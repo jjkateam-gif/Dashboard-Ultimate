@@ -1,34 +1,27 @@
 const { pool } = require('../db');
 const { fetchKlines } = require('./binance');
 const { computeSignal } = require('./indicators');
-const { keypairFromSecret } = require('./solanaRpc');
-const jupiterAdapter = require('./adapters/jupiterAdapter');
+const blofinClient = require('./blofinClient');
+const blofinWs = require('./blofinWs');
 const safetyGuard = require('./safetyGuard');
 const fetch = require('node-fetch');
 const crypto = require('crypto');
 
 class LiveEngine {
   constructor() {
-    this.strategies = new Map(); // id -> { config, userId, protocol, interval }
-    this.walletKeys = new Map(); // userId -> keypair
+    this.strategies = new Map(); // id -> { config, userId, interval }
+    this.credentials = new Map(); // userId -> { apiKey, secretKey, passphrase }
     this.running = false;
   }
 
-  /* ── adapter resolution ─────────────────────────────────── */
+  /* ── credential management ───────────────────────────────── */
 
-  getAdapter(protocol) {
-    if (protocol === 'drift') return require('./adapters/driftAdapter');
-    return jupiterAdapter;
-  }
-
-  /* ── wallet management ──────────────────────────────────── */
-
-  async unlockWallet(userId, password) {
+  async unlockCredentials(userId, password) {
     const result = await pool.query(
       'SELECT encrypted_data FROM trading_wallets WHERE user_id=$1',
       [userId]
     );
-    if (result.rows.length === 0) throw new Error('No trading wallet found');
+    if (result.rows.length === 0) throw new Error('No BloFin credentials found');
 
     const envelope = JSON.parse(result.rows[0].encrypted_data);
     const salt = Buffer.from(envelope.salt, 'hex');
@@ -41,25 +34,30 @@ class LiveEngine {
     decipher.setAuthTag(tag);
     const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
 
-    const secretBytes = JSON.parse(decrypted.toString('utf8'));
-    const keypair = keypairFromSecret(secretBytes);
-    this.walletKeys.set(userId, keypair);
+    const creds = JSON.parse(decrypted.toString('utf8'));
+    if (!creds.apiKey || !creds.secretKey || !creds.passphrase) {
+      throw new Error('Invalid credential data');
+    }
+    this.credentials.set(userId, creds);
 
-    console.log(`[LiveEngine] Wallet unlocked for user ${userId} (${keypair.publicKey.toBase58().slice(0, 8)}...)`);
+    console.log(`[LiveEngine] Credentials unlocked for user ${userId} (key: ${creds.apiKey.slice(0, 8)}...)`);
+
+    // Start WebSocket connection for this user
+    blofinWs.connectPrivate(userId, creds);
 
     // Start any active strategies for this user
     const strats = await pool.query(
-      'SELECT id, config, protocol FROM live_strategies WHERE user_id=$1 AND active=TRUE',
+      'SELECT id, config FROM live_strategies WHERE user_id=$1 AND active=TRUE',
       [userId]
     );
     for (const row of strats.rows) {
-      this.addStrategy(row.id, row.config, userId, row.protocol);
+      this.addStrategy(row.id, row.config, userId);
     }
 
-    return keypair.publicKey.toBase58();
+    return creds.apiKey.slice(0, 8) + '...';
   }
 
-  lockWallet(userId) {
+  lockCredentials(userId) {
     // Remove all strategies for this user
     for (const [id, entry] of this.strategies) {
       if (entry.userId === userId) {
@@ -67,17 +65,17 @@ class LiveEngine {
         this.strategies.delete(id);
       }
     }
-    this.walletKeys.delete(userId);
-    console.log(`[LiveEngine] Wallet locked for user ${userId}`);
+    this.credentials.delete(userId);
+    blofinWs.disconnectPrivate(userId);
+    console.log(`[LiveEngine] Credentials locked for user ${userId}`);
   }
 
-  isWalletUnlocked(userId) {
-    return this.walletKeys.has(userId);
+  isUnlocked(userId) {
+    return this.credentials.has(userId);
   }
 
-  getWalletPublicKey(userId) {
-    const kp = this.walletKeys.get(userId);
-    return kp ? kp.publicKey.toBase58() : null;
+  getCredentials(userId) {
+    return this.credentials.get(userId) || null;
   }
 
   /* ── engine lifecycle ───────────────────────────────────── */
@@ -93,24 +91,25 @@ class LiveEngine {
       clearInterval(entry.interval);
     }
     this.strategies.clear();
-    this.walletKeys.clear();
+    this.credentials.clear();
+    blofinWs.closeAll();
     this.running = false;
     console.log('[LiveEngine] Live trading engine stopped');
   }
 
   /* ── strategy management ────────────────────────────────── */
 
-  addStrategy(id, config, userId, protocol) {
+  addStrategy(id, config, userId) {
     if (this.strategies.has(id)) return;
-    if (!this.walletKeys.has(userId)) {
-      console.warn(`[LiveEngine] Cannot add strategy ${id}: wallet not unlocked for user ${userId}`);
+    if (!this.credentials.has(userId)) {
+      console.warn(`[LiveEngine] Cannot add strategy ${id}: credentials not unlocked for user ${userId}`);
       return;
     }
     const interval = setInterval(() => this.poll(id), 60000);
-    this.strategies.set(id, { config, userId, protocol: protocol || 'jupiter', interval });
+    this.strategies.set(id, { config, userId, interval });
     // Initial poll after a short delay
     setTimeout(() => this.poll(id), 5000);
-    console.log(`[LiveEngine] Strategy ${id} added (${protocol || 'jupiter'})`);
+    console.log(`[LiveEngine] Strategy ${id} added (blofin)`);
   }
 
   removeStrategy(id) {
@@ -128,16 +127,15 @@ class LiveEngine {
     const entry = this.strategies.get(id);
     if (!entry) return;
     try {
-      const { config, userId, protocol } = entry;
-      const keypair = this.walletKeys.get(userId);
-      if (!keypair) return;
+      const { config, userId } = entry;
+      const creds = this.credentials.get(userId);
+      if (!creds) return;
 
-      const adapter = this.getAdapter(protocol);
       const symbol = config.symbol || 'BTCUSDT';
       const tf = config.timeframe || '1h';
-      const market = this._mkt(symbol, protocol);
+      const instId = this._mkt(symbol);
 
-      // Fetch candles
+      // Fetch candles from Binance (used for signal computation)
       const candles = await fetchKlines(symbol, tf, 500);
       if (!candles || candles.length < 50) return;
 
@@ -185,7 +183,7 @@ class LiveEngine {
         const dir = openPos.direction === 'long' ? 1 : -1;
         let exitReason = null;
 
-        // Safety guard check (near liquidation, kill switch)
+        // Safety guard check
         const safetyCheck = await safetyGuard.shouldAutoClose(userId, {
           liqPrice: parseFloat(openPos.liq_price) || 0,
           markPrice: price,
@@ -221,9 +219,9 @@ class LiveEngine {
 
         if (exitReason) {
           try {
-            const closeResult = await adapter.closePosition({
-              keypair,
-              market,
+            const closeResult = await blofinClient.closePosition({
+              creds,
+              instId,
               direction: openPos.direction,
             });
 
@@ -232,15 +230,13 @@ class LiveEngine {
             const pnlPct = ((price - entryPrice) / entryPrice) * dir * leverage * 100;
             const pnl = sizeUsd * (pnlPct / 100);
 
-            // Update position as closed
             await pool.query(
               `UPDATE live_positions
                SET closed_at=NOW(), exit_price=$1, close_tx=$2, pnl=$3, close_reason=$4
                WHERE id=$5`,
-              [price, closeResult.txSignature || null, pnl, exitReason, openPos.id]
+              [price, closeResult.orderId || null, pnl, exitReason, openPos.id]
             );
 
-            // Insert into trade history
             await pool.query(
               `INSERT INTO live_trade_history
                (user_id, strategy_id, protocol, market, direction, entry_price, exit_price,
@@ -248,20 +244,20 @@ class LiveEngine {
                 close_reason, opened_at, closed_at)
                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW())`,
               [
-                userId, id, protocol, market, openPos.direction,
+                userId, id, 'blofin', instId, openPos.direction,
                 entryPrice, price, sizeUsd, parseFloat(openPos.collateral_usd),
                 leverage, pnl, pnlPct,
-                openPos.open_tx, closeResult.txSignature || null,
+                openPos.open_tx, closeResult.orderId || null,
                 exitReason, openPos.opened_at,
               ]
             );
 
             const dirLabel = dir === 1 ? 'LONG' : 'SHORT';
             this._alert(userId,
-              `${symbol} ${dirLabel} closed @ ${price} | P&L: ${pnl > 0 ? '+' : ''}${pnl.toFixed(2)} (${pnlPct.toFixed(1)}%) | Reason: ${exitReason} | Tx: ${(closeResult.txSignature || '').slice(0, 16)}...`
+              `${symbol} ${dirLabel} closed @ ${price} | P&L: ${pnl > 0 ? '+' : ''}${pnl.toFixed(2)} (${pnlPct.toFixed(1)}%) | Reason: ${exitReason}`
             );
 
-            console.log(`[LiveEngine] Closed ${dirLabel} ${market} | PnL: ${pnl.toFixed(2)} | Reason: ${exitReason}`);
+            console.log(`[LiveEngine] Closed ${dirLabel} ${instId} | PnL: ${pnl.toFixed(2)} | Reason: ${exitReason}`);
           } catch (closeErr) {
             console.error(`[LiveEngine] Close position error for ${id}:`, closeErr.message);
             this._alert(userId, `CLOSE FAILED for ${symbol}: ${closeErr.message}`);
@@ -270,7 +266,6 @@ class LiveEngine {
       }
 
       // ── Process entries ──────────────────────────────────
-      // Re-check for open position (may have just been closed)
       const openCheck = await pool.query(
         'SELECT id FROM live_positions WHERE strategy_id=$1 AND closed_at IS NULL LIMIT 1',
         [id]
@@ -285,18 +280,18 @@ class LiveEngine {
           (direction === 'short' && combinedSignal === -1);
 
         if (allowEntry) {
-          // Determine collateral from USDC balance and trade %
-          const balance = await adapter.getBalance(keypair.publicKey.toBase58());
-          const availableUsd = balance.usdc || 0;
+          // Get USDT balance from BloFin
+          const balance = await blofinClient.getBalance(creds);
+          const availableUsd = balance.availableBalance || 0;
           const desiredCollateral = (config.capital || availableUsd) * (tradePct / 100);
           const collateralUsd = Math.min(desiredCollateral, availableUsd);
 
           if (collateralUsd < 1) {
-            console.warn(`[LiveEngine] Insufficient USDC balance for strategy ${id}: $${availableUsd.toFixed(2)}`);
+            console.warn(`[LiveEngine] Insufficient USDT balance for strategy ${id}: $${availableUsd.toFixed(2)}`);
             return;
           }
 
-          // Safety guard check before opening
+          // Safety guard check
           try {
             await safetyGuard.canOpenPosition(userId, collateralUsd, leverage);
           } catch (safetyErr) {
@@ -308,7 +303,7 @@ class LiveEngine {
           const dirStr = combinedSignal === 1 ? 'long' : 'short';
           const sizeUsd = collateralUsd * leverage;
 
-          // Compute SL/TP prices for the adapter
+          // Compute SL/TP prices
           let slPrice = null;
           let tpPrice = null;
           if (stopLoss > 0) {
@@ -322,36 +317,41 @@ class LiveEngine {
               : price * (1 - takeProfit / 100 / leverage);
           }
 
+          // Calculate contract size from collateral
+          // BloFin size is in contracts — we approximate using mark price
+          const contractSize = (sizeUsd / price).toFixed(4);
+
           try {
-            const openResult = await adapter.openPosition({
-              keypair,
-              market,
+            const openResult = await blofinClient.openPosition({
+              creds,
+              instId,
               direction: dirStr,
-              collateralUsd,
+              size: contractSize,
               leverage,
+              orderType: 'market',
               slPrice,
               tpPrice,
             });
 
-            // Record position in DB
             await pool.query(
               `INSERT INTO live_positions
                (strategy_id, user_id, protocol, market, direction, entry_price,
-                size_usd, collateral_usd, leverage, open_tx, sl_price, tp_price)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+                size_usd, collateral_usd, leverage, open_tx, sl_price, tp_price, order_id, margin_mode)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
               [
-                id, userId, protocol, market, dirStr, price,
+                id, userId, 'blofin', instId, dirStr, price,
                 sizeUsd, collateralUsd, leverage,
-                openResult.txSignature || null, slPrice, tpPrice,
+                openResult.orderId || null, slPrice, tpPrice,
+                openResult.orderId || null, 'cross',
               ]
             );
 
             const dirLabel = combinedSignal === 1 ? 'LONG' : 'SHORT';
             this._alert(userId,
-              `${symbol} ${dirLabel} entry @ ${price} | Size: $${sizeUsd.toFixed(2)} | Collateral: $${collateralUsd.toFixed(2)} | Leverage: ${leverage}x | Tx: ${(openResult.txSignature || '').slice(0, 16)}...`
+              `${symbol} ${dirLabel} entry @ ${price} | Size: $${sizeUsd.toFixed(2)} | Collateral: $${collateralUsd.toFixed(2)} | Leverage: ${leverage}x`
             );
 
-            console.log(`[LiveEngine] Opened ${dirLabel} ${market} | Size: $${sizeUsd.toFixed(2)} | Lev: ${leverage}x`);
+            console.log(`[LiveEngine] Opened ${dirLabel} ${instId} | Size: $${sizeUsd.toFixed(2)} | Lev: ${leverage}x`);
           } catch (openErr) {
             console.error(`[LiveEngine] Open position error for ${id}:`, openErr.message);
             this._alert(userId, `ENTRY FAILED for ${symbol}: ${openErr.message}`);
@@ -367,13 +367,12 @@ class LiveEngine {
   /* ── helpers ────────────────────────────────────────────── */
 
   /**
-   * Convert Binance-style symbol to protocol-specific market name.
-   * BTCUSDT -> BTC-PERP (drift) or BTC-USD (jupiter)
+   * Convert Binance-style symbol to BloFin instId.
+   * BTCUSDT -> BTC-USDT
    */
-  _mkt(sym, proto) {
-    const base = sym.replace(/USDT$/i, '').replace(/USD$/i, '');
-    if (proto === 'drift') return `${base}-PERP`;
-    return `${base}-USD`;
+  _mkt(sym) {
+    const base = sym.replace(/USDT$/i, '');
+    return `${base}-USDT`;
   }
 
   /**
@@ -401,7 +400,7 @@ class LiveEngine {
 
   async killSwitch(userId) {
     console.log(`[LiveEngine] KILL SWITCH activated for user ${userId}`);
-    const keypair = this.walletKeys.get(userId);
+    const creds = this.credentials.get(userId);
 
     // Close all open positions for this user
     const openPositions = await pool.query(
@@ -411,11 +410,10 @@ class LiveEngine {
 
     for (const pos of openPositions.rows) {
       try {
-        const adapter = this.getAdapter(pos.protocol);
-        if (keypair) {
-          const closeResult = await adapter.closePosition({
-            keypair,
-            market: pos.market,
+        if (creds) {
+          const closeResult = await blofinClient.closePosition({
+            creds,
+            instId: pos.market,
             direction: pos.direction,
           });
 
@@ -423,10 +421,9 @@ class LiveEngine {
             `UPDATE live_positions
              SET closed_at=NOW(), close_tx=$1, close_reason='KILL_SWITCH'
              WHERE id=$2`,
-            [closeResult.txSignature || null, pos.id]
+            [closeResult.orderId || null, pos.id]
           );
 
-          // Record in trade history
           await pool.query(
             `INSERT INTO live_trade_history
              (user_id, strategy_id, protocol, market, direction, entry_price,
@@ -434,13 +431,12 @@ class LiveEngine {
               close_reason, opened_at, closed_at)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'KILL_SWITCH',$12,NOW())`,
             [
-              userId, pos.strategy_id, pos.protocol, pos.market, pos.direction,
+              userId, pos.strategy_id, 'blofin', pos.market, pos.direction,
               pos.entry_price, pos.size_usd, pos.collateral_usd, pos.leverage,
-              pos.open_tx, closeResult.txSignature || null, pos.opened_at,
+              pos.open_tx, closeResult.orderId || null, pos.opened_at,
             ]
           );
         } else {
-          // No keypair available; mark position as closed anyway
           await pool.query(
             `UPDATE live_positions
              SET closed_at=NOW(), close_reason='KILL_SWITCH'
@@ -450,7 +446,6 @@ class LiveEngine {
         }
       } catch (err) {
         console.error(`[LiveEngine] Kill switch close error for position ${pos.id}:`, err.message);
-        // Mark as closed even on failure so strategies don't keep trying
         await pool.query(
           `UPDATE live_positions
            SET closed_at=NOW(), close_reason='KILL_SWITCH_ERR'
@@ -460,7 +455,7 @@ class LiveEngine {
       }
     }
 
-    // Deactivate all live strategies for this user
+    // Deactivate all live strategies
     await pool.query(
       'UPDATE live_strategies SET active=FALSE WHERE user_id=$1',
       [userId]
@@ -474,7 +469,6 @@ class LiveEngine {
       }
     }
 
-    // Activate the kill switch flag in safety config
     await safetyGuard.activateKillSwitch(userId);
 
     this._alert(userId, 'KILL SWITCH ACTIVATED - All positions closed, all strategies deactivated.');

@@ -45,7 +45,7 @@ class SafetyGuard {
     if (result.rows.length > 0) return result.rows[0];
     return {
       max_position_usd: 500,
-      max_leverage: 10,
+      max_leverage: 20,
       daily_loss_limit_usd: 100,
       auto_close_liq_pct: 5,
       kill_switch: false,

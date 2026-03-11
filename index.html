@@ -796,41 +796,45 @@ details[open] summary::before{transform:rotate(90deg)}
         <div style="font-family:'Space Mono',monospace;font-size:11px;color:#00f5a0;font-weight:bold;margin-bottom:10px">⚡ ENGINE STATUS</div>
         <div id="liveEngineStatus" style="font-size:11px;color:#ccc;line-height:1.8">
           <div>Engine: <span id="liveStatusEngine" style="color:#666">--</span></div>
-          <div>Wallet: <span id="liveStatusWallet" style="color:#666">--</span></div>
+          <div>Credentials: <span id="liveStatusWallet" style="color:#666">--</span></div>
           <div>Strategies: <span id="liveStatusStrats" style="color:#666">0</span></div>
           <div>Open Positions: <span id="liveStatusPos" style="color:#666">0</span></div>
           <div>Kill Switch: <span id="liveStatusKill" style="color:#666">OFF</span></div>
         </div>
       </div>
 
-      <!-- Trading Wallet Card -->
+      <!-- BloFin API Keys Card -->
       <div style="background:rgba(10,10,20,0.8);border:1px solid rgba(0,245,160,0.15);border-radius:10px;padding:14px">
-        <div style="font-family:'Space Mono',monospace;font-size:11px;color:#00f5a0;font-weight:bold;margin-bottom:10px">🔑 TRADING WALLET</div>
-        <div id="liveWalletInfo">
-          <div id="liveWalletNone" style="font-size:11px;color:#888">
-            <p>No trading wallet stored on server.</p>
-            <p style="margin-top:6px;color:#666">Generate a wallet in the Paper Trade tab first, then store it here for server-side trading.</p>
-            <button onclick="liveStoreWallet()" style="margin-top:8px;width:100%;padding:8px;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:6px;cursor:pointer;font-size:11px;font-family:'Space Mono',monospace">📤 Store Wallet on Server</button>
-          </div>
-          <div id="liveWalletLoaded" style="display:none;font-size:11px">
-            <div style="color:#ccc;margin-bottom:6px">Public Key:</div>
-            <div id="liveWalletPubkey" style="color:#00f5a0;font-family:'Space Mono',monospace;font-size:10px;word-break:break-all;margin-bottom:8px">--</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
-              <div style="background:rgba(0,0,0,0.3);padding:6px;border-radius:4px;text-align:center">
-                <div style="color:#888;font-size:9px">SOL</div>
-                <div id="liveWalletSOL" style="color:#00f5a0;font-size:12px;font-weight:bold">--</div>
-              </div>
-              <div style="background:rgba(0,0,0,0.3);padding:6px;border-radius:4px;text-align:center">
-                <div style="color:#888;font-size:9px">USDC</div>
-                <div id="liveWalletUSDC" style="color:#00f5a0;font-size:12px;font-weight:bold">--</div>
-              </div>
+        <div style="font-family:'Space Mono',monospace;font-size:11px;color:#00f5a0;font-weight:bold;margin-bottom:10px">🔑 BLOFIN API KEYS</div>
+        <div id="liveCredInfo">
+          <div id="liveCredNone" style="font-size:11px;color:#888">
+            <p>No BloFin API keys stored.</p>
+            <p style="margin-top:6px;color:#666">Get your API keys from <a href="https://blofin.com/en/account/api" target="_blank" style="color:#00f5a0">blofin.com/account/api</a></p>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
+              <input id="blofinApiKey" type="text" placeholder="API Key" style="width:100%;padding:6px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:4px;font-size:11px;box-sizing:border-box">
+              <input id="blofinSecretKey" type="password" placeholder="Secret Key" style="width:100%;padding:6px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:4px;font-size:11px;box-sizing:border-box">
+              <input id="blofinPassphrase" type="password" placeholder="Passphrase" style="width:100%;padding:6px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:4px;font-size:11px;box-sizing:border-box">
+              <input id="blofinEncPwd" type="password" placeholder="Encryption password (for server storage)" style="width:100%;padding:6px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:4px;font-size:11px;box-sizing:border-box">
+              <label style="display:flex;align-items:center;gap:6px;color:#888;font-size:10px;cursor:pointer">
+                <input type="checkbox" id="blofinDemoMode" style="accent-color:#00f5a0"> Demo Mode (testnet)
+              </label>
+              <button onclick="liveStoreCredentials()" style="width:100%;padding:8px;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:6px;cursor:pointer;font-size:11px;font-family:'Space Mono',monospace">📤 Store API Keys</button>
             </div>
-            <div id="liveWalletLockSection">
-              <input id="liveUnlockPwd" type="password" placeholder="Wallet password" style="width:100%;padding:6px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:4px;font-size:11px;margin-bottom:6px;box-sizing:border-box">
+          </div>
+          <div id="liveCredLoaded" style="display:none;font-size:11px">
+            <div style="color:#ccc;margin-bottom:6px">API Key:</div>
+            <div id="liveCredKeyPreview" style="color:#00f5a0;font-family:'Space Mono',monospace;font-size:10px;margin-bottom:8px">--</div>
+            <div style="background:rgba(0,0,0,0.3);padding:8px;border-radius:4px;text-align:center;margin-bottom:8px">
+              <div style="color:#888;font-size:9px">USDT Balance</div>
+              <div id="liveBalanceUSDT" style="color:#00f5a0;font-size:14px;font-weight:bold">--</div>
+              <div style="color:#666;font-size:8px;margin-top:2px">Available: <span id="liveBalanceAvail" style="color:#ccc">--</span></div>
+            </div>
+            <div id="liveCredLockSection">
+              <input id="liveUnlockPwd" type="password" placeholder="Encryption password" style="width:100%;padding:6px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:4px;font-size:11px;margin-bottom:6px;box-sizing:border-box">
               <div style="display:flex;gap:6px">
-                <button onclick="liveUnlockWallet()" id="liveUnlockBtn" style="flex:1;padding:6px;background:rgba(0,245,160,0.2);border:1px solid rgba(0,245,160,0.4);color:#00f5a0;border-radius:4px;cursor:pointer;font-size:10px">🔓 Unlock</button>
-                <button onclick="liveLockWallet()" id="liveLockBtn" style="flex:1;padding:6px;background:rgba(255,77,109,0.15);border:1px solid rgba(255,77,109,0.3);color:#ff4d6d;border-radius:4px;cursor:pointer;font-size:10px;display:none">🔒 Lock</button>
-                <button onclick="liveDeleteWallet()" style="padding:6px 10px;background:rgba(255,0,0,0.1);border:1px solid rgba(255,0,0,0.2);color:#ff4d6d;border-radius:4px;cursor:pointer;font-size:10px">🗑️</button>
+                <button onclick="liveUnlockCredentials()" id="liveUnlockBtn" style="flex:1;padding:6px;background:rgba(0,245,160,0.2);border:1px solid rgba(0,245,160,0.4);color:#00f5a0;border-radius:4px;cursor:pointer;font-size:10px">🔓 Unlock</button>
+                <button onclick="liveLockCredentials()" id="liveLockBtn" style="flex:1;padding:6px;background:rgba(255,77,109,0.15);border:1px solid rgba(255,77,109,0.3);color:#ff4d6d;border-radius:4px;cursor:pointer;font-size:10px;display:none">🔒 Lock</button>
+                <button onclick="liveDeleteCredentials()" style="padding:6px 10px;background:rgba(255,0,0,0.1);border:1px solid rgba(255,0,0,0.2);color:#ff4d6d;border-radius:4px;cursor:pointer;font-size:10px">🗑️</button>
               </div>
             </div>
           </div>
@@ -847,7 +851,7 @@ details[open] summary::before{transform:rotate(90deg)}
           </div>
           <div>
             <label style="color:#888;font-size:10px">Max Leverage</label>
-            <input id="liveSafetyMaxLev" type="number" value="10" style="width:100%;padding:5px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:4px;font-size:11px;box-sizing:border-box">
+            <input id="liveSafetyMaxLev" type="number" value="20" style="width:100%;padding:5px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:4px;font-size:11px;box-sizing:border-box">
           </div>
           <div>
             <label style="color:#888;font-size:10px">Daily Loss Limit (USD)</label>
@@ -887,17 +891,12 @@ details[open] summary::before{transform:rotate(90deg)}
 
       <!-- Available Markets Card -->
       <div style="background:rgba(10,10,20,0.8);border:1px solid rgba(0,245,160,0.15);border-radius:10px;padding:14px">
-        <div style="font-family:'Space Mono',monospace;font-size:11px;color:#00f5a0;font-weight:bold;margin-bottom:10px">🌐 AVAILABLE MARKETS</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div>
-            <div style="color:#f5c400;font-size:10px;font-weight:bold;margin-bottom:6px">Jupiter Perps</div>
-            <div id="liveMarketsJupiter" style="font-size:10px;color:#888">Loading...</div>
-          </div>
-          <div>
-            <div style="color:#00bfff;font-size:10px;font-weight:bold;margin-bottom:6px">Drift Protocol</div>
-            <div id="liveMarketsDrift" style="font-size:10px;color:#888">Loading...</div>
-          </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-family:'Space Mono',monospace;font-size:11px;color:#00f5a0;font-weight:bold">🌐 BLOFIN FUTURES (530+ pairs)</div>
+          <button onclick="liveRefreshMarkets()" style="padding:3px 8px;background:rgba(0,245,160,0.1);border:1px solid rgba(0,245,160,0.2);color:#00f5a0;border-radius:4px;cursor:pointer;font-size:9px">🔄</button>
         </div>
+        <input id="liveMarketsSearch" type="text" placeholder="Search markets (e.g. BTC, ETH, SOL...)" oninput="filterLiveMarkets()" style="width:100%;padding:6px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:4px;font-size:10px;margin-bottom:8px;box-sizing:border-box">
+        <div id="liveMarketsBloFin" style="font-size:10px;color:#888;max-height:200px;overflow-y:auto">Loading...</div>
       </div>
 
       <!-- Trade History Card -->
@@ -2392,80 +2391,76 @@ details[open] summary::before{transform:rotate(90deg)}
 
 
 
-<!-- ========== JUPITER EXECUTE MODAL ========== -->
-<div id="jupiterModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;align-items:center;justify-content:center">
+<!-- ========== BLOFIN EXECUTE MODAL ========== -->
+<div id="blofinModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#0a1a10;border:1px solid rgba(0,245,160,0.3);border-radius:14px;padding:24px;width:480px;max-width:96vw">
 
     <!-- Header -->
     <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:14px">
       <div>
-        <div style="font-size:13px;font-weight:800;color:#00f5a0;font-family:'Space Mono',monospace">⚡ Execute Trade on Jupiter</div>
-        <div id="jupiterModalSub" style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px">Fetching...</div>
+        <div style="font-size:13px;font-weight:800;color:#00f5a0;font-family:'Space Mono',monospace">⚡ Execute Trade on BloFin</div>
+        <div id="blofinModalSub" style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px">Fetching...</div>
       </div>
-      <!-- Mode toggle -->
-      <div style="display:flex;gap:4px;background:rgba(0,0,0,0.3);border-radius:6px;padding:3px">
-        <button id="jModeSpot" onclick="setJupiterMode('spot')"
-          style="font-size:8px;padding:4px 10px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;font-weight:700;border:none;cursor:pointer;background:rgba(0,245,160,0.2);color:#00f5a0">
-          SPOT
-        </button>
-        <button id="jModePerps" onclick="setJupiterMode('perps')"
-          style="font-size:8px;padding:4px 10px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;font-weight:700;border:none;cursor:pointer;background:transparent;color:#5a7a68">
-          PERPS
-        </button>
+      <!-- Order Type + Margin Mode -->
+      <div style="display:flex;gap:4px;flex-direction:column">
+        <select id="bfOrderType" onchange="updateBlofinDisplay()" style="font-size:8px;padding:3px 6px;background:rgba(0,0,0,0.4);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:4px;font-family:'Space Mono',monospace">
+          <option value="market">Market</option>
+          <option value="limit">Limit</option>
+          <option value="post_only">Post Only</option>
+          <option value="fok">FOK</option>
+          <option value="ioc">IOC</option>
+        </select>
+        <select id="bfMarginMode" style="font-size:8px;padding:3px 6px;background:rgba(0,0,0,0.4);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:4px;font-family:'Space Mono',monospace">
+          <option value="cross">Cross</option>
+          <option value="isolated">Isolated</option>
+        </select>
       </div>
     </div>
 
-    <!-- SPOT panel -->
-    <div id="jPanelSpot" style="background:rgba(0,0,0,0.3);border-radius:8px;padding:12px;margin-bottom:10px;font-family:'Space Mono',monospace">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:9px">
-        <div><span style="color:#5a7a68">Buy:</span> <span id="jqBuy" style="color:#00f5a0;font-weight:700"></span></div>
-        <div><span style="color:#5a7a68">Pay:</span> <span id="jqPay" style="color:#fff"></span></div>
-        <div><span style="color:#5a7a68">Fill price:</span> <span id="jqPrice" style="color:#fff"></span></div>
-        <div><span style="color:#5a7a68">Price impact:</span> <span id="jqImpact" style="color:#f5c400"></span></div>
-        <div><span style="color:#5a7a68">Stop Loss:</span> <span id="jqSL" style="color:#ff4d6d"></span></div>
-        <div><span style="color:#5a7a68">Take Profit:</span> <span id="jqTP" style="color:#00f5a0"></span></div>
-      </div>
-      <div id="jqRoute" style="font-size:7px;color:#3a5a48;margin-top:8px"></div>
+    <!-- Limit price input (hidden for market orders) -->
+    <div id="bfLimitPriceRow" style="display:none;margin-bottom:10px">
+      <input id="bfLimitPrice" type="number" placeholder="Limit price" style="width:100%;padding:6px;background:rgba(0,0,0,0.4);border:1px solid rgba(245,196,0,0.3);color:#f5c400;border-radius:4px;font-size:11px;box-sizing:border-box;font-family:'Space Mono',monospace">
     </div>
 
-    <!-- PERPS panel -->
-    <div id="jPanelPerps" style="display:none;background:rgba(0,0,0,0.3);border-radius:8px;padding:12px;margin-bottom:10px;font-family:'Space Mono',monospace">
+    <!-- Position stats panel -->
+    <div style="background:rgba(0,0,0,0.3);border-radius:8px;padding:12px;margin-bottom:10px;font-family:'Space Mono',monospace">
       <!-- Leverage selector -->
       <div style="margin-bottom:10px">
         <div style="font-size:7px;color:#5a7a68;margin-bottom:5px;text-transform:uppercase;letter-spacing:1px">Leverage</div>
         <div id="leverageBtns" style="display:flex;gap:4px;flex-wrap:wrap">
-          <button onclick="setLeverage(1)"  class="lev-btn" data-lev="1"  style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);color:#00f5a0;font-weight:700">1×</button>
-          <button onclick="setLeverage(2)"  class="lev-btn" data-lev="2"  style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#aaa">2×</button>
-          <button onclick="setLeverage(5)"  class="lev-btn" data-lev="5"  style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#aaa">5×</button>
-          <button onclick="setLeverage(10)" class="lev-btn" data-lev="10" style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#aaa">10×</button>
-          <button onclick="setLeverage(20)" class="lev-btn" data-lev="20" style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#aaa">20×</button>
-          <button onclick="setLeverage(50)" class="lev-btn" data-lev="50" style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:rgba(245,196,0,0.08);border:1px solid rgba(245,196,0,0.2);color:#f5c400">50×</button>
-          <button onclick="setLeverage(100)" class="lev-btn" data-lev="100" style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:rgba(255,77,109,0.08);border:1px solid rgba(255,77,109,0.2);color:#ff4d6d">100×</button>
+          <button onclick="setBlofinLeverage(1)"  class="lev-btn" data-lev="1"  style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);color:#00f5a0;font-weight:700">1x</button>
+          <button onclick="setBlofinLeverage(2)"  class="lev-btn" data-lev="2"  style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#aaa">2x</button>
+          <button onclick="setBlofinLeverage(5)"  class="lev-btn" data-lev="5"  style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#aaa">5x</button>
+          <button onclick="setBlofinLeverage(10)" class="lev-btn" data-lev="10" style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#aaa">10x</button>
+          <button onclick="setBlofinLeverage(25)" class="lev-btn" data-lev="25" style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#aaa">25x</button>
+          <button onclick="setBlofinLeverage(50)" class="lev-btn" data-lev="50" style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:rgba(245,196,0,0.08);border:1px solid rgba(245,196,0,0.2);color:#f5c400">50x</button>
+          <button onclick="setBlofinLeverage(100)" class="lev-btn" data-lev="100" style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:rgba(255,77,109,0.08);border:1px solid rgba(255,77,109,0.2);color:#ff4d6d">100x</button>
+          <button onclick="setBlofinLeverage(150)" class="lev-btn" data-lev="150" style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:rgba(255,0,0,0.1);border:1px solid rgba(255,0,0,0.3);color:#ff0000">150x</button>
         </div>
       </div>
-      <!-- Perps stats grid -->
+      <!-- Stats grid -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:9px">
-        <div><span style="color:#5a7a68">Collateral:</span> <span id="jpCollateral" style="color:#fff"></span></div>
-        <div><span style="color:#5a7a68">Position size:</span> <span id="jpSize" style="color:#fff;font-weight:700"></span></div>
-        <div><span style="color:#5a7a68">Mark price:</span> <span id="jpMark" style="color:#fff"></span></div>
-        <div><span style="color:#5a7a68">Liq. price:</span> <span id="jpLiq" style="color:#ff4d6d;font-weight:700"></span></div>
-        <div><span style="color:#5a7a68">Stop Loss:</span> <span id="jpSL" style="color:#ff4d6d"></span></div>
-        <div><span style="color:#5a7a68">Take Profit:</span> <span id="jpTP" style="color:#00f5a0"></span></div>
+        <div><span style="color:#5a7a68">Collateral:</span> <span id="bfCollateral" style="color:#fff"></span></div>
+        <div><span style="color:#5a7a68">Position size:</span> <span id="bfSize" style="color:#fff;font-weight:700"></span></div>
+        <div><span style="color:#5a7a68">Mark price:</span> <span id="bfMark" style="color:#fff"></span></div>
+        <div><span style="color:#5a7a68">Liq. price:</span> <span id="bfLiq" style="color:#ff4d6d;font-weight:700"></span></div>
+        <div><span style="color:#5a7a68">Stop Loss:</span> <span id="bfSL" style="color:#ff4d6d"></span></div>
+        <div><span style="color:#5a7a68">Take Profit:</span> <span id="bfTP" style="color:#00f5a0"></span></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:8px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.05)">
-        <div><span style="color:#3a5a48">Open fee (0.06%):</span> <span id="jpFee" style="color:#5a7a68"></span></div>
-        <div><span style="color:#3a5a48">Market:</span> <span id="jpMarket" style="color:#5a7a68"></span></div>
+        <div><span style="color:#3a5a48">Maker: 0.02% · Taker: 0.06%</span></div>
+        <div><span style="color:#3a5a48">Instrument:</span> <span id="bfInstId" style="color:#5a7a68"></span></div>
       </div>
     </div>
 
-    <div id="jupiterExecStatus" style="font-size:8px;font-family:'Space Mono',monospace;color:#5a7a68;min-height:18px;margin-bottom:12px"></div>
+    <div id="blofinExecStatus" style="font-size:8px;font-family:'Space Mono',monospace;color:#5a7a68;min-height:18px;margin-bottom:12px"></div>
 
     <div style="display:flex;gap:8px">
-      <button id="jupiterConfirmBtn" onclick="confirmJupiterExec()"
+      <button id="blofinConfirmBtn" onclick="confirmBlofinExec()"
         style="flex:1;padding:10px;margin:0;background:rgba(0,245,160,0.2);border:1px solid rgba(0,245,160,0.5);color:#00f5a0;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-size:9px;font-weight:700">
         ⚡ Confirm Execute
       </button>
-      <button onclick="closeJupiterModal()"
+      <button onclick="closeBlofinModal()"
         style="flex:1;padding:10px;margin:0;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#666;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-size:9px">
         Cancel
       </button>
@@ -14731,31 +14726,9 @@ async function decryptBytes(stored, password) {
   return new Uint8Array(dec);
 }
 
-function base58Encode(bytes) {
-  const ABC = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-  let num = BigInt('0x' + [...bytes].map(b => b.toString(16).padStart(2,'0')).join(''));
-  let out = '';
-  while (num > 0n) { out = ABC[Number(num % 58n)] + out; num /= 58n; }
-  for (const b of bytes) { if (b) break; out = '1' + out; }
-  return out;
-}
+// base58Encode removed (BloFin uses API keys, not Solana addresses)
 
-async function generateSolanaKeypair() {
-  try {
-    const kp   = await crypto.subtle.generateKey('Ed25519', true, ['sign','verify']);
-    const pub  = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
-    const priv = new Uint8Array(await crypto.subtle.exportKey('pkcs8', kp.privateKey));
-    const seed = priv.slice(-32);
-    const sk   = new Uint8Array(64);
-    sk.set(seed); sk.set(pub, 32);
-    return { secretKey: sk, publicKey: base58Encode(pub), publicKeyBytes: pub };
-  } catch {
-    const seed = crypto.getRandomValues(new Uint8Array(32));
-    const sk   = new Uint8Array(64);
-    sk.set(seed); sk.set(seed, 32);
-    return { secretKey: sk, publicKey: base58Encode(seed), publicKeyBytes: seed };
-  }
-}
+// generateSolanaKeypair removed (BloFin uses API keys)
 
 async function generateTradingWallet() {
   const pw  = $('walletPassword')?.value?.trim();
@@ -14881,800 +14854,163 @@ function exportWalletBackup() {
   toast('✅ Backup saved — store it somewhere safe');
 }
 
-// ============================================================
-// ===== WITHDRAW FUNDS =======================================
-// ============================================================
-
-// Solana token mints
-const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
-const SOL_LAMPORTS = 1_000_000_000;
-const USDC_DECIMALS = 1_000_000;
-
-function openWithdrawPanel() {
-  if (!walletState.loaded) { toast('Unlock your wallet first', 'error'); return; }
-  const p = $('withdrawPanel');
-  if (p) { p.style.display = p.style.display === 'none' ? 'block' : 'none'; }
-  $('withdrawStatus').textContent = '';
-  $('withdrawDestWarning').style.display = 'none';
-}
-
-function closeWithdrawPanel() {
-  const p = $('withdrawPanel');
-  if (p) p.style.display = 'none';
-}
-
-async function loadWithdrawBalances() {
-  if (!walletState.loaded) { toast('Unlock wallet first', 'error'); return; }
-  const el = $('withdrawBalances');
-  el.innerHTML = '<span style="color:#a78bfa">Loading...</span>';
-  try {
-    // SOL balance
-    const solRes = await fetch('https://api.mainnet-beta.solana.com', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'getBalance',
-        params: [walletState.publicKey, { commitment:'confirmed' }] })
-    });
-    const solData = await solRes.json();
-    const solBal = ((solData.result?.value || 0) / SOL_LAMPORTS).toFixed(4);
-
-    // USDC balance
-    const usdcRes = await fetch('https://api.mainnet-beta.solana.com', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc:'2.0', id:2, method:'getTokenAccountsByOwner',
-        params: [walletState.publicKey,
-          { mint: USDC_MINT },
-          { encoding:'jsonParsed', commitment:'confirmed' }
-        ]
-      })
-    });
-    const usdcData = await usdcRes.json();
-    const usdcAccounts = usdcData.result?.value || [];
-    const usdcBal = usdcAccounts.length > 0
-      ? (usdcAccounts[0].account.data.parsed.info.tokenAmount.uiAmount || 0).toFixed(2)
-      : '0.00';
-
-    // Store for MAX button
-    window._withdrawBals = { sol: parseFloat(solBal), usdc: parseFloat(usdcBal) };
-
-    el.innerHTML =
-      `<span style="color:#5a7a68">Balances: </span>` +
-      `<span style="color:#fff;margin-right:12px">SOL: <strong style="color:#00f5a0">${solBal}</strong></span>` +
-      `<span style="color:#fff">USDC: <strong style="color:#00f5a0">${usdcBal}</strong></span>`;
-  } catch(e) {
-    el.innerHTML = `<span style="color:#ff4d6d">Failed to load balances: ${e.message}</span>`;
-  }
-}
-
-function setWithdrawMax() {
-  const token = $('withdrawToken').value;
-  if (!window._withdrawBals) { toast('Click "Check balance" first', 'error'); return; }
-  const maxAmt = token === 'SOL'
-    ? Math.max(0, window._withdrawBals.sol - 0.005).toFixed(4)  // leave 0.005 SOL for fees
-    : window._withdrawBals.usdc.toFixed(2);
-  $('withdrawAmount').value = maxAmt;
-}
-
-function validateWithdrawDest(addr) {
-  // Solana addresses are base58, 32–44 chars, no 0/O/I/l
-  const base58Regex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-  return base58Regex.test(addr);
-}
-
-async function confirmWithdraw() {
-  if (!walletState.loaded || !walletState.keypair) {
-    toast('Wallet not unlocked', 'error'); return;
-  }
-
-  const dest   = ($('withdrawDest').value || '').trim();
-  const amount = parseFloat($('withdrawAmount').value);
-  const token  = $('withdrawToken').value;
-  const statusEl = $('withdrawStatus');
-  const warnEl   = $('withdrawDestWarning');
-
-  // ── Validate destination ──────────────────────────────────
-  warnEl.style.display = 'none';
-  if (!dest) {
-    warnEl.textContent = '⛔ Please enter a destination address.';
-    warnEl.style.display = 'block'; return;
-  }
-  if (!validateWithdrawDest(dest)) {
-    warnEl.innerHTML =
-      '⛔ That does not look like a valid Solana address. ' +
-      'Solana addresses are 32\u201344 characters (letters and numbers, no spaces). ' +
-      'Open Phantom and copy your address from there.';
-    warnEl.style.display = 'block'; return;
-  }
-  if (dest === walletState.publicKey) {
-    warnEl.textContent = '⛔ Destination is the same as your trading wallet — choose a different address.';
-    warnEl.style.display = 'block'; return;
-  }
-  if (!amount || amount <= 0) {
-    statusEl.innerHTML = '<span style="color:#ff4d6d">Enter an amount greater than 0</span>'; return;
-  }
-
-  // ── Confirm prompt ────────────────────────────────────────
-  const confirmed = window.confirm(
-    `Send ${amount} ${token} to:
-${dest}
-
-` +
-    `⚠️ This is a Solana mainnet transaction — it cannot be reversed.
-` +
-    `Make sure this is a Solana wallet address.
-
-Proceed?`
-  );
-  if (!confirmed) return;
-
-  const btn = $('withdrawConfirmBtn');
-  btn.disabled = true;
-  btn.textContent = 'Sending...';
-  statusEl.innerHTML = '<span style="color:#a78bfa">⏳ Building transaction...</span>';
-
-  try {
-    if (token === 'SOL') {
-      await withdrawSOL(dest, amount, statusEl);
-    } else {
-      await withdrawUSDC(dest, amount, statusEl);
-    }
-  } catch(e) {
-    statusEl.innerHTML = `<span style="color:#ff4d6d">❌ Error: ${e.message}</span>`;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '↑ Send on Solana';
-  }
-}
-
-async function withdrawSOL(destPubkey, amountSol, statusEl) {
-  const lamports = Math.round(amountSol * SOL_LAMPORTS);
-
-  // Get recent blockhash
-  statusEl.innerHTML = '<span style="color:#a78bfa">⏳ Getting blockhash...</span>';
-  const bhRes = await fetch('https://api.mainnet-beta.solana.com', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'getLatestBlockhash',
-      params: [{ commitment:'confirmed' }] })
-  });
-  const bhData = await bhRes.json();
-  const blockhash = bhData.result.value.blockhash;
-
-  // Build SOL transfer instruction manually (system program transfer)
-  // Instruction: programId=11111...1, instruction index=2 (Transfer), lamports
-  const fromKey   = base58Decode(walletState.publicKey);
-  const toKey     = base58Decode(destPubkey);
-  const systemPgm = new Uint8Array(32); // all zeros = system program
-
-  // Instruction data: [2, 0, 0, 0, lamports as little-endian u64]
-  const instrData = new Uint8Array(12);
-  new DataView(instrData.buffer).setUint32(0, 2, true);  // Transfer instruction
-  // lamports as u64 little endian (safe for <2^32)
-  new DataView(instrData.buffer).setUint32(4, lamports & 0xFFFFFFFF, true);
-  new DataView(instrData.buffer).setUint32(8, Math.floor(lamports / 0x100000000), true);
-
-  const tx = buildSolanaTransaction({
-    blockhash,
-    feePayer: fromKey,
-    accounts: [fromKey, toKey, systemPgm],
-    programIdIndex: 2,
-    accountIndices: [0, 1],
-    instrData,
-  });
-
-  statusEl.innerHTML = '<span style="color:#a78bfa">⏳ Signing...</span>';
-  const sig = await signAndSubmitRaw(tx);
-  statusEl.innerHTML =
-    `<span style="color:#00f5a0">✅ Sent! Tx: <a href="https://solscan.io/tx/${sig}" target="_blank" style="color:#63b3ed">${sig.substring(0,16)}...</a></span>`;
-  toast(`✅ Withdrew ${amountSol} SOL`);
-  loadWithdrawBalances();
-}
-
-async function withdrawUSDC(destPubkey, amountUsdc, statusEl) {
-  statusEl.innerHTML = '<span style="color:#a78bfa">⏳ Routing via Jupiter swap...</span>';
-  // For USDC SPL token transfer we use a simpler route:
-  // Jupiter's /v6/swap with inputMint=USDC, outputMint=USDC, recipient=dest
-  // is not a swap — for a direct SPL transfer we need the token program.
-  // Easiest safe path: use the Jupiter API to get a 0-fee transfer route,
-  // or build raw SPL transfer. We'll build the raw SPL transfer.
-
-  const fromKey  = base58Decode(walletState.publicKey);
-  const toKey    = base58Decode(destPubkey);
-  const amount   = Math.round(amountUsdc * USDC_DECIMALS);
-
-  // Find sender's USDC token account
-  statusEl.innerHTML = '<span style="color:#a78bfa">⏳ Finding token accounts...</span>';
-  const taRes = await fetch('https://api.mainnet-beta.solana.com', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'getTokenAccountsByOwner',
-      params: [walletState.publicKey, { mint: USDC_MINT }, { encoding:'jsonParsed' }] })
-  });
-  const taData = await taRes.json();
-  const senderATA = taData.result?.value?.[0]?.pubkey;
-  if (!senderATA) throw new Error('No USDC token account found in this wallet');
-
-  // Derive recipient ATA
-  const recipientATA = await deriveATA(destPubkey, USDC_MINT);
-
-  // Check if recipient ATA exists
-  const checkRes = await fetch('https://api.mainnet-beta.solana.com', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc:'2.0', id:2, method:'getAccountInfo',
-      params: [recipientATA, { encoding:'base64' }] })
-  });
-  const checkData = await checkRes.json();
-  const recipientATAExists = checkData.result?.value !== null;
-
-  if (!recipientATAExists) {
-    // Need to create ATA — costs ~0.002 SOL. Use Jupiter transfer API instead.
-    statusEl.innerHTML = '<span style="color:#f5c400">⏳ Creating recipient token account (~0.002 SOL fee)...</span>';
-  }
-
-  // Get blockhash
-  const bhRes = await fetch('https://api.mainnet-beta.solana.com', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc:'2.0', id:3, method:'getLatestBlockhash',
-      params: [{ commitment:'confirmed' }] })
-  });
-  const bhData = await bhRes.json();
-  const blockhash = bhData.result.value.blockhash;
-
-  // Build SPL transfer instruction
-  // Token program: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
-  const TOKEN_PROGRAM = base58Decode('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
-  const senderATAKey   = base58Decode(senderATA);
-  const recipientATAKey = base58Decode(recipientATA);
-
-  // SPL Transfer instruction data: [3, amount as u64 LE]
-  const instrData = new Uint8Array(9);
-  instrData[0] = 3; // Transfer instruction
-  new DataView(instrData.buffer).setUint32(1, amount & 0xFFFFFFFF, true);
-  new DataView(instrData.buffer).setUint32(5, Math.floor(amount / 0x100000000), true);
-
-  const tx = buildSolanaTransaction({
-    blockhash,
-    feePayer: fromKey,
-    accounts: [senderATAKey, recipientATAKey, fromKey, TOKEN_PROGRAM],
-    programIdIndex: 3,
-    accountIndices: [0, 1, 2],
-    instrData,
-  });
-
-  statusEl.innerHTML = '<span style="color:#a78bfa">⏳ Signing...</span>';
-  const sig = await signAndSubmitRaw(tx);
-  statusEl.innerHTML =
-    `<span style="color:#00f5a0">✅ Sent! Tx: <a href="https://solscan.io/tx/${sig}" target="_blank" style="color:#63b3ed">${sig.substring(0,16)}...</a></span>`;
-  toast(`✅ Withdrew ${amountUsdc} USDC`);
-  loadWithdrawBalances();
-}
-
-// Build a minimal Solana legacy transaction binary
-function buildSolanaTransaction({ blockhash, feePayer, accounts, programIdIndex, accountIndices, instrData }) {
-  // Header: numRequiredSignatures=1, numReadonlySignedAccounts=0, numReadonlyUnsignedAccounts=1
-  const header = new Uint8Array([1, 0, 1]);
-  // Account keys (compact array)
-  const numAccounts = accounts.length;
-  const accountsFlat = new Uint8Array(numAccounts * 32);
-  accounts.forEach((a, i) => accountsFlat.set(a, i * 32));
-  // Blockhash (32 bytes)
-  const bhBytes = base58Decode(blockhash);
-  // Instructions: 1 instruction
-  const acctIdxBytes = new Uint8Array(accountIndices);
-  const instr = new Uint8Array([
-    programIdIndex,              // program id index
-    accountIndices.length,       // accounts count
-    ...accountIndices,           // account indices
-    ...encodeCompactU16(instrData.length), // data length
-    ...instrData,                // data
-  ]);
-
-  // Message
-  const message = new Uint8Array([
-    ...header,
-    ...encodeCompactU16(numAccounts), ...accountsFlat,
-    ...bhBytes,
-    1, // instruction count
-    ...instr,
-  ]);
-
-  // Transaction = [sig count=1, empty sig (64 zeros), message]
-  const emptySig = new Uint8Array(64);
-  return new Uint8Array([1, ...emptySig, ...message]);
-}
-
-function encodeCompactU16(n) {
-  if (n <= 0x7f) return [n];
-  if (n <= 0x3fff) return [(n & 0x7f) | 0x80, n >> 7];
-  return [(n & 0x7f) | 0x80, ((n >> 7) & 0x7f) | 0x80, n >> 14];
-}
-
-async function signAndSubmitRaw(tx) {
-  // Extract message (skip 1-byte sig count + 64-byte sig = offset 65)
-  const msgBytes = tx.slice(65);
-
-  // Sign with stored keypair
-  const privKey = await crypto.subtle.importKey(
-    'raw', walletState.keypair.slice(0, 32),
-    { name:'Ed25519' }, false, ['sign']
-  );
-  const sig = new Uint8Array(await crypto.subtle.sign('Ed25519', privKey, msgBytes));
-
-  // Inject signature
-  tx.set(sig, 1);
-
-  // Submit
-  const b64 = btoa(String.fromCharCode(...tx));
-  const rpcRes = await fetch('https://api.mainnet-beta.solana.com', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'sendTransaction',
-      params: [b64, { encoding:'base64', skipPreflight:false, preflightCommitment:'confirmed' }] })
-  });
-  const rpcData = await rpcRes.json();
-  if (rpcData.error) throw new Error(rpcData.error.message);
-  return rpcData.result; // tx signature
-}
-
-// base58 decode helper (for Solana public keys)
-function base58Decode(s) {
-  const ALPHA = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-  let n = BigInt(0);
-  for (const c of s) {
-    const d = ALPHA.indexOf(c);
-    if (d < 0) throw new Error('Invalid base58 char: ' + c);
-    n = n * 58n + BigInt(d);
-  }
-  const bytes = [];
-  while (n > 0n) { bytes.unshift(Number(n & 0xffn)); n >>= 8n; }
-  const leadingZeros = [...s].filter(c => c === '1').length;
-  return new Uint8Array([...new Array(leadingZeros).fill(0), ...bytes]);
-}
-
-// Derive associated token account (ATA) for owner + mint
-async function deriveATA(ownerB58, mintB58) {
-  const PROGRAM_ID  = base58Decode('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe8bv');
-  const TOKEN_PROG  = base58Decode('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
-  const owner = base58Decode(ownerB58);
-  const mint  = base58Decode(mintB58);
-  const SYSTEM = new Uint8Array(32);
-
-  // Find PDA: seeds = [owner, TOKEN_PROG, mint], program = PROGRAM_ID
-  for (let nonce = 255; nonce >= 0; nonce--) {
-    const seeds = new Uint8Array([...owner, ...TOKEN_PROG, ...mint, nonce]);
-    const hashBuf = await crypto.subtle.digest('SHA-256',
-      await crypto.subtle.digest('SHA-256',
-        new Uint8Array([...seeds, ...PROGRAM_ID, ...new TextEncoder().encode('ProgramDerivedAddress')])
-      )
-    );
-    const hash = new Uint8Array(hashBuf);
-    // Valid PDA: not on Ed25519 curve (simplified check: just use nonce=255 for ATA)
-    if (nonce === 255) {
-      return base58Encode(hash.slice(0, 32));
-    }
-  }
-  throw new Error('Could not derive ATA');
-}
-
-function base58Encode(bytes) {
-  const ALPHA = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-  let n = BigInt(0);
-  for (const b of bytes) n = n * 256n + BigInt(b);
-  let s = '';
-  while (n > 0n) { const r = Number(n % 58n); s = ALPHA[r] + s; n = n / 58n; }
-  const leading = [...bytes].filter(b => b === 0).length;
-  return '1'.repeat(leading) + s;
-}
-
-function updateWalletReadyStatus() {
-  const el = $('walletReadyStatus');
-  if (!el) return;
-  if (!walletState.loaded) {
-    el.innerHTML = '<span style="color:#f5c400">⚠️ Wallet locked — enter password and click Unlock to enable live execution</span>';
-  } else if (!walletState.backedUp) {
-    el.innerHTML = '<span style="color:#f5c400">⚠️ Export your backup before live execution unlocks</span>';
-  } else {
-    el.innerHTML = '<span style="color:#00f5a0">✅ Wallet ready — locked and loaded for live execution</span>';
-  }
-}
+// Withdraw functions removed (BloFin handles withdrawals via exchange UI)
 
 // ════════════════════════════════════════════════════════════════
-// ⚡ JUPITER EXECUTION ENGINE
+// ════════════════════════════════════════════════════════════════
+// ⚡ BLOFIN EXECUTION ENGINE — PERPETUAL FUTURES
 // ════════════════════════════════════════════════════════════════
 
-// Verified Solana token mints
-// ════════════════════════════════════════════════════════════════
-// ⚡ JUPITER EXECUTION ENGINE v2 — SPOT + PERPS
-// Replaces: JUPITER_TOKENS block through closeJupiterModal()
-// ════════════════════════════════════════════════════════════════
+let blofinPending = null;
+let blofinLev = 1;
 
-// ── Token registry ────────────────────────────────────────────
-const JUPITER_TOKENS = {
-  BTCUSDT: { mint:'3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh', symbol:'wBTC', decimals:8 },
-  ETHUSDT: { mint:'7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs', symbol:'wETH', decimals:8 },
-  SOLUSDT: { mint:'So11111111111111111111111111111111111111112',   symbol:'SOL',  decimals:9 },
-  USDC:    { mint:'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', symbol:'USDC', decimals:6 },
-};
-
-// Jupiter Perps markets — JLP pool-based, oracle pricing
-// marketIndex: 0=SOL, 1=BTC, 2=ETH (matches Jupiter Perps custody ordering)
-const PERP_MARKETS = {
-  SOLUSDT: { name:'SOL-USD', marketIndex:0, maxLev:100, oracleMint:'So11111111111111111111111111111111111111112' },
-  BTCUSDT: { name:'BTC-USD', marketIndex:1, maxLev:100, oracleMint:'3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh' },
-  ETHUSDT: { name:'ETH-USD', marketIndex:2, maxLev:100, oracleMint:'7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs' },
-};
-
-const PERPS_API = 'https://perps-api.jup.ag/v1';
-
-// ── Runtime state ─────────────────────────────────────────────
-let jupiterPending = null;
-let jupiterMode    = 'spot';   // 'spot' | 'perps'
-let jupiterLev     = 1;
-
-function jupiterTokenFor(sym) { return JUPITER_TOKENS[sym] || null; }
-function perpMarketFor(sym)   { return PERP_MARKETS[sym]   || null; }
-
-// ── Mode toggle ───────────────────────────────────────────────
-function setJupiterMode(mode) {
-  jupiterMode = mode;
-  const spotBtn  = $('jModeSpot');
-  const perpsBtn = $('jModePerps');
-  const spotPanel  = $('jPanelSpot');
-  const perpsPanel = $('jPanelPerps');
-
-  if (spotBtn)  { spotBtn.style.background  = mode==='spot'  ? 'rgba(0,245,160,0.2)'  : 'transparent'; spotBtn.style.color  = mode==='spot'  ? '#00f5a0' : '#5a7a68'; }
-  if (perpsBtn) { perpsBtn.style.background = mode==='perps' ? 'rgba(167,139,250,0.2)': 'transparent'; perpsBtn.style.color = mode==='perps' ? '#a78bfa' : '#5a7a68'; }
-  if (spotPanel)  spotPanel.style.display  = mode==='spot'  ? 'block' : 'none';
-  if (perpsPanel) perpsPanel.style.display = mode==='perps' ? 'block' : 'none';
-
-  // Re-fetch quote in new mode if we have a pending setup
-  if (jupiterPending?.setup) {
-    openJupiterModal({ ...jupiterPending.setup, mode });
-  }
-}
-
-function setLeverage(lev) {
-  jupiterLev = lev;
+function setBlofinLeverage(lev) {
+  blofinLev = lev;
   document.querySelectorAll('.lev-btn').forEach(btn => {
     const btnLev = parseInt(btn.dataset.lev);
     const isSelected = btnLev === lev;
-    if (btnLev >= 50) {
-      btn.style.background  = isSelected ? (btnLev===100?'rgba(255,77,109,0.25)':'rgba(245,196,0,0.2)') : (btnLev===100?'rgba(255,77,109,0.08)':'rgba(245,196,0,0.08)');
-      btn.style.borderColor = isSelected ? (btnLev===100?'rgba(255,77,109,0.6)':'rgba(245,196,0,0.5)')  : (btnLev===100?'rgba(255,77,109,0.2)':'rgba(245,196,0,0.2)');
-      btn.style.color       = btnLev===100 ? '#ff4d6d' : '#f5c400';
+    if (btnLev >= 100) {
+      btn.style.background  = isSelected ? 'rgba(255,0,0,0.2)'  : 'rgba(255,0,0,0.05)';
+      btn.style.borderColor = isSelected ? 'rgba(255,0,0,0.5)'  : 'rgba(255,0,0,0.2)';
+      btn.style.color       = '#ff0000';
+    } else if (btnLev >= 50) {
+      btn.style.background  = isSelected ? 'rgba(245,196,0,0.2)' : 'rgba(245,196,0,0.08)';
+      btn.style.borderColor = isSelected ? 'rgba(245,196,0,0.5)' : 'rgba(245,196,0,0.2)';
+      btn.style.color       = '#f5c400';
     } else {
       btn.style.background  = isSelected ? 'rgba(0,245,160,0.2)'  : 'transparent';
       btn.style.borderColor = isSelected ? 'rgba(0,245,160,0.45)' : 'rgba(255,255,255,0.1)';
       btn.style.color       = isSelected ? '#00f5a0' : '#aaa';
     }
   });
-  // Update perps stats display with new leverage
-  if (jupiterPending?.setup && jupiterMode === 'perps') {
-    const s = jupiterPending.setup;
-    updatePerpsDisplay(jupiterPending.markPrice, s.sizingUsd, lev, s.direction, s.slPct, s.tpPct, s.sym);
-  }
+  if (blofinPending?.setup) updateBlofinDisplay();
 }
 
-function updatePerpsDisplay(markPrice, collateralUsd, lev, direction, slPct, tpPct, sym) {
+function updateBlofinDisplay() {
+  if (!blofinPending) return;
+  const p = blofinPending;
+  const lev = blofinLev || 1;
+  const markPrice = p.markPrice;
+  const collateralUsd = p.sizing;
+  const direction = p.setup.direction;
+  const slPct = p.slPct || 0;
+  const tpPct = p.tpPct || 0;
+
   const positionSize = collateralUsd * lev;
-  // Approximate liquidation price (Jupiter Perps uses ~90% of collateral before liquidation)
   const liqPct = 0.9 / lev;
-  const liqPrice = direction === 'long'
-    ? markPrice * (1 - liqPct)
-    : markPrice * (1 + liqPct);
-  const slPrice = direction === 'long'
-    ? markPrice * (1 - slPct / 100)
-    : markPrice * (1 + slPct / 100);
-  const tpPrice = direction === 'long'
-    ? markPrice * (1 + tpPct / 100)
-    : markPrice * (1 - tpPct / 100);
-  const openFee  = positionSize * 0.0006;  // 0.06% Jupiter Perps fee
-  const market   = PERP_MARKETS[sym];
-  const fmt = n => n.toLocaleString(undefined,{maximumFractionDigits:4});
+  const liqPrice = direction === 'long' ? markPrice * (1 - liqPct) : markPrice * (1 + liqPct);
+  const slPrice = slPct > 0 ? (direction === 'long' ? markPrice * (1 - slPct / 100) : markPrice * (1 + slPct / 100)) : null;
+  const tpPrice = tpPct > 0 ? (direction === 'long' ? markPrice * (1 + tpPct / 100) : markPrice * (1 - tpPct / 100)) : null;
+  const instId = p.instId;
+  const fmt = n => n ? n.toLocaleString(undefined, {maximumFractionDigits: 4}) : '--';
 
   const el = id => $(id);
-  el('jpCollateral') && (el('jpCollateral').textContent = `$${collateralUsd.toFixed(0)} USDC`);
-  el('jpSize')       && (el('jpSize').textContent       = `$${positionSize.toLocaleString(undefined,{maximumFractionDigits:0})}`);
-  el('jpMark')       && (el('jpMark').textContent       = `$${fmt(markPrice)}`);
-  el('jpLiq')        && (el('jpLiq').textContent        = `$${fmt(liqPrice)} (${(liqPct*100).toFixed(1)}% move)`);
-  el('jpSL')         && (el('jpSL').textContent         = `$${fmt(slPrice)} (−${slPct}%)`);
-  el('jpTP')         && (el('jpTP').textContent         = `$${fmt(tpPrice)} (+${tpPct}%)`);
-  el('jpFee')        && (el('jpFee').textContent        = `~$${openFee.toFixed(2)}`);
-  el('jpMarket')     && (el('jpMarket').textContent     = market?.name || sym);
+  if (el('bfCollateral')) el('bfCollateral').textContent = '$' + collateralUsd.toFixed(0) + ' USDT';
+  if (el('bfSize'))       el('bfSize').textContent       = '$' + positionSize.toLocaleString(undefined, {maximumFractionDigits: 0});
+  if (el('bfMark'))       el('bfMark').textContent       = '$' + fmt(markPrice);
+  if (el('bfLiq'))        el('bfLiq').textContent        = '$' + fmt(liqPrice) + ' (' + (liqPct * 100).toFixed(1) + '% move)';
+  if (el('bfSL'))         el('bfSL').textContent         = slPrice ? '$' + fmt(slPrice) + ' (-' + slPct + '%)' : 'None';
+  if (el('bfTP'))         el('bfTP').textContent         = tpPrice ? '$' + fmt(tpPrice) + ' (+' + tpPct + '%)' : 'None';
+  if (el('bfInstId'))     el('bfInstId').textContent     = instId;
 
-  // Liq price warning colouring
-  if (el('jpLiq')) {
+  const orderType = $('bfOrderType')?.value || 'market';
+  const limitRow = $('bfLimitPriceRow');
+  if (limitRow) limitRow.style.display = (orderType === 'limit' || orderType === 'post_only') ? 'block' : 'none';
+
+  if (el('bfLiq')) {
     const movePct = liqPct * 100;
-    el('jpLiq').style.color = movePct < 3 ? '#ff4d6d' : movePct < 8 ? '#f5c400' : '#ff8c69';
+    el('bfLiq').style.color = movePct < 3 ? '#ff4d6d' : movePct < 8 ? '#f5c400' : '#ff8c69';
   }
 
-  // Store computed values in pending for execution
-  if (jupiterPending) {
-    jupiterPending.markPrice  = markPrice;
-    jupiterPending.liqPrice   = liqPrice;
-    jupiterPending.slPrice    = slPrice;
-    jupiterPending.tpPrice    = tpPrice;
-    jupiterPending.positionSize = positionSize;
-    jupiterPending.leverage   = lev;
-  }
+  blofinPending.liqPrice = liqPrice;
+  blofinPending.slPrice = slPrice;
+  blofinPending.tpPrice = tpPrice;
+  blofinPending.positionSize = positionSize;
+  blofinPending.leverage = lev;
 }
 
-// ════════════════════════════════════════════════════════════════
-// OPEN MODAL — entry point from Best Trades / strategy alerts
-// ════════════════════════════════════════════════════════════════
-
-async function openJupiterModal(setup) {
-  // setup: { sym, direction, slPct, tpPct, sizingUsd, asset, mode?, leverage? }
-  if (!walletState.loaded) {
-    toast('Unlock your trading wallet first — go to Paper Trade tab', 'error');
-    switchPageTab('paper');
-    return;
-  }
-
-  const modal      = $('jupiterModal');
-  const statusEl   = $('jupiterExecStatus');
-  const confirmBtn = $('jupiterConfirmBtn');
+async function openBlofinModal(setup) {
+  const modal = $('blofinModal');
+  const statusEl = $('blofinExecStatus');
+  const confirmBtn = $('blofinConfirmBtn');
   if (!modal) return;
 
   modal.style.display = 'flex';
-  if (statusEl)    statusEl.textContent = 'Fetching quote...';
-  if (confirmBtn)  confirmBtn.disabled  = true;
-  jupiterPending = null;
+  if (statusEl) statusEl.textContent = 'Fetching quote...';
+  if (confirmBtn) confirmBtn.disabled = true;
+  blofinPending = null;
 
-  // Respect mode/leverage from setup if provided
-  if (setup.mode)     { jupiterMode = setup.mode; setJupiterMode(setup.mode); }
-  if (setup.leverage) { jupiterLev  = setup.leverage; setLeverage(setup.leverage); }
+  if (setup.leverage) { blofinLev = setup.leverage; setBlofinLeverage(setup.leverage); }
 
   const maxSize = parseFloat($('policyMaxSize')?.value || 100);
-  const sizing  = Math.min(setup.sizingUsd || 50, maxSize);
-  const slPct   = setup.slPct || 3;
-  const tpPct   = setup.tpPct || 6;
+  const sizing = Math.min(setup.sizingUsd || 50, maxSize);
+  const slPct = setup.slPct || 3;
+  const tpPct = setup.tpPct || 6;
+  const instId = setup.sym.replace(/USDT$/i, '') + '-USDT';
 
-  const sub = $('jupiterModalSub');
-  const token = jupiterTokenFor(setup.sym);
-  if (!token) {
-    if (statusEl) statusEl.innerHTML = `<span style="color:#ff4d6d">❌ ${setup.sym} not supported for execution on Solana</span>`;
-    return;
-  }
-  if (sub) sub.textContent = `${setup.direction.toUpperCase()} ${token.symbol} · $${sizing} · ${jupiterMode.toUpperCase()}`;
+  const sub = $('blofinModalSub');
+  if (sub) sub.textContent = setup.direction.toUpperCase() + ' ' + instId + ' · $' + sizing + ' · PERPS';
 
   try {
-    if (jupiterMode === 'perps') {
-      await fetchPerpsQuote(setup, sizing, slPct, tpPct, token);
-    } else {
-      await fetchSpotQuote(setup, sizing, slPct, tpPct, token);
+    let markPrice;
+    try {
+      const r = await fetch(LIVE_API + '/ticker?instId=' + encodeURIComponent(instId), { headers: liveHeaders() });
+      if (r.ok) { const d = await r.json(); markPrice = d.ticker?.last || d.ticker?.bid; }
+    } catch {}
+    if (!markPrice) {
+      const klRes = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=' + setup.sym);
+      if (klRes.ok) { const kl = await klRes.json(); markPrice = parseFloat(kl.price); }
     }
+    if (!markPrice) throw new Error('Could not fetch mark price');
+
+    blofinPending = { setup, instId, sizing, slPct, tpPct, markPrice, leverage: blofinLev, positionSize: sizing * blofinLev };
+    updateBlofinDisplay();
+
     if (confirmBtn) confirmBtn.disabled = false;
-    if (statusEl)   statusEl.innerHTML  = '<span style="color:#00f5a0">✅ Quote ready — review and confirm</span>';
+    if (statusEl) statusEl.innerHTML = '<span style="color:#00f5a0">Quote ready — review and confirm</span>';
   } catch(e) {
-    if (statusEl) statusEl.innerHTML = `<span style="color:#ff4d6d">❌ ${e.message}</span>`;
-    console.warn('[Jupiter openModal]', e);
+    if (statusEl) statusEl.innerHTML = '<span style="color:#ff4d6d">' + e.message + '</span>';
   }
 }
 
-// ── Spot quote ────────────────────────────────────────────────
-async function fetchSpotQuote(setup, sizing, slPct, tpPct, token) {
-  const usdc = JUPITER_TOKENS.USDC;
-  const inputMint  = setup.direction === 'long' ? usdc.mint  : token.mint;
-  const outputMint = setup.direction === 'long' ? token.mint : usdc.mint;
-  const inputDec   = setup.direction === 'long' ? usdc.decimals : token.decimals;
-  const amount     = Math.round(sizing * Math.pow(10, inputDec));
-
-  const url = `https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=100`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('Jupiter quote: HTTP ' + res.status);
-  const quote = await res.json();
-  if (quote.error) throw new Error('Jupiter: ' + quote.error);
-
-  const outDec    = setup.direction === 'long' ? token.decimals : usdc.decimals;
-  const outAmount = parseInt(quote.outAmount) / Math.pow(10, outDec);
-  const impact    = parseFloat(quote.priceImpactPct || 0) * 100;
-  const fillPrice = setup.direction === 'long' ? sizing / outAmount : outAmount / sizing;
-  const slPrice   = setup.direction === 'long' ? fillPrice*(1-slPct/100) : fillPrice*(1+slPct/100);
-  const tpPrice   = setup.direction === 'long' ? fillPrice*(1+tpPct/100) : fillPrice*(1-tpPct/100);
-  const fmt       = n => n.toLocaleString(undefined,{maximumFractionDigits:6});
-  const routeLbl  = quote.routePlan?.slice(0,2).map(r=>r.swapInfo?.label||'').filter(Boolean).join(' → ') || 'Jupiter Auto';
-
-  $('jqBuy').textContent    = `${outAmount.toFixed(6)} ${setup.direction==='long'?token.symbol:'USDC'}`;
-  $('jqPay').textContent    = `$${sizing} ${setup.direction==='long'?'USDC':token.symbol}`;
-  $('jqPrice').textContent  = `$${fmt(fillPrice)}`;
-  $('jqImpact').textContent = impact.toFixed(3) + '%';
-  $('jqImpact').style.color = impact > 1 ? '#ff4d6d' : impact > 0.3 ? '#f5c400' : '#00f5a0';
-  $('jqSL').textContent     = `$${fmt(slPrice)} (−${slPct}%)`;
-  $('jqTP').textContent     = `$${fmt(tpPrice)} (+${tpPct}%)`;
-  $('jqRoute').textContent  = 'Route: ' + routeLbl;
-
-  jupiterPending = {
-    mode:'spot', quote, inputMint, outputMint, amount, token, setup,
-    fillPrice, slPrice, tpPrice, sizing, slPct, tpPct,
-  };
-}
-
-// ── Perps quote ───────────────────────────────────────────────
-async function fetchPerpsQuote(setup, sizing, slPct, tpPct, token) {
-  const market = perpMarketFor(setup.sym);
-  if (!market) throw new Error(`${setup.sym} not available for perps. Supported: SOL, BTC, ETH`);
-
-  // Get current mark price from Binance (fast, reliable)
-  const klUrl = `https://api.binance.com/api/v3/ticker/price?symbol=${setup.sym}`;
-  const klRes = await fetch(klUrl);
-  if (!klRes.ok) throw new Error('Could not fetch mark price');
-  const klData = await klRes.json();
-  const markPrice = parseFloat(klData.price);
-  if (!markPrice) throw new Error('Invalid mark price received');
-
-  const lev = jupiterLev || setup.leverage || 1;
-  updatePerpsDisplay(markPrice, sizing, lev, setup.direction, slPct, tpPct, setup.sym);
-
-  jupiterPending = {
-    mode:'perps', market, token, setup,
-    markPrice, sizing, slPct, tpPct, leverage: lev,
-    positionSize: sizing * lev,
-    slPrice:  setup.direction==='long' ? markPrice*(1-slPct/100) : markPrice*(1+slPct/100),
-    tpPrice:  setup.direction==='long' ? markPrice*(1+tpPct/100) : markPrice*(1-tpPct/100),
-    liqPrice: setup.direction==='long' ? markPrice*(1-0.9/lev)   : markPrice*(1+0.9/lev),
-  };
-}
-
-// ════════════════════════════════════════════════════════════════
-// CONFIRM EXECUTE
-// ════════════════════════════════════════════════════════════════
-
-async function confirmJupiterExec() {
-  if (!jupiterPending)      return;
-  if (!walletState.keypair) { toast('Wallet locked', 'error'); return; }
-
-  const statusEl   = $('jupiterExecStatus');
-  const confirmBtn = $('jupiterConfirmBtn');
+async function confirmBlofinExec() {
+  if (!blofinPending) return;
+  const statusEl = $('blofinExecStatus');
+  const confirmBtn = $('blofinConfirmBtn');
   if (confirmBtn) confirmBtn.disabled = true;
-  if (statusEl)   statusEl.innerHTML  = '<span style="color:#f5c400">⏳ Building transaction...</span>';
+  if (statusEl) statusEl.innerHTML = '<span style="color:#f5c400">Placing order via backend...</span>';
 
   try {
-    if (jupiterPending.mode === 'perps') {
-      await executePerps(statusEl);
-    } else {
-      await executeSpot(statusEl);
-    }
+    const p = blofinPending;
+    const orderType = $('bfOrderType')?.value || 'market';
+    const marginMode = $('bfMarginMode')?.value || 'cross';
+    const limitPrice = orderType !== 'market' ? parseFloat($('bfLimitPrice')?.value) : undefined;
+    const side = p.setup.direction === 'long' ? 'buy' : 'sell';
+    const contractSize = (p.positionSize / p.markPrice).toFixed(4);
+
+    const body = { instId: p.instId, side, orderType, size: contractSize, leverage: p.leverage, marginMode };
+    if (p.tpPrice) body.tpPrice = p.tpPrice;
+    if (p.slPrice) body.slPrice = p.slPrice;
+    if (limitPrice) body.price = limitPrice;
+
+    const r = await fetch(LIVE_API + '/order', { method: 'POST', headers: liveHeaders(), body: JSON.stringify(body) });
+    const d = await r.json();
+    if (!r.ok || !d.success) throw new Error(d.error || 'Order failed');
+
+    if (statusEl) statusEl.innerHTML = '<span style="color:#00f5a0">Position opened! Order: ' + (d.orderId || '--').slice(0, 16) + '...</span>';
+    toast('Position opened on BloFin!');
+    setTimeout(closeBlofinModal, 3500);
+    liveRefreshAll();
   } catch(e) {
-    if (statusEl) statusEl.innerHTML = `<span style="color:#ff4d6d">❌ ${e.message}</span>`;
+    if (statusEl) statusEl.innerHTML = '<span style="color:#ff4d6d">' + e.message + '</span>';
     if (confirmBtn) confirmBtn.disabled = false;
-    console.error('[Jupiter exec]', e);
   }
 }
 
-// ── Sign + submit helper (shared) ─────────────────────────────
-async function signAndSubmit(base64Tx) {
-  const txBytes  = Uint8Array.from(atob(base64Tx), c => c.charCodeAt(0));
-  // Versioned transaction: version byte + sig count + sig slots + message
-  const numSigs   = txBytes[1] || 1;
-  const msgOffset = 1 + 1 + numSigs * 64;
-  const msgBytes  = txBytes.slice(msgOffset);
-
-  const privKey   = walletState.keypair.slice(0, 32);
-  const sigKey    = await crypto.subtle.importKey('raw', privKey, {name:'Ed25519'}, false, ['sign']);
-  const signature = new Uint8Array(await crypto.subtle.sign('Ed25519', sigKey, msgBytes));
-  txBytes.set(signature, 1 + 1);   // inject at sig slot 0
-
-  const rpc    = 'https://api.mainnet-beta.solana.com';
-  const rpcRes = await fetch(rpc, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'sendTransaction',
-      params:[btoa(String.fromCharCode(...txBytes)), {encoding:'base64',skipPreflight:false,maxRetries:3}]
-    })
-  });
-  const rpcData = await rpcRes.json();
-  if (rpcData.error) throw new Error(rpcData.error.message || JSON.stringify(rpcData.error));
-  return rpcData.result; // txSig
-}
-
-// ── Execute SPOT ──────────────────────────────────────────────
-async function executeSpot(statusEl) {
-  const p = jupiterPending;
-  if (statusEl) statusEl.innerHTML = '<span style="color:#f5c400">⏳ Building swap transaction...</span>';
-
-  const swapRes = await fetch('https://quote-api.jup.ag/v6/swap', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
-      quoteResponse:           p.quote,
-      userPublicKey:           walletState.publicKey,
-      wrapAndUnwrapSol:        true,
-      dynamicComputeUnitLimit: true,
-      prioritizationFeeLamports: 'auto',
-    })
-  });
-  if (!swapRes.ok) throw new Error('Swap build failed: HTTP ' + swapRes.status);
-  const swapJson = await swapRes.json();
-  if (!swapJson.swapTransaction) throw new Error('No transaction returned from Jupiter');
-
-  if (statusEl) statusEl.innerHTML = '<span style="color:#f5c400">✍️ Signing...</span>';
-  const txSig = await signAndSubmit(swapJson.swapTransaction);
-
-  if (statusEl) statusEl.innerHTML =
-    `<span style="color:#00f5a0">✅ Filled! <a href="https://solscan.io/tx/${txSig}" target="_blank" style="color:#63b3ed;text-decoration:none">Solscan ↗</a></span>`;
-
-  sendTradeNotification('SPOT', p, txSig);
-  toast('⚡ Spot trade executed on Jupiter!');
-  setTimeout(closeJupiterModal, 3500);
-}
-
-// ── Execute PERPS ─────────────────────────────────────────────
-async function executePerps(statusEl) {
-  const p   = jupiterPending;
-  const lev = p.leverage || jupiterLev || 1;
-
-  if (statusEl) statusEl.innerHTML = '<span style="color:#f5c400">⏳ Building perps transaction...</span>';
-
-  // Jupiter Perps API — increase-position endpoint
-  // Docs: https://perps-api.jup.ag/v1/
-  const collateralLamports = Math.round(p.sizing * Math.pow(10, 6));  // USDC 6 decimals
-  const usdc = JUPITER_TOKENS.USDC;
-
-  const body = {
-    walletAddress:        walletState.publicKey,
-    market:               p.market.name,           // 'SOL-USD' | 'BTC-USD' | 'ETH-USD'
-    side:                 p.setup.direction,        // 'long' | 'short'
-    collateralMint:       usdc.mint,               // USDC as collateral
-    collateralAmount:     collateralLamports,       // in lamports (1e6 per USD)
-    leverage:             lev,
-    slippage:             0.5,                     // 0.5% slippage tolerance
-    stopLossPrice:        p.slPrice,
-    takeProfitPrice:      p.tpPrice,
-  };
-
-  let txBase64;
-  try {
-    const apiRes = await fetch(`${PERPS_API}/increase-position`, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(body)
-    });
-
-    if (!apiRes.ok) {
-      // Try alternate endpoint name
-      const altRes = await fetch(`${PERPS_API}/open-position`, {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(body)
-      });
-      if (!altRes.ok) throw new Error(`Jupiter Perps API returned ${apiRes.status}. The perps transaction API may require a different endpoint — check perps-api.jup.ag docs for the latest.`);
-      const altData = await altRes.json();
-      txBase64 = altData.transaction || altData.tx || altData.serializedTransaction;
-    } else {
-      const apiData = await apiRes.json();
-      if (apiData.error) throw new Error('Perps API: ' + apiData.error);
-      txBase64 = apiData.transaction || apiData.tx || apiData.serializedTransaction;
-    }
-  } catch(e) {
-    throw new Error(e.message);
-  }
-
-  if (!txBase64) throw new Error('No transaction returned from Jupiter Perps API');
-
-  if (statusEl) statusEl.innerHTML = '<span style="color:#f5c400">✍️ Signing perps transaction...</span>';
-  const txSig = await signAndSubmit(txBase64);
-
-  if (statusEl) statusEl.innerHTML =
-    `<span style="color:#a78bfa">✅ Perps position opened! <a href="https://solscan.io/tx/${txSig}" target="_blank" style="color:#63b3ed;text-decoration:none">Solscan ↗</a> · <a href="https://perps.jup.ag" target="_blank" style="color:#63b3ed;text-decoration:none">View position ↗</a></span>`;
-
-  sendTradeNotification('PERPS', p, txSig, lev);
-  toast(`⚡ ${lev}× perps position opened on Jupiter!`);
-  setTimeout(closeJupiterModal, 4000);
-}
-
-// ── Telegram notification (shared) ───────────────────────────
-function sendTradeNotification(type, p, txSig, lev) {
-  const { token: tgToken, chatId } = amGetTg();
-  if (!tgToken || !chatId) return;
-  const dir   = p.setup.direction === 'long' ? '🟢 LONG' : '🔴 SHORT';
-  const asset = p.token?.symbol || p.setup.sym;
-  let msg;
-  if (type === 'PERPS') {
-    const pos = (p.sizing * (lev||1)).toLocaleString(undefined,{maximumFractionDigits:0});
-    msg = `⚡ <b>PERPS POSITION OPENED</b> — ${asset}\n${dir} ${lev}× leverage\nCollateral: $${p.sizing} USDC · Position: $${pos}\nMark: ~$${p.markPrice?.toLocaleString(undefined,{maximumFractionDigits:2})}\nLiq: $${p.liqPrice?.toLocaleString(undefined,{maximumFractionDigits:2})} · SL: $${p.slPrice?.toLocaleString(undefined,{maximumFractionDigits:2})} · TP: $${p.tpPrice?.toLocaleString(undefined,{maximumFractionDigits:2})}\n<a href="https://solscan.io/tx/${txSig}">Solscan ↗</a> · <a href="https://perps.jup.ag">Manage position ↗</a>`;
-  } else {
-    msg = `⚡ <b>SPOT TRADE EXECUTED</b> — ${asset}\n${dir} · $${p.sizing} USDC\nFill ≈ $${p.fillPrice?.toLocaleString(undefined,{maximumFractionDigits:4})}\nSL: $${p.slPrice?.toLocaleString(undefined,{maximumFractionDigits:4})} · TP: $${p.tpPrice?.toLocaleString(undefined,{maximumFractionDigits:4})}\n<a href="https://solscan.io/tx/${txSig}">Solscan ↗</a>`;
-  }
-  sendTelegram(tgToken, chatId, msg).catch(()=>{});
-}
-
-function closeJupiterModal() {
-  const m = $('jupiterModal');
+function closeBlofinModal() {
+  const m = $('blofinModal');
   if (m) m.style.display = 'none';
-  jupiterPending = null;
+  blofinPending = null;
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -15707,8 +15043,8 @@ renderProbeResults = function(results, tf) {
         <div style="width:5px;height:5px;border-radius:50%;background:#252525;flex-shrink:0"></div>
         <span style="font-size:7px;color:#3a5a48;font-family:'Space Mono',monospace">${m.label}</span>
       </div>`).join('');
-    const canExec   = !!JUPITER_TOKENS[r.sym];
-    const hasPerps  = !!PERP_MARKETS[r.sym];
+    const canExec = true; // All BloFin USDT pairs are executable
+    const hasPerps = true; // BloFin supports perps for all pairs
     const execReady = canExec && walletState.loaded;
     const execStyle = execReady
       ? 'background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);color:#00f5a0;cursor:pointer'
@@ -15825,7 +15161,7 @@ function btSetMode(idx, mode) {
 function execFromBestTrades(idx) {
   const r = PROBE.results?.[idx];
   if (!r) { toast('Run a scan first', 'error'); return; }
-  if (!JUPITER_TOKENS[r.sym]) {
+  if (false) { // BloFin supports all pairs
     toast(`${r.asset} is not available for Jupiter execution (not a Solana SPL token)`, 'error');
     return;
   }
@@ -15835,7 +15171,7 @@ function execFromBestTrades(idx) {
   const modeBtn = $('btMode_perps_' + idx);
   const mode    = modeBtn?.style?.background?.includes('167') ? 'perps' : 'spot';
 
-  openJupiterModal({
+  openBlofinModal({
     sym:       r.sym,
     direction: r.direction,
     slPct, tpPct,
@@ -15849,12 +15185,12 @@ function execFromBestTrades(idx) {
 const _origFireAlert = fireAlert;
 async function fireAlert(alert, message, detail) {
   await _origFireAlert(alert, message, detail);
-  if (alert.liveExec && alert.type === 'strategy' && walletState.loaded && JUPITER_TOKENS[alert.symbol]) {
+  if (alert.liveExec && alert.type === 'strategy' && walletState.loaded && true /* BloFin supports all */) {
     const isLong  = message.includes('LONG')  || message.includes('🟢');
     const isShort = message.includes('SHORT') || message.includes('🔴');
     if (!isLong && !isShort) return;
     const lev = alert.leverage || alert.execLeverage || 1;
-    openJupiterModal({
+    openBlofinModal({
       sym:       alert.symbol,
       direction: isLong ? 'long' : 'short',
       slPct:     alert.stopLoss   || 3,
@@ -15890,11 +15226,14 @@ function liveHeaders() {
   return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
 }
 
+let _liveMarketsData = [];
+let _liveSSE = null;
+
 async function liveRefreshAll() {
   try {
     await Promise.all([
       liveRefreshStatus(),
-      liveRefreshWallet(),
+      liveRefreshCredentials(),
       liveRefreshStrategies(),
       liveRefreshPositions(),
       liveRefreshSafety(),
@@ -15911,55 +15250,57 @@ async function liveRefreshStatus() {
     if (!r.ok) return;
     const d = await r.json();
     const $e = (id) => document.getElementById(id);
-    $e('liveStatusEngine').textContent = d.engineRunning ? '🟢 Running' : '🔴 Stopped';
+    $e('liveStatusEngine').textContent = d.engineRunning ? 'Running' : 'Stopped';
     $e('liveStatusEngine').style.color = d.engineRunning ? '#00f5a0' : '#ff4d6d';
-    $e('liveStatusWallet').textContent = d.walletUnlocked ? '🔓 Unlocked' : '🔒 Locked';
-    $e('liveStatusWallet').style.color = d.walletUnlocked ? '#00f5a0' : '#f5c400';
+    $e('liveStatusWallet').textContent = d.credentialsUnlocked ? 'Unlocked' : 'Locked';
+    $e('liveStatusWallet').style.color = d.credentialsUnlocked ? '#00f5a0' : '#f5c400';
     $e('liveStatusStrats').textContent = d.activeStrategies;
     $e('liveStatusPos').textContent = d.openPositions;
-    $e('liveStatusKill').textContent = d.killSwitchActive ? '🔴 ACTIVE' : '🟢 OFF';
+    $e('liveStatusKill').textContent = d.killSwitchActive ? 'ACTIVE' : 'OFF';
     $e('liveStatusKill').style.color = d.killSwitchActive ? '#ff4d6d' : '#00f5a0';
-    // Show/hide kill switch deactivate button
     const deactBtn = $e('liveDeactivateKillBtn');
     if (deactBtn) deactBtn.style.display = d.killSwitchActive ? 'block' : 'none';
-    // Show live dot on tab if there are open positions
     const dot = $e('liveTradeDot');
     if (dot) dot.style.display = d.openPositions > 0 ? 'block' : 'none';
+    // Connect SSE if credentials are unlocked
+    if (d.credentialsUnlocked && !_liveSSE) connectLiveStream();
   } catch (e) { console.error('liveRefreshStatus error:', e); }
 }
 
-// ── Trading Wallet ────────────────────────────────────────────
-async function liveRefreshWallet() {
+// ── BloFin Credentials ────────────────────────────────────────
+async function liveRefreshCredentials() {
   try {
-    const r = await fetch(LIVE_API + '/wallet', { headers: liveHeaders() });
+    const r = await fetch(LIVE_API + '/credentials', { headers: liveHeaders() });
     if (!r.ok) return;
     const d = await r.json();
-    const none = document.getElementById('liveWalletNone');
-    const loaded = document.getElementById('liveWalletLoaded');
-    if (!d.wallet) {
+    const none = document.getElementById('liveCredNone');
+    const loaded = document.getElementById('liveCredLoaded');
+    if (!d.hasCredentials) {
       none.style.display = 'block';
       loaded.style.display = 'none';
       return;
     }
     none.style.display = 'none';
     loaded.style.display = 'block';
-    document.getElementById('liveWalletPubkey').textContent = d.wallet.publicKey;
     // Update lock/unlock buttons
     const unlockBtn = document.getElementById('liveUnlockBtn');
     const lockBtn = document.getElementById('liveLockBtn');
     const pwdInput = document.getElementById('liveUnlockPwd');
-    if (d.wallet.unlocked) {
+    if (d.unlocked) {
       unlockBtn.style.display = 'none';
       lockBtn.style.display = 'block';
       pwdInput.style.display = 'none';
+      document.getElementById('liveCredKeyPreview').textContent = 'Unlocked';
+      document.getElementById('liveCredKeyPreview').style.color = '#00f5a0';
     } else {
       unlockBtn.style.display = 'block';
       lockBtn.style.display = 'block';
       pwdInput.style.display = 'block';
+      document.getElementById('liveCredKeyPreview').textContent = 'Locked';
+      document.getElementById('liveCredKeyPreview').style.color = '#f5c400';
     }
-    // Fetch balance
     liveRefreshBalance();
-  } catch (e) { console.error('liveRefreshWallet error:', e); }
+  } catch (e) { console.error('liveRefreshCredentials error:', e); }
 }
 
 async function liveRefreshBalance() {
@@ -15968,38 +15309,52 @@ async function liveRefreshBalance() {
     if (!r.ok) return;
     const d = await r.json();
     if (!d.balance) return;
-    document.getElementById('liveWalletSOL').textContent = d.balance.sol !== null ? parseFloat(d.balance.sol).toFixed(4) : '--';
-    document.getElementById('liveWalletUSDC').textContent = d.balance.usdc !== null ? parseFloat(d.balance.usdc).toFixed(2) : '--';
+    const usdtEl = document.getElementById('liveBalanceUSDT');
+    const availEl = document.getElementById('liveBalanceAvail');
+    if (usdtEl) usdtEl.textContent = d.balance.usdt !== null ? '$' + parseFloat(d.balance.usdt).toFixed(2) : '--';
+    if (availEl) availEl.textContent = d.balance.availableBalance !== null ? '$' + parseFloat(d.balance.availableBalance).toFixed(2) : '--';
   } catch (e) { console.error('liveRefreshBalance error:', e); }
 }
 
-async function liveStoreWallet() {
-  if (!walletState.loaded) return alert('Generate a trading wallet in the Paper Trade tab first.');
-  const pwd = prompt('Enter your wallet password to encrypt and store on server:');
-  if (!pwd) return;
+async function liveStoreCredentials() {
+  const apiKey = document.getElementById('blofinApiKey')?.value?.trim();
+  const secretKey = document.getElementById('blofinSecretKey')?.value?.trim();
+  const passphrase = document.getElementById('blofinPassphrase')?.value?.trim();
+  const encPwd = document.getElementById('blofinEncPwd')?.value?.trim();
+  if (!apiKey || !secretKey || !passphrase) return alert('All three API fields are required.');
+  if (!encPwd || encPwd.length < 8) return alert('Encryption password must be >= 8 characters.');
+
   try {
-    const stored = wLoad();
-    if (!stored) return alert('No wallet data found locally.');
-    const r = await fetch(LIVE_API + '/wallet', {
+    // Encrypt credentials client-side before sending
+    const credsJson = JSON.stringify({ apiKey, secretKey, passphrase });
+    const credsBytes = new TextEncoder().encode(credsJson);
+    const encrypted = await encryptBytes(credsBytes, encPwd);
+
+    const r = await fetch(LIVE_API + '/credentials', {
       method: 'POST',
       headers: liveHeaders(),
-      body: JSON.stringify({ publicKey: stored.publicKey, encryptedData: stored }),
+      body: JSON.stringify({ encryptedData: encrypted }),
     });
     const d = await r.json();
     if (d.success) {
-      alert('Wallet stored on server! You can now unlock it for live trading.');
-      liveRefreshWallet();
+      alert('BloFin API keys stored! Enter your encryption password to unlock.');
+      // Clear inputs
+      document.getElementById('blofinApiKey').value = '';
+      document.getElementById('blofinSecretKey').value = '';
+      document.getElementById('blofinPassphrase').value = '';
+      document.getElementById('blofinEncPwd').value = '';
+      liveRefreshCredentials();
     } else {
       alert('Failed: ' + (d.error || 'Unknown error'));
     }
-  } catch (e) { alert('Error storing wallet: ' + e.message); }
+  } catch (e) { alert('Error storing credentials: ' + e.message); }
 }
 
-async function liveUnlockWallet() {
+async function liveUnlockCredentials() {
   const pwd = document.getElementById('liveUnlockPwd').value;
-  if (!pwd) return alert('Enter wallet password');
+  if (!pwd) return alert('Enter encryption password');
   try {
-    const r = await fetch(LIVE_API + '/wallet/unlock', {
+    const r = await fetch(LIVE_API + '/credentials/unlock', {
       method: 'POST',
       headers: liveHeaders(),
       body: JSON.stringify({ password: pwd }),
@@ -16014,19 +15369,54 @@ async function liveUnlockWallet() {
   } catch (e) { alert('Unlock error: ' + e.message); }
 }
 
-async function liveLockWallet() {
+async function liveLockCredentials() {
   try {
-    await fetch(LIVE_API + '/wallet/lock', { method: 'POST', headers: liveHeaders() });
+    await fetch(LIVE_API + '/credentials/lock', { method: 'POST', headers: liveHeaders() });
+    if (_liveSSE) { _liveSSE.close(); _liveSSE = null; }
     liveRefreshAll();
   } catch (e) { alert('Lock error: ' + e.message); }
 }
 
-async function liveDeleteWallet() {
-  if (!confirm('Delete trading wallet from server? This cannot be undone.')) return;
+async function liveDeleteCredentials() {
+  if (!confirm('Delete BloFin API keys from server? This cannot be undone.')) return;
   try {
-    await fetch(LIVE_API + '/wallet', { method: 'DELETE', headers: liveHeaders() });
+    await fetch(LIVE_API + '/credentials', { method: 'DELETE', headers: liveHeaders() });
+    if (_liveSSE) { _liveSSE.close(); _liveSSE = null; }
     liveRefreshAll();
   } catch (e) { alert('Delete error: ' + e.message); }
+}
+
+// ── SSE Stream (real-time updates) ────────────────────────────
+function connectLiveStream() {
+  if (_liveSSE) return;
+  const token = localStorage.getItem('authToken');
+  if (!token) return;
+  try {
+    _liveSSE = new EventSource(LIVE_API + '/stream?token=' + encodeURIComponent(token));
+    _liveSSE.addEventListener('positions', (e) => {
+      try {
+        // Real-time position update — refresh positions display
+        liveRefreshPositions();
+      } catch {}
+    });
+    _liveSSE.addEventListener('account', (e) => {
+      try {
+        liveRefreshBalance();
+      } catch {}
+    });
+    _liveSSE.addEventListener('orders', (e) => {
+      try {
+        liveRefreshPositions();
+        liveRefreshHistory();
+      } catch {}
+    });
+    _liveSSE.onerror = () => {
+      _liveSSE.close();
+      _liveSSE = null;
+      // Reconnect after 10s
+      setTimeout(connectLiveStream, 10000);
+    };
+  } catch {}
 }
 
 // ── Live Strategies ───────────────────────────────────────────
@@ -16042,26 +15432,20 @@ async function liveRefreshStrategies() {
     }
     el.innerHTML = d.strategies.map(s => {
       const cfg = typeof s.config === 'string' ? JSON.parse(s.config) : s.config;
-      const protoColor = s.protocol === 'drift' ? '#00bfff' : '#f5c400';
-      const protoLabel = s.protocol === 'drift' ? 'DRIFT' : 'JUPITER';
       const statusColor = s.active ? '#00f5a0' : '#888';
       const statusLabel = s.active ? 'ACTIVE' : 'PAUSED';
       return '<div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:6px;padding:10px;margin-bottom:6px">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
           '<div style="font-weight:bold;color:#fff">' + (cfg.label || s.id) + '</div>' +
           '<div style="display:flex;gap:6px;align-items:center">' +
-            '<span style="font-size:9px;padding:2px 6px;border-radius:3px;background:' + protoColor + '22;color:' + protoColor + ';border:1px solid ' + protoColor + '44">' + protoLabel + '</span>' +
+            '<span style="font-size:9px;padding:2px 6px;border-radius:3px;background:rgba(0,245,160,0.1);color:#00f5a0;border:1px solid rgba(0,245,160,0.3)">BLOFIN</span>' +
             '<span style="font-size:9px;padding:2px 6px;border-radius:3px;background:' + statusColor + '22;color:' + statusColor + '">' + statusLabel + '</span>' +
           '</div>' +
         '</div>' +
         '<div style="color:#888;font-size:10px">' + (cfg.symbol || '?') + ' | ' + (cfg.timeframe || '?') + ' | ' + (cfg.leverage || 1) + 'x | Positions: ' + (s.open_positions || 0) + '</div>' +
         '<div style="display:flex;gap:4px;margin-top:6px">' +
-          '<button onclick="liveToggleStrategy(\'' + s.id + '\',' + !s.active + ')" style="padding:3px 8px;background:rgba(0,245,160,0.1);border:1px solid rgba(0,245,160,0.2);color:#00f5a0;border-radius:3px;cursor:pointer;font-size:9px">' + (s.active ? '⏸ Pause' : '▶️ Start') + '</button>' +
-          '<button onclick="liveDeleteStrategy(\'' + s.id + '\')" style="padding:3px 8px;background:rgba(255,0,0,0.1);border:1px solid rgba(255,0,0,0.15);color:#ff4d6d;border-radius:3px;cursor:pointer;font-size:9px">🗑️ Delete</button>' +
-          '<select onchange="liveChangeProtocol(\'' + s.id + '\',this.value)" style="padding:3px 6px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);color:#ccc;border-radius:3px;font-size:9px">' +
-            '<option value="jupiter"' + (s.protocol === 'jupiter' ? ' selected' : '') + '>Jupiter</option>' +
-            '<option value="drift"' + (s.protocol === 'drift' ? ' selected' : '') + '>Drift</option>' +
-          '</select>' +
+          '<button onclick="liveToggleStrategy(\'' + s.id + '\',' + !s.active + ')" style="padding:3px 8px;background:rgba(0,245,160,0.1);border:1px solid rgba(0,245,160,0.2);color:#00f5a0;border-radius:3px;cursor:pointer;font-size:9px">' + (s.active ? 'Pause' : 'Start') + '</button>' +
+          '<button onclick="liveDeleteStrategy(\'' + s.id + '\')" style="padding:3px 8px;background:rgba(255,0,0,0.1);border:1px solid rgba(255,0,0,0.15);color:#ff4d6d;border-radius:3px;cursor:pointer;font-size:9px">Delete</button>' +
         '</div>' +
       '</div>';
     }).join('');
@@ -16089,29 +15473,16 @@ async function liveDeleteStrategy(id) {
   } catch (e) { alert('Delete error: ' + e.message); }
 }
 
-async function liveChangeProtocol(id, protocol) {
-  try {
-    await fetch(LIVE_API + '/strategies/' + id, {
-      method: 'PUT',
-      headers: liveHeaders(),
-      body: JSON.stringify({ protocol }),
-    });
-    liveRefreshStrategies();
-  } catch (e) { alert('Protocol change error: ' + e.message); }
-}
-
-// Function to create a live strategy from paper trade
-function goLiveWithStrategy(strategyId, config, protocol) {
-  const proto = protocol || 'jupiter';
+function goLiveWithStrategy(strategyId, config) {
   fetch(LIVE_API + '/strategies', {
     method: 'POST',
     headers: liveHeaders(),
-    body: JSON.stringify({ id: 'live_' + strategyId, config, protocol: proto }),
+    body: JSON.stringify({ id: 'live_' + strategyId, config }),
   })
   .then(r => r.json())
   .then(d => {
     if (d.success) {
-      alert('Strategy is now LIVE on ' + proto.toUpperCase() + '! Switch to the Live Trading tab to monitor.');
+      alert('Strategy is now LIVE on BloFin! Switch to the Live Trading tab to monitor.');
       liveRefreshAll();
     } else {
       alert('Failed: ' + (d.error || 'Unknown error'));
@@ -16134,20 +15505,25 @@ async function liveRefreshPositions() {
     el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:10px">' +
       '<tr style="color:#888;border-bottom:1px solid rgba(255,255,255,0.05)">' +
         '<th style="text-align:left;padding:4px">Market</th>' +
-        '<th>Dir</th><th>Entry</th><th>Size</th><th>Lev</th><th>Protocol</th><th>Opened</th>' +
+        '<th>Dir</th><th>Entry</th><th>Mark</th><th>Size</th><th>Lev</th><th>P&L</th><th>Liq</th>' +
       '</tr>' +
       d.positions.map(p => {
         const dirColor = p.direction === 'long' ? '#00f5a0' : '#ff4d6d';
-        const dirLabel = p.direction === 'long' ? '🟢 LONG' : '🔴 SHORT';
-        const opened = new Date(p.opened_at).toLocaleDateString();
+        const dirLabel = p.direction === 'long' ? 'LONG' : 'SHORT';
+        const pnl = p.livePnl !== null ? parseFloat(p.livePnl) : null;
+        const pnlStr = pnl !== null ? ((pnl >= 0 ? '+' : '') + pnl.toFixed(2)) : '--';
+        const pnlColor = pnl !== null ? (pnl >= 0 ? '#00f5a0' : '#ff4d6d') : '#888';
+        const markStr = p.markPrice ? parseFloat(p.markPrice).toFixed(2) : '--';
+        const liqStr = p.liquidationPrice ? parseFloat(p.liquidationPrice).toFixed(2) : '--';
         return '<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">' +
           '<td style="padding:4px;color:#fff">' + p.market + '</td>' +
           '<td style="text-align:center;color:' + dirColor + '">' + dirLabel + '</td>' +
           '<td style="text-align:center;color:#ccc">' + parseFloat(p.entry_price).toFixed(2) + '</td>' +
-          '<td style="text-align:center;color:#ccc">' + parseFloat(p.size_usd).toFixed(2) + '</td>' +
+          '<td style="text-align:center;color:#a78bfa">' + markStr + '</td>' +
+          '<td style="text-align:center;color:#ccc">$' + parseFloat(p.size_usd).toFixed(0) + '</td>' +
           '<td style="text-align:center;color:#f5c400">' + p.leverage + 'x</td>' +
-          '<td style="text-align:center;color:' + (p.protocol === 'drift' ? '#00bfff' : '#f5c400') + '">' + (p.protocol || 'jupiter').toUpperCase() + '</td>' +
-          '<td style="text-align:center;color:#888">' + opened + '</td>' +
+          '<td style="text-align:center;color:' + pnlColor + ';font-weight:bold">' + pnlStr + '</td>' +
+          '<td style="text-align:center;color:#ff8c69">' + liqStr + '</td>' +
         '</tr>';
       }).join('') +
     '</table>';
@@ -16168,7 +15544,7 @@ async function liveRefreshHistory() {
     el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:10px">' +
       '<tr style="color:#888;border-bottom:1px solid rgba(255,255,255,0.05)">' +
         '<th style="text-align:left;padding:4px">Market</th>' +
-        '<th>Dir</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Reason</th><th>Protocol</th><th>Date</th>' +
+        '<th>Dir</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Reason</th><th>Date</th>' +
       '</tr>' +
       d.trades.map(t => {
         const pnl = parseFloat(t.pnl) || 0;
@@ -16178,12 +15554,11 @@ async function liveRefreshHistory() {
         const closed = t.closed_at ? new Date(t.closed_at).toLocaleDateString() : '--';
         return '<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">' +
           '<td style="padding:4px;color:#fff">' + t.market + '</td>' +
-          '<td style="text-align:center;color:' + dirColor + '">' + (t.direction === 'long' ? '🟢' : '🔴') + '</td>' +
+          '<td style="text-align:center;color:' + dirColor + '">' + (t.direction === 'long' ? 'LONG' : 'SHORT') + '</td>' +
           '<td style="text-align:center;color:#ccc">' + parseFloat(t.entry_price).toFixed(2) + '</td>' +
           '<td style="text-align:center;color:#ccc">' + (t.exit_price ? parseFloat(t.exit_price).toFixed(2) : '--') + '</td>' +
           '<td style="text-align:center;color:' + pnlColor + ';font-weight:bold">' + pnlStr + '</td>' +
           '<td style="text-align:center;color:#f5c400">' + (t.close_reason || '--') + '</td>' +
-          '<td style="text-align:center;color:' + (t.protocol === 'drift' ? '#00bfff' : '#f5c400') + '">' + (t.protocol || '').toUpperCase() + '</td>' +
           '<td style="text-align:center;color:#888">' + closed + '</td>' +
         '</tr>';
       }).join('') +
@@ -16200,7 +15575,7 @@ async function liveRefreshSafety() {
     const d = await r.json();
     if (d.config) {
       document.getElementById('liveSafetyMaxPos').value = d.config.max_position_usd || 500;
-      document.getElementById('liveSafetyMaxLev').value = d.config.max_leverage || 10;
+      document.getElementById('liveSafetyMaxLev').value = d.config.max_leverage || 20;
       document.getElementById('liveSafetyDailyLoss').value = d.config.daily_loss_limit_usd || 100;
       document.getElementById('liveSafetyLiqPct').value = d.config.auto_close_liq_pct || 5;
     }
@@ -16254,19 +15629,32 @@ async function liveRefreshMarkets() {
     const r = await fetch(LIVE_API + '/markets', { headers: liveHeaders() });
     if (!r.ok) return;
     const d = await r.json();
-    const jupEl = document.getElementById('liveMarketsJupiter');
-    const driftEl = document.getElementById('liveMarketsDrift');
-    if (d.jupiter) {
-      jupEl.innerHTML = d.jupiter.map(m =>
-        '<div style="padding:2px 0;color:#ccc">' + m.name + ' <span style="color:#888">(up to ' + m.maxLeverage + 'x)</span></div>'
-      ).join('');
-    }
-    if (d.drift) {
-      driftEl.innerHTML = d.drift.map(m =>
-        '<div style="padding:2px 0;color:#ccc">' + m.name + ' <span style="color:#888">(up to ' + m.maxLeverage + 'x)</span></div>'
-      ).join('');
-    }
+    _liveMarketsData = d.blofin || [];
+    renderLiveMarkets(_liveMarketsData);
   } catch (e) { console.error('liveRefreshMarkets error:', e); }
+}
+
+function filterLiveMarkets() {
+  const q = (document.getElementById('liveMarketsSearch')?.value || '').toUpperCase();
+  const filtered = q ? _liveMarketsData.filter(m => m.name.toUpperCase().includes(q)) : _liveMarketsData;
+  renderLiveMarkets(filtered);
+}
+
+function renderLiveMarkets(markets) {
+  const el = document.getElementById('liveMarketsBloFin');
+  if (!markets || markets.length === 0) {
+    el.innerHTML = '<div style="color:#888">No markets found.</div>';
+    return;
+  }
+  // Show first 50 to avoid DOM bloat
+  const shown = markets.slice(0, 50);
+  el.innerHTML = shown.map(m =>
+    '<div style="padding:2px 0;color:#ccc;display:flex;justify-content:space-between">' +
+      '<span>' + m.name + '</span>' +
+      '<span style="color:#888;font-size:9px">up to ' + m.maxLeverage + 'x</span>' +
+    '</div>'
+  ).join('') +
+  (markets.length > 50 ? '<div style="color:#888;font-size:9px;margin-top:4px">...and ' + (markets.length - 50) + ' more. Use search to filter.</div>' : '');
 }
 
 // Auto-refresh live dashboard every 30 seconds when visible

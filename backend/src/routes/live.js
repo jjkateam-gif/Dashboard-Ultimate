@@ -3,62 +3,62 @@ const { pool } = require('../db');
 const { authenticate } = require('../middleware/auth');
 const liveEngine = require('../services/liveEngine');
 const safetyGuard = require('../services/safetyGuard');
-const jupiterAdapter = require('../services/adapters/jupiterAdapter');
+const blofinClient = require('../services/blofinClient');
+const blofinWs = require('../services/blofinWs');
+const crypto = require('crypto');
 
 const router = express.Router();
 router.use(authenticate);
 
 /* ======================================================
-   TRADING WALLET CRUD
+   BLOFIN CREDENTIALS CRUD
    ====================================================== */
 
-// POST /live/wallet - Store encrypted trading wallet
-router.post('/wallet', async (req, res) => {
+// POST /live/credentials - Store encrypted BloFin API credentials
+router.post('/credentials', async (req, res) => {
   try {
-    const { publicKey, encryptedData } = req.body;
-    if (!publicKey || !encryptedData) {
-      return res.status(400).json({ error: 'publicKey and encryptedData required' });
+    const { encryptedData } = req.body;
+    if (!encryptedData) {
+      return res.status(400).json({ error: 'encryptedData required' });
     }
+    // Store in the same trading_wallets table, repurposed for BloFin keys
     await pool.query(
       `INSERT INTO trading_wallets (user_id, public_key, encrypted_data)
        VALUES ($1, $2, $3)
        ON CONFLICT (user_id) DO UPDATE SET public_key=$2, encrypted_data=$3, updated_at=NOW()`,
-      [req.user.id, publicKey, JSON.stringify(encryptedData)]
+      [req.user.id, 'blofin', JSON.stringify(encryptedData)]
     );
-    res.json({ success: true, publicKey });
+    res.json({ success: true });
   } catch (err) {
-    console.error('Trading wallet save error:', err);
+    console.error('Credential save error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// GET /live/wallet - Get trading wallet info
-router.get('/wallet', async (req, res) => {
+// GET /live/credentials - Check if credentials exist
+router.get('/credentials', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT public_key, created_at, updated_at FROM trading_wallets WHERE user_id=$1',
+      'SELECT created_at, updated_at FROM trading_wallets WHERE user_id=$1',
       [req.user.id]
     );
-    if (result.rows.length === 0) return res.json({ wallet: null });
-    const row = result.rows[0];
-    const unlocked = liveEngine.isWalletUnlocked(req.user.id);
+    if (result.rows.length === 0) return res.json({ hasCredentials: false, unlocked: false });
+    const unlocked = liveEngine.isUnlocked(req.user.id);
     res.json({
-      wallet: {
-        publicKey: row.public_key,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-        unlocked,
-      },
+      hasCredentials: true,
+      unlocked,
+      createdAt: result.rows[0].created_at,
+      updatedAt: result.rows[0].updated_at,
     });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// DELETE /live/wallet - Remove trading wallet
-router.delete('/wallet', async (req, res) => {
+// DELETE /live/credentials - Remove stored credentials
+router.delete('/credentials', async (req, res) => {
   try {
-    liveEngine.lockWallet(req.user.id);
+    liveEngine.lockCredentials(req.user.id);
     await pool.query('DELETE FROM trading_wallets WHERE user_id=$1', [req.user.id]);
     res.json({ success: true });
   } catch (err) {
@@ -66,23 +66,23 @@ router.delete('/wallet', async (req, res) => {
   }
 });
 
-// POST /live/wallet/unlock - Decrypt wallet key into RAM
-router.post('/wallet/unlock', async (req, res) => {
+// POST /live/credentials/unlock - Decrypt credentials into RAM
+router.post('/credentials/unlock', async (req, res) => {
   try {
     const { password } = req.body;
     if (!password) return res.status(400).json({ error: 'Password required' });
-    const publicKey = await liveEngine.unlockWallet(req.user.id, password);
-    res.json({ success: true, publicKey });
+    const keyPreview = await liveEngine.unlockCredentials(req.user.id, password);
+    res.json({ success: true, keyPreview });
   } catch (err) {
-    console.error('Wallet unlock error:', err.message);
+    console.error('Credential unlock error:', err.message);
     res.status(400).json({ error: err.message });
   }
 });
 
-// POST /live/wallet/lock - Clear wallet key from RAM
-router.post('/wallet/lock', async (req, res) => {
+// POST /live/credentials/lock - Clear credentials from RAM
+router.post('/credentials/lock', async (req, res) => {
   try {
-    liveEngine.lockWallet(req.user.id);
+    liveEngine.lockCredentials(req.user.id);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -96,19 +96,18 @@ router.post('/wallet/lock', async (req, res) => {
 // POST /live/strategies - Create or update a live strategy
 router.post('/strategies', async (req, res) => {
   try {
-    const { id, config, protocol } = req.body;
+    const { id, config } = req.body;
     if (!id || !config) return res.status(400).json({ error: 'Strategy id and config required' });
-    const proto = (protocol === 'drift') ? 'drift' : 'jupiter';
 
     await pool.query(
       `INSERT INTO live_strategies (id, user_id, config, protocol)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (id) DO UPDATE SET config=$3, protocol=$4, active=TRUE, updated_at=NOW()`,
-      [id, req.user.id, JSON.stringify(config), proto]
+       VALUES ($1, $2, $3, 'blofin')
+       ON CONFLICT (id) DO UPDATE SET config=$3, protocol='blofin', active=TRUE, updated_at=NOW()`,
+      [id, req.user.id, JSON.stringify(config)]
     );
 
-    if (liveEngine.isWalletUnlocked(req.user.id)) {
-      liveEngine.addStrategy(id, config, req.user.id, proto);
+    if (liveEngine.isUnlocked(req.user.id)) {
+      liveEngine.addStrategy(id, config, req.user.id);
     }
 
     res.json({ success: true });
@@ -118,7 +117,7 @@ router.post('/strategies', async (req, res) => {
   }
 });
 
-// GET /live/strategies - List user live strategies with open position counts
+// GET /live/strategies - List user live strategies
 router.get('/strategies', async (req, res) => {
   try {
     const result = await pool.query(
@@ -139,13 +138,12 @@ router.get('/strategies', async (req, res) => {
 // PUT /live/strategies/:id - Update strategy config
 router.put('/strategies/:id', async (req, res) => {
   try {
-    const { config, protocol, active } = req.body;
+    const { config, active } = req.body;
     const sets = [];
     const values = [req.params.id, req.user.id];
     let idx = 3;
 
     if (config !== undefined) { sets.push(`config=$${idx++}`); values.push(JSON.stringify(config)); }
-    if (protocol !== undefined) { sets.push(`protocol=$${idx++}`); values.push(protocol); }
     if (active !== undefined) { sets.push(`active=$${idx++}`); values.push(active); }
     sets.push('updated_at=NOW()');
 
@@ -159,9 +157,9 @@ router.put('/strategies/:id', async (req, res) => {
 
     const row = result.rows[0];
 
-    if (row.active && liveEngine.isWalletUnlocked(req.user.id)) {
+    if (row.active && liveEngine.isUnlocked(req.user.id)) {
       liveEngine.removeStrategy(req.params.id);
-      liveEngine.addStrategy(row.id, row.config, req.user.id, row.protocol);
+      liveEngine.addStrategy(row.id, row.config, req.user.id);
     } else {
       liveEngine.removeStrategy(req.params.id);
     }
@@ -203,13 +201,33 @@ router.get('/positions', async (req, res) => {
        ORDER BY p.opened_at DESC`,
       [req.user.id]
     );
-    res.json({ positions: result.rows });
+
+    // Enrich with live mark price + PnL from BloFin if credentials are unlocked
+    const creds = liveEngine.getCredentials(req.user.id);
+    let livePositions = [];
+    if (creds) {
+      try {
+        livePositions = await blofinClient.getPositions(creds);
+      } catch {}
+    }
+
+    const positions = result.rows.map(p => {
+      const live = livePositions.find(lp => lp.instId === p.market && lp.direction === p.direction);
+      return {
+        ...p,
+        markPrice: live ? live.markPrice : null,
+        livePnl: live ? live.pnl : null,
+        liquidationPrice: live ? live.liquidationPrice : parseFloat(p.liq_price) || null,
+      };
+    });
+
+    res.json({ positions });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// GET /live/history - Trade history with pagination
+// GET /live/history - Trade history
 router.get('/history', async (req, res) => {
   try {
     let limit = parseInt(req.query.limit) || 50;
@@ -239,10 +257,111 @@ router.get('/history', async (req, res) => {
 });
 
 /* ======================================================
+   ORDER EXECUTION (from frontend modal)
+   ====================================================== */
+
+// POST /live/order - Execute a trade on BloFin
+router.post('/order', async (req, res) => {
+  try {
+    const creds = liveEngine.getCredentials(req.user.id);
+    if (!creds) return res.status(400).json({ error: 'Credentials not unlocked' });
+
+    const { instId, side, orderType, size, price, leverage, tpPrice, slPrice, marginMode } = req.body;
+    if (!instId || !side || !size) return res.status(400).json({ error: 'instId, side, and size required' });
+
+    const direction = side === 'buy' ? 'long' : 'short';
+    const lev = leverage || 1;
+    const sizeUsd = parseFloat(size) * (await blofinClient.getMarkPrice(instId) || 0);
+
+    // Safety check
+    await safetyGuard.canOpenPosition(req.user.id, sizeUsd / lev, lev);
+
+    const result = await blofinClient.openPosition({
+      creds,
+      instId,
+      direction,
+      size,
+      leverage: lev,
+      orderType: orderType || 'market',
+      price,
+      tpPrice,
+      slPrice,
+      marginMode,
+    });
+
+    res.json({ success: true, orderId: result.orderId });
+  } catch (err) {
+    console.error('Order execution error:', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /live/close - Close a position
+router.post('/close', async (req, res) => {
+  try {
+    const creds = liveEngine.getCredentials(req.user.id);
+    if (!creds) return res.status(400).json({ error: 'Credentials not unlocked' });
+
+    const { instId, direction } = req.body;
+    if (!instId || !direction) return res.status(400).json({ error: 'instId and direction required' });
+
+    const result = await blofinClient.closePosition({ creds, instId, direction });
+    res.json({ success: true, orderId: result.orderId });
+  } catch (err) {
+    console.error('Close position error:', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// GET /live/ticker - Get current ticker for an instrument
+router.get('/ticker', async (req, res) => {
+  try {
+    const { instId } = req.query;
+    if (!instId) return res.status(400).json({ error: 'instId required' });
+    const ticker = await blofinClient.getTicker(instId);
+    res.json({ ticker });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/* ======================================================
+   SSE STREAM (real-time updates from BloFin WebSocket)
+   ====================================================== */
+
+router.get('/stream', (req, res) => {
+  if (!liveEngine.isUnlocked(req.user.id)) {
+    return res.status(400).json({ error: 'Credentials not unlocked' });
+  }
+
+  // Set up SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+
+  res.write(`event: connected\ndata: {}\n\n`);
+
+  // Register as SSE client
+  blofinWs.addSseClient(req.user.id, res);
+
+  // Keep-alive ping every 30s
+  const keepAlive = setInterval(() => {
+    res.write(`:ping\n\n`);
+  }, 30000);
+
+  req.on('close', () => {
+    clearInterval(keepAlive);
+  });
+});
+
+/* ======================================================
    SAFETY CONFIG & KILL SWITCH
    ====================================================== */
 
-// GET /live/safety - Get safety config
+// GET /live/safety
 router.get('/safety', async (req, res) => {
   try {
     const [config, todayPnl] = await Promise.all([
@@ -255,7 +374,7 @@ router.get('/safety', async (req, res) => {
   }
 });
 
-// PUT /live/safety - Update safety config
+// PUT /live/safety
 router.put('/safety', async (req, res) => {
   try {
     const { maxPositionUsd, maxLeverage, dailyLossLimitUsd, autoCloseLiqPct } = req.body;
@@ -272,7 +391,7 @@ router.put('/safety', async (req, res) => {
   }
 });
 
-// POST /live/kill-switch - Emergency close all positions
+// POST /live/kill-switch
 router.post('/kill-switch', async (req, res) => {
   try {
     await liveEngine.killSwitch(req.user.id);
@@ -283,7 +402,7 @@ router.post('/kill-switch', async (req, res) => {
   }
 });
 
-// POST /live/kill-switch/deactivate - Deactivate kill switch
+// POST /live/kill-switch/deactivate
 router.post('/kill-switch/deactivate', async (req, res) => {
   try {
     await safetyGuard.deactivateKillSwitch(req.user.id);
@@ -298,72 +417,56 @@ router.post('/kill-switch/deactivate', async (req, res) => {
    MARKETS & BALANCE
    ====================================================== */
 
-// GET /live/markets - Available markets from both protocols
+// GET /live/markets - Available BloFin markets
 router.get('/markets', async (req, res) => {
   try {
-    const driftAdapter = require('../services/adapters/driftAdapter');
-    const [jupMarkets, driftMarkets] = await Promise.all([
-      jupiterAdapter.getMarkets(),
-      driftAdapter.getMarkets(),
-    ]);
-    res.json({ jupiter: jupMarkets, drift: driftMarkets });
+    const markets = await blofinClient.getMarkets();
+    res.json({ blofin: markets });
   } catch (err) {
+    console.error('Markets fetch error:', err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// GET /live/balance - Trading wallet SOL + USDC balance
+// GET /live/balance - BloFin USDT balance
 router.get('/balance', async (req, res) => {
   try {
-    const unlocked = liveEngine.isWalletUnlocked(req.user.id);
+    const unlocked = liveEngine.isUnlocked(req.user.id);
 
     if (!unlocked) {
-      const result = await pool.query(
-        'SELECT public_key FROM trading_wallets WHERE user_id=$1',
-        [req.user.id]
-      );
-      const publicKey = result.rows.length > 0 ? result.rows[0].public_key : null;
-      return res.json({ balance: { publicKey, sol: null, usdc: null, locked: true } });
+      return res.json({ balance: { usdt: null, locked: true } });
     }
 
-    const publicKey = liveEngine.getWalletPublicKey(req.user.id);
-    const { getSolBalance, getTokenBalance, USDC_MINT } = require('../services/solanaRpc');
-    const [sol, usdc] = await Promise.all([
-      getSolBalance(publicKey),
-      getTokenBalance(publicKey, USDC_MINT),
-    ]);
-
-    res.json({ balance: { publicKey, sol, usdc, locked: false } });
+    const creds = liveEngine.getCredentials(req.user.id);
+    const balance = await blofinClient.getBalance(creds);
+    res.json({ balance: { ...balance, locked: false } });
   } catch (err) {
     console.error('Balance fetch error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// GET /live/status - Engine status for this user
+// GET /live/status - Engine status
 router.get('/status', async (req, res) => {
   try {
-    const walletUnlocked = liveEngine.isWalletUnlocked(req.user.id);
+    const unlocked = liveEngine.isUnlocked(req.user.id);
 
-    // Count active strategies running in the engine for this user
     let activeStrategies = 0;
     for (const [, entry] of liveEngine.strategies) {
       if (entry.userId === req.user.id) activeStrategies++;
     }
 
-    // Count open positions in DB
     const posResult = await pool.query(
       'SELECT COUNT(*) AS total FROM live_positions WHERE user_id=$1 AND closed_at IS NULL',
       [req.user.id]
     );
     const openPositions = parseInt(posResult.rows[0].total);
 
-    // Get kill switch status from safety config
     const safetyConfig = await safetyGuard.getConfig(req.user.id);
 
     res.json({
       engineRunning: liveEngine.running,
-      walletUnlocked,
+      credentialsUnlocked: unlocked,
       activeStrategies,
       openPositions,
       killSwitchActive: safetyConfig.kill_switch || false,
