@@ -15682,7 +15682,7 @@ function closeJupiterModal() {
 // ════════════════════════════════════════════════════════════════
 
 const _probeRenderBase = renderProbeResults;
-function renderProbeResults(results, tf) {
+renderProbeResults = function(results, tf) {
   _probeRenderBase(results, tf);
 
   const el = $('probeSetups');
@@ -15801,7 +15801,7 @@ function renderProbeResults(results, tf) {
       </div>
     </div>`;
   }).join('');
-}
+};
 
 // Toggle mode on a card
 function btSetMode(idx, mode) {
