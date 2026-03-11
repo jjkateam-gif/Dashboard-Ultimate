@@ -68,8 +68,7 @@ async function initDB() {
       console.log('Admin user created: Josh');
     }
 
-    // Load routes only after DB is ready
-    const liveRoutes = require('./routes/live');
+    // Load core routes (these must always work)
     const authRoutes = require('./routes/auth');
     const adminRoutes = require('./routes/admin');
     const walletRoutes = require('./routes/wallet');
@@ -83,12 +82,22 @@ async function initDB() {
     app.use('/paper', paperRoutes);
     app.use('/stats', statsRoutes);
     app.use('/alerts', alertRoutes);
-    app.use('/live', liveRoutes);
 
-    // Start the live trading engine
-    const liveEngine = require('./services/liveEngine');
-    liveEngine.start();
-    console.log('All routes loaded. Live engine started. Server fully ready.');
+    console.log('Core routes loaded.');
+
+    // Load live trading routes (separate try/catch so it doesn't break core routes)
+    try {
+      const liveRoutes = require('./routes/live');
+      app.use('/live', liveRoutes);
+
+      const liveEngine = require('./services/liveEngine');
+      liveEngine.start();
+      console.log('Live trading routes loaded. Engine started.');
+    } catch (liveErr) {
+      console.error('Live trading init error (core routes still working):', liveErr.message);
+    }
+
+    console.log('Server fully ready.');
   } catch (err) {
     console.error('DB init error (server still running):', err.message);
   }
