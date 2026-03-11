@@ -1,5 +1,13 @@
 require('dotenv').config();
 const express = require('express');
+
+// Catch ANY crash and log it
+process.on('uncaughtException', (err) => {
+  console.error('FATAL uncaughtException:', err.message, err.stack);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('FATAL unhandledRejection:', reason);
+});
 const cors = require('cors');
 
 const app = express();
@@ -88,3 +96,8 @@ app.use((err, req, res, next) => {
 });
 
 initDB();
+
+// Heartbeat - confirm process stays alive
+setInterval(() => {
+  console.log("[heartbeat]", new Date().toISOString());
+}, 30000);
