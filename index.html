@@ -756,6 +756,139 @@ details[open] summary::before{transform:rotate(90deg)}
     📄 Paper Trade
     <span id="paperLiveDot" style="display:none;position:absolute;top:6px;right:6px;width:7px;height:7px;background:#a78bfa;border-radius:50%;animation:livePulse 1.2s ease-in-out infinite"></span>
   </button>
+  <button onclick="switchPageTab('live')" id="pageTab_live"
+    style="font-family:'Space Mono',monospace;font-size:10px;padding:8px 20px;background:transparent;border:1px solid transparent;border-bottom:none;color:#aaa;cursor:pointer;border-radius:8px 8px 0 0;margin-bottom:-1px;position:relative">
+    ⚡ Live Trading
+    <span id="liveTradeDot" style="display:none;position:absolute;top:6px;right:6px;width:7px;height:7px;background:#ff4d6d;border-radius:50%;animation:livePulse 1.2s ease-in-out infinite"></span>
+  </button>
+</div>
+
+<!-- ========== LIVE TRADING PAGE ========== -->
+<div id="page_live" style="display:none">
+  <div style="display:grid;grid-template-columns:320px 1fr;gap:14px">
+
+    <!-- LEFT SIDEBAR -->
+    <div style="display:flex;flex-direction:column;gap:10px">
+
+      <!-- Engine Status Card -->
+      <div style="background:rgba(10,10,20,0.8);border:1px solid rgba(0,245,160,0.15);border-radius:10px;padding:14px">
+        <div style="font-family:'Space Mono',monospace;font-size:11px;color:#00f5a0;font-weight:bold;margin-bottom:10px">⚡ ENGINE STATUS</div>
+        <div id="liveEngineStatus" style="font-size:11px;color:#ccc;line-height:1.8">
+          <div>Engine: <span id="liveStatusEngine" style="color:#666">--</span></div>
+          <div>Wallet: <span id="liveStatusWallet" style="color:#666">--</span></div>
+          <div>Strategies: <span id="liveStatusStrats" style="color:#666">0</span></div>
+          <div>Open Positions: <span id="liveStatusPos" style="color:#666">0</span></div>
+          <div>Kill Switch: <span id="liveStatusKill" style="color:#666">OFF</span></div>
+        </div>
+      </div>
+
+      <!-- Trading Wallet Card -->
+      <div style="background:rgba(10,10,20,0.8);border:1px solid rgba(0,245,160,0.15);border-radius:10px;padding:14px">
+        <div style="font-family:'Space Mono',monospace;font-size:11px;color:#00f5a0;font-weight:bold;margin-bottom:10px">🔑 TRADING WALLET</div>
+        <div id="liveWalletInfo">
+          <div id="liveWalletNone" style="font-size:11px;color:#888">
+            <p>No trading wallet stored on server.</p>
+            <p style="margin-top:6px;color:#666">Generate a wallet in the Paper Trade tab first, then store it here for server-side trading.</p>
+            <button onclick="liveStoreWallet()" style="margin-top:8px;width:100%;padding:8px;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:6px;cursor:pointer;font-size:11px;font-family:'Space Mono',monospace">📤 Store Wallet on Server</button>
+          </div>
+          <div id="liveWalletLoaded" style="display:none;font-size:11px">
+            <div style="color:#ccc;margin-bottom:6px">Public Key:</div>
+            <div id="liveWalletPubkey" style="color:#00f5a0;font-family:'Space Mono',monospace;font-size:10px;word-break:break-all;margin-bottom:8px">--</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+              <div style="background:rgba(0,0,0,0.3);padding:6px;border-radius:4px;text-align:center">
+                <div style="color:#888;font-size:9px">SOL</div>
+                <div id="liveWalletSOL" style="color:#00f5a0;font-size:12px;font-weight:bold">--</div>
+              </div>
+              <div style="background:rgba(0,0,0,0.3);padding:6px;border-radius:4px;text-align:center">
+                <div style="color:#888;font-size:9px">USDC</div>
+                <div id="liveWalletUSDC" style="color:#00f5a0;font-size:12px;font-weight:bold">--</div>
+              </div>
+            </div>
+            <div id="liveWalletLockSection">
+              <input id="liveUnlockPwd" type="password" placeholder="Wallet password" style="width:100%;padding:6px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:4px;font-size:11px;margin-bottom:6px;box-sizing:border-box">
+              <div style="display:flex;gap:6px">
+                <button onclick="liveUnlockWallet()" id="liveUnlockBtn" style="flex:1;padding:6px;background:rgba(0,245,160,0.2);border:1px solid rgba(0,245,160,0.4);color:#00f5a0;border-radius:4px;cursor:pointer;font-size:10px">🔓 Unlock</button>
+                <button onclick="liveLockWallet()" id="liveLockBtn" style="flex:1;padding:6px;background:rgba(255,77,109,0.15);border:1px solid rgba(255,77,109,0.3);color:#ff4d6d;border-radius:4px;cursor:pointer;font-size:10px;display:none">🔒 Lock</button>
+                <button onclick="liveDeleteWallet()" style="padding:6px 10px;background:rgba(255,0,0,0.1);border:1px solid rgba(255,0,0,0.2);color:#ff4d6d;border-radius:4px;cursor:pointer;font-size:10px">🗑️</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Safety Controls Card -->
+      <div style="background:rgba(10,10,20,0.8);border:1px solid rgba(255,77,109,0.15);border-radius:10px;padding:14px">
+        <div style="font-family:'Space Mono',monospace;font-size:11px;color:#ff4d6d;font-weight:bold;margin-bottom:10px">🛡️ SAFETY CONTROLS</div>
+        <div style="font-size:11px;color:#ccc;display:flex;flex-direction:column;gap:8px">
+          <div>
+            <label style="color:#888;font-size:10px">Max Position (USD)</label>
+            <input id="liveSafetyMaxPos" type="number" value="500" style="width:100%;padding:5px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:4px;font-size:11px;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="color:#888;font-size:10px">Max Leverage</label>
+            <input id="liveSafetyMaxLev" type="number" value="10" style="width:100%;padding:5px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:4px;font-size:11px;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="color:#888;font-size:10px">Daily Loss Limit (USD)</label>
+            <input id="liveSafetyDailyLoss" type="number" value="100" style="width:100%;padding:5px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:4px;font-size:11px;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="color:#888;font-size:10px">Auto-Close Near Liquidation (%)</label>
+            <input id="liveSafetyLiqPct" type="number" value="5" style="width:100%;padding:5px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:4px;font-size:11px;box-sizing:border-box">
+          </div>
+          <button onclick="liveSaveSafety()" style="padding:6px;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:4px;cursor:pointer;font-size:10px;font-family:'Space Mono',monospace">💾 Save Safety Config</button>
+          <div style="margin-top:4px;border-top:1px solid rgba(255,77,109,0.2);padding-top:8px">
+            <div style="color:#888;font-size:10px;margin-bottom:4px">Today P&L: <span id="liveTodayPnl" style="color:#ccc">$0.00</span></div>
+            <button onclick="liveKillSwitch()" id="liveKillBtn" style="width:100%;padding:10px;background:rgba(255,0,0,0.25);border:2px solid #ff4d6d;color:#ff4d6d;border-radius:6px;cursor:pointer;font-size:12px;font-weight:bold;font-family:'Space Mono',monospace">🛑 KILL SWITCH</button>
+            <button onclick="liveDeactivateKill()" id="liveDeactivateKillBtn" style="display:none;width:100%;padding:8px;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:4px;cursor:pointer;font-size:10px;margin-top:4px">✅ Deactivate Kill Switch</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT MAIN CONTENT -->
+    <div style="display:flex;flex-direction:column;gap:10px">
+
+      <!-- Live Strategies Card -->
+      <div style="background:rgba(10,10,20,0.8);border:1px solid rgba(0,245,160,0.15);border-radius:10px;padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-family:'Space Mono',monospace;font-size:11px;color:#00f5a0;font-weight:bold">📋 LIVE STRATEGIES</div>
+          <button onclick="liveRefreshStrategies()" style="padding:4px 10px;background:rgba(0,245,160,0.1);border:1px solid rgba(0,245,160,0.2);color:#00f5a0;border-radius:4px;cursor:pointer;font-size:10px">🔄 Refresh</button>
+        </div>
+        <div id="liveStrategiesList" style="font-size:11px;color:#888">No live strategies yet. Start one from the Paper Trade tab.</div>
+      </div>
+
+      <!-- Open Positions Card -->
+      <div style="background:rgba(10,10,20,0.8);border:1px solid rgba(167,139,250,0.15);border-radius:10px;padding:14px">
+        <div style="font-family:'Space Mono',monospace;font-size:11px;color:#a78bfa;font-weight:bold;margin-bottom:10px">📊 OPEN POSITIONS</div>
+        <div id="livePositionsList" style="font-size:11px;color:#888">No open positions.</div>
+      </div>
+
+      <!-- Available Markets Card -->
+      <div style="background:rgba(10,10,20,0.8);border:1px solid rgba(0,245,160,0.15);border-radius:10px;padding:14px">
+        <div style="font-family:'Space Mono',monospace;font-size:11px;color:#00f5a0;font-weight:bold;margin-bottom:10px">🌐 AVAILABLE MARKETS</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <div style="color:#f5c400;font-size:10px;font-weight:bold;margin-bottom:6px">Jupiter Perps</div>
+            <div id="liveMarketsJupiter" style="font-size:10px;color:#888">Loading...</div>
+          </div>
+          <div>
+            <div style="color:#00bfff;font-size:10px;font-weight:bold;margin-bottom:6px">Drift Protocol</div>
+            <div id="liveMarketsDrift" style="font-size:10px;color:#888">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trade History Card -->
+      <div style="background:rgba(10,10,20,0.8);border:1px solid rgba(0,245,160,0.15);border-radius:10px;padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-family:'Space Mono',monospace;font-size:11px;color:#00f5a0;font-weight:bold">📜 TRADE HISTORY</div>
+          <button onclick="liveRefreshHistory()" style="padding:4px 10px;background:rgba(0,245,160,0.1);border:1px solid rgba(0,245,160,0.2);color:#00f5a0;border-radius:4px;cursor:pointer;font-size:10px">🔄</button>
+        </div>
+        <div id="liveHistoryList" style="font-size:11px;color:#888;max-height:400px;overflow-y:auto">No trade history yet.</div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ========== BACKTESTER PAGE ========== -->
@@ -7864,7 +7997,7 @@ let dnaData           = null;
 // ── Page tab switching ─────────────────────────────────────
 
 function switchPageTab(tab) {
-  ['backtester', 'degen', 'intel', 'trades', 'alerts', 'paper'].forEach(t => {
+  ['backtester', 'degen', 'intel', 'trades', 'alerts', 'paper', 'live'].forEach(t => {
     const btn  = $('pageTab_' + t);
     const page = $('page_'    + t);
     const active = t === tab;
@@ -7874,6 +8007,7 @@ function switchPageTab(tab) {
         trades: { bg:'rgba(255,107,53,0.12)',  border:'rgba(255,107,53,0.4)',  text:'#ff6b35' },
         alerts: { bg:'rgba(0,190,255,0.12)',   border:'rgba(0,190,255,0.4)',   text:'#00bfff' },
         paper:  { bg:'rgba(167,139,250,0.12)', border:'rgba(167,139,250,0.4)', text:'#a78bfa' },
+        live:   { bg:'rgba(255,77,109,0.12)',  border:'rgba(255,77,109,0.4)',  text:'#ff4d6d' },
       };
       const c = colorMap[t] || { bg:'rgba(0,245,160,0.12)', border:'rgba(0,245,160,0.4)', text:'#00f5a0' };
       btn.style.background  = active ? c.bg     : 'transparent';
@@ -7903,6 +8037,8 @@ function switchPageTab(tab) {
     restorePaperPolls();
     renderPaperDashboard();
     checkWalletLoaded();
+  } else if (tab === 'live') {
+    liveRefreshAll();
   } else {
     clearInterval(degenRefreshTimer); degenRefreshTimer = null;
     clearInterval(liveFeedTimer);     liveFeedTimer     = null;
@@ -15560,6 +15696,405 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }, 900);
 });
+
+// ══════════════════════════════════════════════════════════════
+// LIVE TRADING DASHBOARD
+// ══════════════════════════════════════════════════════════════
+
+const LIVE_API = (window.CBP_BACKEND || 'http://localhost:3001') + '/live';
+
+function liveHeaders() {
+  const token = localStorage.getItem('authToken');
+  return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+}
+
+async function liveRefreshAll() {
+  try {
+    await Promise.all([
+      liveRefreshStatus(),
+      liveRefreshWallet(),
+      liveRefreshStrategies(),
+      liveRefreshPositions(),
+      liveRefreshSafety(),
+      liveRefreshMarkets(),
+      liveRefreshHistory(),
+    ]);
+  } catch (e) { console.error('liveRefreshAll error:', e); }
+}
+
+// ── Engine Status ─────────────────────────────────────────────
+async function liveRefreshStatus() {
+  try {
+    const r = await fetch(LIVE_API + '/status', { headers: liveHeaders() });
+    if (!r.ok) return;
+    const d = await r.json();
+    const $e = (id) => document.getElementById(id);
+    $e('liveStatusEngine').textContent = d.engineRunning ? '🟢 Running' : '🔴 Stopped';
+    $e('liveStatusEngine').style.color = d.engineRunning ? '#00f5a0' : '#ff4d6d';
+    $e('liveStatusWallet').textContent = d.walletUnlocked ? '🔓 Unlocked' : '🔒 Locked';
+    $e('liveStatusWallet').style.color = d.walletUnlocked ? '#00f5a0' : '#f5c400';
+    $e('liveStatusStrats').textContent = d.activeStrategies;
+    $e('liveStatusPos').textContent = d.openPositions;
+    $e('liveStatusKill').textContent = d.killSwitchActive ? '🔴 ACTIVE' : '🟢 OFF';
+    $e('liveStatusKill').style.color = d.killSwitchActive ? '#ff4d6d' : '#00f5a0';
+    // Show/hide kill switch deactivate button
+    const deactBtn = $e('liveDeactivateKillBtn');
+    if (deactBtn) deactBtn.style.display = d.killSwitchActive ? 'block' : 'none';
+    // Show live dot on tab if there are open positions
+    const dot = $e('liveTradeDot');
+    if (dot) dot.style.display = d.openPositions > 0 ? 'block' : 'none';
+  } catch (e) { console.error('liveRefreshStatus error:', e); }
+}
+
+// ── Trading Wallet ────────────────────────────────────────────
+async function liveRefreshWallet() {
+  try {
+    const r = await fetch(LIVE_API + '/wallet', { headers: liveHeaders() });
+    if (!r.ok) return;
+    const d = await r.json();
+    const none = document.getElementById('liveWalletNone');
+    const loaded = document.getElementById('liveWalletLoaded');
+    if (!d.wallet) {
+      none.style.display = 'block';
+      loaded.style.display = 'none';
+      return;
+    }
+    none.style.display = 'none';
+    loaded.style.display = 'block';
+    document.getElementById('liveWalletPubkey').textContent = d.wallet.publicKey;
+    // Update lock/unlock buttons
+    const unlockBtn = document.getElementById('liveUnlockBtn');
+    const lockBtn = document.getElementById('liveLockBtn');
+    const pwdInput = document.getElementById('liveUnlockPwd');
+    if (d.wallet.unlocked) {
+      unlockBtn.style.display = 'none';
+      lockBtn.style.display = 'block';
+      pwdInput.style.display = 'none';
+    } else {
+      unlockBtn.style.display = 'block';
+      lockBtn.style.display = 'block';
+      pwdInput.style.display = 'block';
+    }
+    // Fetch balance
+    liveRefreshBalance();
+  } catch (e) { console.error('liveRefreshWallet error:', e); }
+}
+
+async function liveRefreshBalance() {
+  try {
+    const r = await fetch(LIVE_API + '/balance', { headers: liveHeaders() });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d.balance) return;
+    document.getElementById('liveWalletSOL').textContent = d.balance.sol !== null ? parseFloat(d.balance.sol).toFixed(4) : '--';
+    document.getElementById('liveWalletUSDC').textContent = d.balance.usdc !== null ? parseFloat(d.balance.usdc).toFixed(2) : '--';
+  } catch (e) { console.error('liveRefreshBalance error:', e); }
+}
+
+async function liveStoreWallet() {
+  if (!walletState.loaded) return alert('Generate a trading wallet in the Paper Trade tab first.');
+  const pwd = prompt('Enter your wallet password to encrypt and store on server:');
+  if (!pwd) return;
+  try {
+    const stored = wLoad();
+    if (!stored) return alert('No wallet data found locally.');
+    const r = await fetch(LIVE_API + '/wallet', {
+      method: 'POST',
+      headers: liveHeaders(),
+      body: JSON.stringify({ publicKey: stored.publicKey, encryptedData: stored }),
+    });
+    const d = await r.json();
+    if (d.success) {
+      alert('Wallet stored on server! You can now unlock it for live trading.');
+      liveRefreshWallet();
+    } else {
+      alert('Failed: ' + (d.error || 'Unknown error'));
+    }
+  } catch (e) { alert('Error storing wallet: ' + e.message); }
+}
+
+async function liveUnlockWallet() {
+  const pwd = document.getElementById('liveUnlockPwd').value;
+  if (!pwd) return alert('Enter wallet password');
+  try {
+    const r = await fetch(LIVE_API + '/wallet/unlock', {
+      method: 'POST',
+      headers: liveHeaders(),
+      body: JSON.stringify({ password: pwd }),
+    });
+    const d = await r.json();
+    if (d.success) {
+      document.getElementById('liveUnlockPwd').value = '';
+      liveRefreshAll();
+    } else {
+      alert('Unlock failed: ' + (d.error || 'Wrong password'));
+    }
+  } catch (e) { alert('Unlock error: ' + e.message); }
+}
+
+async function liveLockWallet() {
+  try {
+    await fetch(LIVE_API + '/wallet/lock', { method: 'POST', headers: liveHeaders() });
+    liveRefreshAll();
+  } catch (e) { alert('Lock error: ' + e.message); }
+}
+
+async function liveDeleteWallet() {
+  if (!confirm('Delete trading wallet from server? This cannot be undone.')) return;
+  try {
+    await fetch(LIVE_API + '/wallet', { method: 'DELETE', headers: liveHeaders() });
+    liveRefreshAll();
+  } catch (e) { alert('Delete error: ' + e.message); }
+}
+
+// ── Live Strategies ───────────────────────────────────────────
+async function liveRefreshStrategies() {
+  try {
+    const r = await fetch(LIVE_API + '/strategies', { headers: liveHeaders() });
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById('liveStrategiesList');
+    if (!d.strategies || d.strategies.length === 0) {
+      el.innerHTML = '<div style="color:#888">No live strategies. Start one from Paper Trade tab using "Go Live".</div>';
+      return;
+    }
+    el.innerHTML = d.strategies.map(s => {
+      const cfg = typeof s.config === 'string' ? JSON.parse(s.config) : s.config;
+      const protoColor = s.protocol === 'drift' ? '#00bfff' : '#f5c400';
+      const protoLabel = s.protocol === 'drift' ? 'DRIFT' : 'JUPITER';
+      const statusColor = s.active ? '#00f5a0' : '#888';
+      const statusLabel = s.active ? 'ACTIVE' : 'PAUSED';
+      return '<div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:6px;padding:10px;margin-bottom:6px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
+          '<div style="font-weight:bold;color:#fff">' + (cfg.label || s.id) + '</div>' +
+          '<div style="display:flex;gap:6px;align-items:center">' +
+            '<span style="font-size:9px;padding:2px 6px;border-radius:3px;background:' + protoColor + '22;color:' + protoColor + ';border:1px solid ' + protoColor + '44">' + protoLabel + '</span>' +
+            '<span style="font-size:9px;padding:2px 6px;border-radius:3px;background:' + statusColor + '22;color:' + statusColor + '">' + statusLabel + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div style="color:#888;font-size:10px">' + (cfg.symbol || '?') + ' | ' + (cfg.timeframe || '?') + ' | ' + (cfg.leverage || 1) + 'x | Positions: ' + (s.open_positions || 0) + '</div>' +
+        '<div style="display:flex;gap:4px;margin-top:6px">' +
+          '<button onclick="liveToggleStrategy(\'' + s.id + '\',' + !s.active + ')" style="padding:3px 8px;background:rgba(0,245,160,0.1);border:1px solid rgba(0,245,160,0.2);color:#00f5a0;border-radius:3px;cursor:pointer;font-size:9px">' + (s.active ? '⏸ Pause' : '▶️ Start') + '</button>' +
+          '<button onclick="liveDeleteStrategy(\'' + s.id + '\')" style="padding:3px 8px;background:rgba(255,0,0,0.1);border:1px solid rgba(255,0,0,0.15);color:#ff4d6d;border-radius:3px;cursor:pointer;font-size:9px">🗑️ Delete</button>' +
+          '<select onchange="liveChangeProtocol(\'' + s.id + '\',this.value)" style="padding:3px 6px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);color:#ccc;border-radius:3px;font-size:9px">' +
+            '<option value="jupiter"' + (s.protocol === 'jupiter' ? ' selected' : '') + '>Jupiter</option>' +
+            '<option value="drift"' + (s.protocol === 'drift' ? ' selected' : '') + '>Drift</option>' +
+          '</select>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } catch (e) { console.error('liveRefreshStrategies error:', e); }
+}
+
+async function liveToggleStrategy(id, active) {
+  try {
+    await fetch(LIVE_API + '/strategies/' + id, {
+      method: 'PUT',
+      headers: liveHeaders(),
+      body: JSON.stringify({ active }),
+    });
+    liveRefreshStrategies();
+    liveRefreshStatus();
+  } catch (e) { alert('Toggle error: ' + e.message); }
+}
+
+async function liveDeleteStrategy(id) {
+  if (!confirm('Delete this live strategy?')) return;
+  try {
+    await fetch(LIVE_API + '/strategies/' + id, { method: 'DELETE', headers: liveHeaders() });
+    liveRefreshStrategies();
+    liveRefreshStatus();
+  } catch (e) { alert('Delete error: ' + e.message); }
+}
+
+async function liveChangeProtocol(id, protocol) {
+  try {
+    await fetch(LIVE_API + '/strategies/' + id, {
+      method: 'PUT',
+      headers: liveHeaders(),
+      body: JSON.stringify({ protocol }),
+    });
+    liveRefreshStrategies();
+  } catch (e) { alert('Protocol change error: ' + e.message); }
+}
+
+// Function to create a live strategy from paper trade
+function goLiveWithStrategy(strategyId, config, protocol) {
+  const proto = protocol || 'jupiter';
+  fetch(LIVE_API + '/strategies', {
+    method: 'POST',
+    headers: liveHeaders(),
+    body: JSON.stringify({ id: 'live_' + strategyId, config, protocol: proto }),
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) {
+      alert('Strategy is now LIVE on ' + proto.toUpperCase() + '! Switch to the Live Trading tab to monitor.');
+      liveRefreshAll();
+    } else {
+      alert('Failed: ' + (d.error || 'Unknown error'));
+    }
+  })
+  .catch(e => alert('Go live error: ' + e.message));
+}
+
+// ── Open Positions ────────────────────────────────────────────
+async function liveRefreshPositions() {
+  try {
+    const r = await fetch(LIVE_API + '/positions', { headers: liveHeaders() });
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById('livePositionsList');
+    if (!d.positions || d.positions.length === 0) {
+      el.innerHTML = '<div style="color:#888">No open positions.</div>';
+      return;
+    }
+    el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:10px">' +
+      '<tr style="color:#888;border-bottom:1px solid rgba(255,255,255,0.05)">' +
+        '<th style="text-align:left;padding:4px">Market</th>' +
+        '<th>Dir</th><th>Entry</th><th>Size</th><th>Lev</th><th>Protocol</th><th>Opened</th>' +
+      '</tr>' +
+      d.positions.map(p => {
+        const dirColor = p.direction === 'long' ? '#00f5a0' : '#ff4d6d';
+        const dirLabel = p.direction === 'long' ? '🟢 LONG' : '🔴 SHORT';
+        const opened = new Date(p.opened_at).toLocaleDateString();
+        return '<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">' +
+          '<td style="padding:4px;color:#fff">' + p.market + '</td>' +
+          '<td style="text-align:center;color:' + dirColor + '">' + dirLabel + '</td>' +
+          '<td style="text-align:center;color:#ccc">
+ + parseFloat(p.entry_price).toFixed(2) + '</td>' +
+          '<td style="text-align:center;color:#ccc">
+ + parseFloat(p.size_usd).toFixed(2) + '</td>' +
+          '<td style="text-align:center;color:#f5c400">' + p.leverage + 'x</td>' +
+          '<td style="text-align:center;color:' + (p.protocol === 'drift' ? '#00bfff' : '#f5c400') + '">' + (p.protocol || 'jupiter').toUpperCase() + '</td>' +
+          '<td style="text-align:center;color:#888">' + opened + '</td>' +
+        '</tr>';
+      }).join('') +
+    '</table>';
+  } catch (e) { console.error('liveRefreshPositions error:', e); }
+}
+
+// ── Trade History ─────────────────────────────────────────────
+async function liveRefreshHistory() {
+  try {
+    const r = await fetch(LIVE_API + '/history?limit=20', { headers: liveHeaders() });
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById('liveHistoryList');
+    if (!d.trades || d.trades.length === 0) {
+      el.innerHTML = '<div style="color:#888">No trade history yet.</div>';
+      return;
+    }
+    el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:10px">' +
+      '<tr style="color:#888;border-bottom:1px solid rgba(255,255,255,0.05)">' +
+        '<th style="text-align:left;padding:4px">Market</th>' +
+        '<th>Dir</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Reason</th><th>Protocol</th><th>Date</th>' +
+      '</tr>' +
+      d.trades.map(t => {
+        const pnl = parseFloat(t.pnl) || 0;
+        const pnlColor = pnl >= 0 ? '#00f5a0' : '#ff4d6d';
+        const pnlStr = (pnl >= 0 ? '+' : '') + pnl.toFixed(2);
+        const dirColor = t.direction === 'long' ? '#00f5a0' : '#ff4d6d';
+        const closed = t.closed_at ? new Date(t.closed_at).toLocaleDateString() : '--';
+        return '<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">' +
+          '<td style="padding:4px;color:#fff">' + t.market + '</td>' +
+          '<td style="text-align:center;color:' + dirColor + '">' + (t.direction === 'long' ? '🟢' : '🔴') + '</td>' +
+          '<td style="text-align:center;color:#ccc">
+ + parseFloat(t.entry_price).toFixed(2) + '</td>' +
+          '<td style="text-align:center;color:#ccc">
+ + (t.exit_price ? parseFloat(t.exit_price).toFixed(2) : '--') + '</td>' +
+          '<td style="text-align:center;color:' + pnlColor + ';font-weight:bold">
+ + pnlStr + '</td>' +
+          '<td style="text-align:center;color:#f5c400">' + (t.close_reason || '--') + '</td>' +
+          '<td style="text-align:center;color:' + (t.protocol === 'drift' ? '#00bfff' : '#f5c400') + '">' + (t.protocol || '').toUpperCase() + '</td>' +
+          '<td style="text-align:center;color:#888">' + closed + '</td>' +
+        '</tr>';
+      }).join('') +
+    '</table>' +
+    (d.total > 20 ? '<div style="text-align:center;margin-top:8px;color:#888;font-size:10px">Showing 20 of ' + d.total + ' trades</div>' : '');
+  } catch (e) { console.error('liveRefreshHistory error:', e); }
+}
+
+// ── Safety Controls ───────────────────────────────────────────
+async function liveRefreshSafety() {
+  try {
+    const r = await fetch(LIVE_API + '/safety', { headers: liveHeaders() });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.config) {
+      document.getElementById('liveSafetyMaxPos').value = d.config.max_position_usd || 500;
+      document.getElementById('liveSafetyMaxLev').value = d.config.max_leverage || 10;
+      document.getElementById('liveSafetyDailyLoss').value = d.config.daily_loss_limit_usd || 100;
+      document.getElementById('liveSafetyLiqPct').value = d.config.auto_close_liq_pct || 5;
+    }
+    const pnlEl = document.getElementById('liveTodayPnl');
+    const pnl = parseFloat(d.todayPnl) || 0;
+    pnlEl.textContent = (pnl >= 0 ? '+' : '') + '
+ + pnl.toFixed(2);
+    pnlEl.style.color = pnl >= 0 ? '#00f5a0' : '#ff4d6d';
+  } catch (e) { console.error('liveRefreshSafety error:', e); }
+}
+
+async function liveSaveSafety() {
+  try {
+    const r = await fetch(LIVE_API + '/safety', {
+      method: 'PUT',
+      headers: liveHeaders(),
+      body: JSON.stringify({
+        maxPositionUsd: parseFloat(document.getElementById('liveSafetyMaxPos').value),
+        maxLeverage: parseFloat(document.getElementById('liveSafetyMaxLev').value),
+        dailyLossLimitUsd: parseFloat(document.getElementById('liveSafetyDailyLoss').value),
+        autoCloseLiqPct: parseFloat(document.getElementById('liveSafetyLiqPct').value),
+      }),
+    });
+    const d = await r.json();
+    if (d.success) alert('Safety config saved!');
+    else alert('Save failed: ' + (d.error || 'Unknown'));
+  } catch (e) { alert('Save error: ' + e.message); }
+}
+
+async function liveKillSwitch() {
+  if (!confirm('KILL SWITCH: This will close ALL open positions and deactivate ALL strategies. Are you sure?')) return;
+  if (!confirm('FINAL WARNING: This action is immediate and cannot be reversed. Proceed?')) return;
+  try {
+    const r = await fetch(LIVE_API + '/kill-switch', { method: 'POST', headers: liveHeaders() });
+    const d = await r.json();
+    alert(d.message || 'Kill switch activated');
+    liveRefreshAll();
+  } catch (e) { alert('Kill switch error: ' + e.message); }
+}
+
+async function liveDeactivateKill() {
+  if (!confirm('Deactivate kill switch and allow trading to resume?')) return;
+  try {
+    await fetch(LIVE_API + '/kill-switch/deactivate', { method: 'POST', headers: liveHeaders() });
+    liveRefreshAll();
+  } catch (e) { alert('Deactivate error: ' + e.message); }
+}
+
+// ── Available Markets ─────────────────────────────────────────
+async function liveRefreshMarkets() {
+  try {
+    const r = await fetch(LIVE_API + '/markets', { headers: liveHeaders() });
+    if (!r.ok) return;
+    const d = await r.json();
+    const jupEl = document.getElementById('liveMarketsJupiter');
+    const driftEl = document.getElementById('liveMarketsDrift');
+    if (d.jupiter) {
+      jupEl.innerHTML = d.jupiter.map(m =>
+        '<div style="padding:2px 0;color:#ccc">' + m.name + ' <span style="color:#888">(up to ' + m.maxLeverage + 'x)</span></div>'
+      ).join('');
+    }
+    if (d.drift) {
+      driftEl.innerHTML = d.drift.map(m =>
+        '<div style="padding:2px 0;color:#ccc">' + m.name + ' <span style="color:#888">(up to ' + m.maxLeverage + 'x)</span></div>'
+      ).join('');
+    }
+  } catch (e) { console.error('liveRefreshMarkets error:', e); }
+}
+
+// Auto-refresh live dashboard every 30 seconds when visible
+let liveAutoRefreshTimer = null;
 
 </script>
 </body>

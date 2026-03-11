@@ -16,10 +16,13 @@ pool.on('error', (err) => {
 async function runMigrations() {
   const fs = require('fs');
   const path = require('path');
-  const sql = fs.readFileSync(path.join(__dirname, '..', 'migrations', '001_init.sql'), 'utf8');
+  const migrations = ['001_init.sql', '002_live_trading.sql'];
   try {
-    await pool.query(sql);
-    console.log('Database migrations complete');
+    for (const file of migrations) {
+      const sql = fs.readFileSync(path.join(__dirname, '..', 'migrations', file), 'utf8');
+      await pool.query(sql);
+      console.log('Migration ' + file + ' complete');
+    }
   } catch (err) {
     console.error('Migration error:', err.message);
     throw err;
