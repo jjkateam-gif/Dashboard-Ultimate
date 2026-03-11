@@ -540,6 +540,15 @@ details[open] summary::before{transform:rotate(90deg)}
   cursor:pointer;letter-spacing:0.5px;transition:opacity 0.3s}
 .login-box button:hover{opacity:0.85}
 .login-error{color:var(--red);font-family:'Space Mono',monospace;font-size:10px;margin-top:8px;min-height:14px}
+
+.login-box .remember-row{display:flex;align-items:center;gap:6px;margin:4px 0 8px;justify-content:flex-start}
+.login-box .remember-row input[type=checkbox]{width:14px;height:14px;accent-color:var(--primary)}
+.login-box .remember-row label{font-family:'Space Mono',monospace;font-size:10px;color:var(--text-muted);cursor:pointer}
+.logout-btn{position:fixed;top:14px;right:20px;z-index:9999;background:rgba(255,77,109,0.15);border:1px solid rgba(255,77,109,0.3);
+  color:var(--red);padding:6px 14px;border-radius:8px;font-family:'Space Mono',monospace;font-size:10px;cursor:pointer;
+  letter-spacing:1px;text-transform:uppercase;transition:all 0.3s;backdrop-filter:blur(10px)}
+.logout-btn:hover{background:rgba(255,77,109,0.3);border-color:var(--red)}
+
 </style>
 </head>
 <body>
@@ -550,11 +559,15 @@ details[open] summary::before{transform:rotate(90deg)}
     <div class="login-sub">Authentication Required</div>
     <input type="text" id="loginUser" placeholder="Username" autocomplete="off" spellcheck="false">
     <input type="password" id="loginPass" placeholder="Password" autocomplete="off">
+    <div class="remember-row"><input type="checkbox" id="loginRemember" checked><label for="loginRemember">Remember me</label></div>
     <button id="loginBtn">LOGIN</button>
     <div class="login-error" id="loginError"></div>
   </div>
 </div>
 
+<script>window.CBP_BACKEND="https://crypto-backtester-backend-production.up.railway.app";</script>
+
+<button class="logout-btn" id="logoutBtn" style="display:none">⏻ LOGOUT</button>
 
 <script>
 (function(){
@@ -563,18 +576,57 @@ details[open] summary::before{transform:rotate(90deg)}
   var userIn = document.getElementById('loginUser');
   var passIn = document.getElementById('loginPass');
   var errEl = document.getElementById('loginError');
-  if(sessionStorage.getItem('cbp_auth')==='1'){overlay.style.display='none';}
-  function tryLogin(){
-    var u=userIn.value, p=passIn.value;
-    if(u==='Josh' && p==='Todayi$Monday'){
-      sessionStorage.setItem('cbp_auth','1');
-      overlay.style.display='none';
-    } else {
-      errEl.textContent='Invalid credentials';
-      passIn.value='';
-      passIn.focus();
-    }
+  var rememberBox = document.getElementById('loginRemember');
+  var logoutBtn = document.getElementById('logoutBtn');
+
+  // Check existing token
+  var savedToken = localStorage.getItem('dash_token');
+  if(savedToken){
+    overlay.style.display='none';
+    logoutBtn.style.display='block';
   }
+
+  async function tryLogin(){
+    var u=userIn.value.trim(), p=passIn.value;
+    if(!u||!p){errEl.textContent='Enter username and password';return;}
+    errEl.textContent='Logging in...';
+    btn.disabled=true;
+    try{
+      var res = await fetch(window.CBP_BACKEND+'/auth/login',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({username:u,password:p,remember:rememberBox.checked})
+      });
+      var data = await res.json();
+      if(!res.ok) throw new Error(data.error||'Login failed');
+      localStorage.setItem('dash_token',data.token);
+      authToken=data.token;
+      currentUser=data.user;
+      overlay.style.display='none';
+      logoutBtn.style.display='block';
+      errEl.textContent='';
+      if(typeof authBoot==='function') authBoot();
+    }catch(e){
+      errEl.textContent=e.message||'Invalid credentials';
+      passIn.value='';passIn.focus();
+    }
+    btn.disabled=false;
+  }
+
+  logoutBtn.addEventListener('click',async function(){
+    try{
+      var tk=localStorage.getItem('dash_token');
+      if(tk) await fetch(window.CBP_BACKEND+'/auth/logout',{method:'POST',headers:{'Authorization':'Bearer '+tk,'Content-Type':'application/json'}});
+    }catch(e){}
+    localStorage.removeItem('dash_token');
+    authToken=null;currentUser=null;
+    sessionStorage.removeItem('cbp_auth');
+    logoutBtn.style.display='none';
+    overlay.style.display='flex';
+    userIn.value='';passIn.value='';errEl.textContent='';
+    userIn.focus();
+  });
+
   btn.addEventListener('click',tryLogin);
   passIn.addEventListener('keydown',function(e){if(e.key==='Enter')tryLogin();});
   userIn.addEventListener('keydown',function(e){if(e.key==='Enter')passIn.focus();});
@@ -7538,7 +7590,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ===== AUTH & BILLING SYSTEM ================================
 // ============================================================
 
-const BACKEND_URL = 'http://localhost:3001'; // ← change to your deployed URL
+const BACKEND_URL = window.CBP_BACKEND || 'http://localhost:3001';
 
 let authToken    = localStorage.getItem('dash_token') || null;
 let currentUser  = null;
