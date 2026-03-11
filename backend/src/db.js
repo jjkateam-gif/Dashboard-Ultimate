@@ -1,13 +1,16 @@
 const { Pool } = require('pg');
-require('dotenv').config();
+
+const dbUrl = process.env.DATABASE_URL;
+console.log('DB URL prefix:', dbUrl ? dbUrl.substring(0, 30) + '...' : 'NOT SET');
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  connectionString: dbUrl,
+  ssl: dbUrl && dbUrl.includes('railway') ? { rejectUnauthorized: false } : false,
+  connectionTimeoutMillis: 10000
 });
 
 pool.on('error', (err) => {
-  console.error('Unexpected DB pool error:', err);
+  console.error('Unexpected DB pool error:', err.message);
 });
 
 async function runMigrations() {
@@ -19,6 +22,7 @@ async function runMigrations() {
     console.log('Database migrations complete');
   } catch (err) {
     console.error('Migration error:', err.message);
+    throw err;
   }
 }
 
