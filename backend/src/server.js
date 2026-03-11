@@ -41,7 +41,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISO
 app.get('/', (req, res) => res.json({ status: 'ok', service: 'Crypto Backtester Backend' }));
 
 // Start HTTP server FIRST so Railway sees it's alive
-const server = app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, () => {
   console.log(`Backend running on port ${PORT}`);
 });
 
