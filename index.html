@@ -383,8 +383,29 @@ details[open] summary::before{transform:rotate(90deg)}
   font-family:'Space Mono',monospace;font-size:8px;font-weight:700;
   background:rgba(168,85,247,0.15);color:#a855f7;border:1px solid rgba(168,85,247,0.3)}
 
+/* Responsive grid classes */
+.page-grid{display:grid;grid-template-columns:300px 1fr;gap:14px}
+.page-grid-narrow{grid-template-columns:280px 1fr}
+
 @media(max-width:1400px){.main-grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:1200px){.page-grid{grid-template-columns:250px 1fr}.page-grid-narrow{grid-template-columns:240px 1fr}}
+@media(max-width:900px){.page-grid,.page-grid-narrow{grid-template-columns:1fr}
+  #pageTabs{flex-wrap:wrap}
+  .cycle-header{flex-direction:column;align-items:flex-start}
+  .score-wrap{flex-direction:column;align-items:flex-start}
+}
 @media(max-width:800px){.metrics{grid-template-columns:repeat(2,1fr)}.tables-grid{grid-template-columns:1fr}.mtf-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){
+  h1{font-size:22px!important}
+  .subtitle{font-size:8px!important}
+  #pageTabs button{font-size:8px!important;padding:6px 10px!important}
+  .panel{padding:10px!important}
+  .section-title{font-size:10px!important}
+  .verdict-badge{font-size:11px!important;padding:8px 12px!important}
+  .ci-card{padding:8px!important}
+  .bm-grid{grid-template-columns:1fr!important}
+  .logout-btn{font-size:7px!important;padding:4px 8px!important}
+}
 
 /* ===== CYCLE DASHBOARD ===== */
 .cycle-panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;
@@ -544,10 +565,10 @@ details[open] summary::before{transform:rotate(90deg)}
 .login-box .remember-row{display:flex;align-items:center;gap:6px;margin:4px 0 8px;justify-content:flex-start}
 .login-box .remember-row input[type=checkbox]{width:14px;height:14px;accent-color:var(--primary)}
 .login-box .remember-row label{font-family:'Space Mono',monospace;font-size:10px;color:var(--text-muted);cursor:pointer}
-.logout-btn{position:fixed;top:14px;right:20px;z-index:9999;background:rgba(255,77,109,0.15);border:1px solid rgba(255,77,109,0.3);
-  color:var(--red);padding:6px 14px;border-radius:8px;font-family:'Space Mono',monospace;font-size:10px;cursor:pointer;
-  letter-spacing:1px;text-transform:uppercase;transition:all 0.3s;backdrop-filter:blur(10px)}
-.logout-btn:hover{background:rgba(255,77,109,0.3);border-color:var(--red)}
+.logout-btn{position:fixed;top:6px;right:20px;z-index:10001;background:rgba(20,20,30,0.95);border:1px solid rgba(255,77,109,0.4);
+  color:var(--red);padding:5px 12px;border-radius:6px;font-family:'Space Mono',monospace;font-size:9px;cursor:pointer;
+  letter-spacing:1px;text-transform:uppercase;transition:all 0.3s;backdrop-filter:blur(12px);box-shadow:0 2px 8px rgba(0,0,0,0.4)}
+.logout-btn:hover{background:rgba(255,77,109,0.25);border-color:var(--red)}
 
 </style>
 </head>
@@ -892,7 +913,7 @@ details[open] summary::before{transform:rotate(90deg)}
 </div>
 
 <!-- ========== BACKTESTER PAGE ========== -->
-<div id="page_backtester" style="display:grid;grid-template-columns:300px 1fr;gap:14px">
+<div id="page_backtester" class="page-grid">
 
 <!-- ========== SIDEBAR ========== -->
 <div class="sidebar">
@@ -907,6 +928,7 @@ details[open] summary::before{transform:rotate(90deg)}
     </select>
     <label>Symbol</label>
     <select id="symbol">
+      <optgroup label="Major Crypto">
       <option value="BTCUSDT" selected>Bitcoin (BTC/USDT)</option>
       <option value="ETHUSDT">Ethereum (ETH/USDT)</option>
       <option value="SOLUSDT">Solana (SOL/USDT)</option>
@@ -915,6 +937,27 @@ details[open] summary::before{transform:rotate(90deg)}
       <option value="DOGEUSDT">Dogecoin (DOGE/USDT)</option>
       <option value="ADAUSDT">Cardano (ADA/USDT)</option>
       <option value="XRPUSDT">XRP (XRP/USDT)</option>
+      </optgroup>
+      <optgroup label="Drift Perpetuals">
+      <option value="JTOUSDT">JTO (JTO/USDT)</option>
+      <option value="JUPUSDT">JUP (JUP/USDT)</option>
+      <option value="WIFUSDT">WIF (WIF/USDT)</option>
+      <option value="WUSDT">W (W/USDT)</option>
+      <option value="ARBUSDT">ARB (ARB/USDT)</option>
+      <option value="APTUSDT">APT (APT/USDT)</option>
+      <option value="TIAUSDT">TIA (TIA/USDT)</option>
+      <option value="SEIUSDT">SEI (SEI/USDT)</option>
+      <option value="INJUSDT">INJ (INJ/USDT)</option>
+      <option value="PYTHUSDT">PYTH (PYTH/USDT)</option>
+      </optgroup>
+      <optgroup label="Other Alts">
+      <option value="AVAXUSDT">AVAX (AVAX/USDT)</option>
+      <option value="LINKUSDT">LINK (LINK/USDT)</option>
+      <option value="MATICUSDT">MATIC (MATIC/USDT)</option>
+      <option value="NEARUSDT">NEAR (NEAR/USDT)</option>
+      <option value="RENDERUSDT">RENDER (RENDER/USDT)</option>
+      <option value="FETUSDT">FET (FET/USDT)</option>
+      </optgroup>
     </select>
     <select id="stockSymbol" style="display:none">
       <optgroup label="Tech Mega-Cap">
@@ -1860,10 +1903,15 @@ details[open] summary::before{transform:rotate(90deg)}
   <div id="intelView_etf" style="display:none">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div>
-        <div style="font-size:13px;font-weight:800;color:#63b3ed;font-family:'Space Mono',monospace">🏦 Bitcoin Spot ETF Flows</div>
-        <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px">Daily net inflows/outflows across all US spot Bitcoin ETFs · Data from CoinGlass</div>
+        <div style="font-size:13px;font-weight:800;color:#63b3ed;font-family:'Space Mono',monospace">🏦 Spot ETF Flows</div>
+        <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px">Daily net inflows/outflows across US spot ETFs · Data from CoinGlass</div>
       </div>
-      <button onclick="loadEtfFlows()" style="font-size:9px;padding:6px 14px;width:auto;margin:0;background:rgba(99,179,237,0.12);border:1px solid rgba(99,179,237,0.3);color:#63b3ed;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace">🔄 Refresh</button>
+      <div style="display:flex;gap:4px;align-items:center">
+        <button onclick="switchEtfAsset('bitcoin')" id="etfAssetTab_bitcoin" style="font-size:8px;padding:4px 10px;background:rgba(99,179,237,0.15);border:1px solid rgba(99,179,237,0.4);color:#63b3ed;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700">BTC</button>
+        <button onclick="switchEtfAsset('ethereum')" id="etfAssetTab_ethereum" style="font-size:8px;padding:4px 10px;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#aaa;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace">ETH</button>
+        <button onclick="switchEtfAsset('solana')" id="etfAssetTab_solana" style="font-size:8px;padding:4px 10px;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#aaa;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace">SOL</button>
+        <button onclick="loadEtfFlows()" style="font-size:9px;padding:4px 12px;background:rgba(99,179,237,0.12);border:1px solid rgba(99,179,237,0.3);color:#63b3ed;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;margin-left:6px">🔄</button>
+      </div>
     </div>
 
     <!-- Summary cards -->
@@ -2030,14 +2078,14 @@ details[open] summary::before{transform:rotate(90deg)}
       </div>
     </div>
     <!-- ⚠ Tab-open warning -->
-    <div style="background:rgba(245,196,0,0.07);border:1px solid rgba(245,196,0,0.25);border-radius:8px;padding:8px 12px;font-size:8px;font-family:'Space Mono',monospace;color:#f5c400;max-width:320px;line-height:1.6">
-      ⚠️ <strong>Tab must be open.</strong> Polling only runs while this tab is active.
-      Close or sleep = strategies pause. <span style="color:#5a7a68">Backend server support coming in Phase 2.</span>
+    <div style="background:rgba(0,245,160,0.06);border:1px solid rgba(0,245,160,0.2);border-radius:8px;padding:8px 12px;font-size:8px;font-family:'Space Mono',monospace;color:#00f5a0;max-width:380px;line-height:1.6">
+      📡 <strong>Backend Connected.</strong> Strategies sync to backend every 60s.
+      Tab polling provides real-time updates. Backend continues running strategies when tab is closed.
     </div>
   </div>
 
   <!-- Main layout: strategy list (left) + detail (right) -->
-  <div style="display:grid;grid-template-columns:280px 1fr;gap:14px;margin-bottom:14px">
+  <div class="page-grid page-grid-narrow" style="margin-bottom:14px">
 
     <!-- ── Strategy list sidebar ── -->
     <div>
@@ -2068,7 +2116,7 @@ details[open] summary::before{transform:rotate(90deg)}
           <div style="font-size:8px;font-weight:700;color:#aaa;letter-spacing:2px;margin-bottom:6px">⚙ RISK CONTROLS</div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
             <span style="font-size:8px;color:#5a7a68">Max daily trades</span>
-            <input id="policyMaxDaily2" type="number" value="5" min="1" max="20"
+            <input id="policyMaxDaily2" type="number" value="999" min="1" max="999"
               oninput="const e=$('policyMaxDaily'); if(e) e.value=this.value;"
               style="width:52px;font-size:8px;padding:3px 5px;background:#0a1a10;border:1px solid rgba(255,255,255,0.1);color:#ddd;border-radius:4px;font-family:'Space Mono',monospace;text-align:center">
           </div>
@@ -2127,7 +2175,7 @@ details[open] summary::before{transform:rotate(90deg)}
             <span>TP: <span id="ptTPLabel" style="color:#00f5a0"></span></span>
             <span>Logic: <span id="ptLogicLabel" style="color:#aaa"></span></span>
             <span style="display:flex;align-items:center;gap:5px;margin-left:auto">
-              <span style="color:#5a7a68">Lookback:</span>
+              <span style="color:#5a7a68;cursor:help" title="Different lookback periods replay different historical candle ranges, so signals and trade counts will vary. Longer lookbacks include more data but may include different market conditions.">Lookback ℹ️:</span>
               <select id="ptLookbackEdit" onchange="ptUpdateLookback(this.value)"
                 style="font-size:8px;padding:2px 6px;background:#0a1a10;border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer">
                 <option value="7">7 days</option>
@@ -2254,7 +2302,7 @@ details[open] summary::before{transform:rotate(90deg)}
           </div>
           <div>
             <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:3px">MAX DAILY TRADES</div>
-            <input id="policyMaxDaily" type="number" value="5" min="1" max="20"
+            <input id="policyMaxDaily" type="number" value="999" min="1" max="999"
               style="width:100%;font-size:9px;padding:5px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#ddd;border-radius:4px;font-family:'Space Mono',monospace;box-sizing:border-box">
           </div>
           <div>
@@ -2821,50 +2869,66 @@ function calcCycleDashboard(d){
     // Score: low = accumulate, high = danger/sell
     let score, phase, phaseDesc;
 
+    // Wall Street Cheat Sheet emotion mapping per phase
+    let wscsEmotion;
     if(daysSinceHalving < 90){
       score = 20 + (daysSinceHalving / 90) * 10;
       phase = 'POST-HALVING CONSOLIDATION';
+      wscsEmotion = 'Disbelief / Hope';
       phaseDesc = 'Supply shock just hit. BTC historically consolidates or dips 0–90 days post-halving before the bull run. Strong long-term accumulation zone.';
     } else if(daysSinceHalving < 270){
       score = 25 + ((daysSinceHalving - 90) / 180) * 15;
       phase = 'RECOVERY & ACCUMULATION';
+      wscsEmotion = 'Hope / Optimism';
       phaseDesc = 'Smart money accumulation phase. 90–270 days post-halving historically marks the last cheap entry before bull acceleration.';
     } else if(daysSinceHalving < 450){
       score = 40 + ((daysSinceHalving - 270) / 180) * 25;
       phase = 'BULL MARKET ACCELERATION';
+      wscsEmotion = 'Belief / Thrill';
       phaseDesc = 'Major price discovery phase. 270–450 days post-halving. Prior cycles saw largest % gains here. Ride trend, tighten stops.';
     } else if(daysSinceHalving < 560){
       score = 65 + ((daysSinceHalving - 450) / 110) * 25;
       phase = 'HISTORICAL PEAK ZONE';
+      wscsEmotion = 'Euphoria / Complacency';
       phaseDesc = '⚠️ All 3 prior ATHs occurred Day 367–548. Peak zone active. Prior peaks: Day 367 (2012), Day 526 (2016), Day 548 (2020). Take profits.';
     } else if(daysSinceHalving < 730){
-      // Score descends from 90→65 — still bearish but danger of sharp drops decreasing
       score = 90 - ((daysSinceHalving - 560) / 170) * 25;
       phase = 'POST-PEAK DISTRIBUTION';
+      wscsEmotion = 'Anxiety / Denial';
       phaseDesc = '🔴 Past all 3 historical ATH windows. Distribution phase. Avg -82.9% drawdown from ATH historically. Avoid catching falling knives.';
     } else if(daysSinceHalving < 1050){
-      // Approaching historical bottom (avg Day 863, range 777–924)
       score = 65 - ((daysSinceHalving - 730) / 320) * 50;
       phase = 'BEAR MARKET / CAPITULATION';
+      wscsEmotion = 'Panic / Capitulation';
       phaseDesc = '⚡ Historical bottom zone. Avg bottom: Day 863 (range 777–924). Avg drawdown -82.9% from ATH. Best long-term accumulation window.';
     } else {
       score = 15 + ((daysSinceHalving - 1050) / 378) * 15;
       phase = 'PRE-HALVING BASE';
+      wscsEmotion = 'Anger / Depression / Disbelief';
       phaseDesc = 'Late bear. Next halving ~2028. Historically price recovers 6–12 months before next halving. Begin long-term accumulation.';
     }
 
     score = Math.round(Math.max(3, Math.min(97, score)));
     const signal = score < 35 ? 'bull' : score > 65 ? 'bear' : 'neutral';
 
+    // Calculate days-to-projected-bottom for display
+    const avgBotDay = 863;
+    const daysToBottom = Math.max(0, avgBotDay - daysSinceHalving);
+    const bottomCountdown = daysSinceHalving < avgBotDay
+      ? `~${daysToBottom} days to projected bottom`
+      : `${daysSinceHalving - avgBotDay} days past avg bottom`;
+
     results.push({
       name:'Halving Cycle',score,signal,weight:15,
-      val:`Day ${daysSinceHalving} of cycle`,
+      val:`Day ${daysSinceHalving} · ${wscsEmotion}`,
+      halvingPhase: phase,
+      wscsEmotion: wscsEmotion,
+      daysToBottom: daysToBottom,
+      daysSinceHalving: daysSinceHalving,
       desc:(function(){
-        // Add bottom projection context for post-peak phases
         let extra = '';
-        if(daysSinceHalving >= 560 && daysSinceHalving < 1050){
+        if(daysSinceHalving >= 450){
           const halvingDate = lastHalving;
-          const avgBotDay   = 863; // historical average
           const minBotDay   = 777;
           const maxBotDay   = 924;
           const projBot     = new Date(halvingDate + avgBotDay * 864e5);
@@ -2872,7 +2936,7 @@ function calcCycleDashboard(d){
           const projMax     = new Date(halvingDate + maxBotDay * 864e5);
           const mths = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
           const fmt  = dt => mths[dt.getMonth()] + ' ' + dt.getFullYear();
-          extra = ` | Hist. bottom window: ${fmt(projMin)}–${fmt(projMax)} (avg ${fmt(projBot)}, Day ${avgBotDay})`;
+          extra = ` | ${bottomCountdown} | Bottom window: ${fmt(projMin)}–${fmt(projMax)}`;
         }
         return `${phase} — ${phaseDesc}${extra}`;
       })()
@@ -2924,7 +2988,27 @@ function renderCycleDashboard(d){
   const trendInd = indicators.find(i=>i.name==='Trend Direction');
   const trendScore = trendInd ? trendInd.score : 50;
   const trendPenalty = trendScore < 30 ? 8 : trendScore < 40 ? 4 : 0;
-  const adjustedScore = Math.min(97, score + trendPenalty);
+  let adjustedScore = Math.min(97, score + trendPenalty);
+
+  // Halving cycle phase override: if halving says distribution/peak, verdict
+  // must not show "MID CYCLE" even if other indicators drag average down
+  const halvingInd = indicators.find(i=>i.name==='Halving Cycle');
+  const halvingPhase = halvingInd ? halvingInd.halvingPhase : '';
+  const halvingDays = halvingInd ? halvingInd.daysSinceHalving : 0;
+  const halvingEmotion = halvingInd ? (halvingInd.wscsEmotion || '') : '';
+  const daysToBottom = halvingInd ? halvingInd.daysToBottom : 0;
+
+  if (halvingPhase === 'HISTORICAL PEAK ZONE' && adjustedScore < 62) {
+    adjustedScore = Math.max(adjustedScore, 62); // at least CAUTION
+  } else if (halvingPhase === 'POST-PEAK DISTRIBUTION' && adjustedScore < 55) {
+    adjustedScore = Math.max(adjustedScore, 55); // at least CAUTION
+  }
+
+  // ATH drawdown override: if drawdown < 15% (near ATH), force at least CAUTION
+  const athInd = indicators.find(i=>i.name==='ATH Drawdown');
+  if (athInd && athInd.score >= 85 && adjustedScore < 62) {
+    adjustedScore = Math.max(adjustedScore, 62);
+  }
 
   if(adjustedScore < 20){
     vb.className='verdict-badge accumulate';
@@ -2950,6 +3034,20 @@ function renderCycleDashboard(d){
     vb.className='verdict-badge exit';
     vb.innerHTML='🔴 EXIT / EXTREME TOP RISK';
     vs.textContent='Extreme signals. Historically within range of major cycle tops. Consider exiting most or all positions.';
+  }
+
+  // Add halving cycle context below the verdict
+  if (halvingPhase) {
+    const emotionBadge = halvingEmotion ? ` · ${halvingEmotion}` : '';
+    const daysCtx = halvingDays > 0
+      ? (daysToBottom > 0 ? `~${daysToBottom} days to projected bottom` : `${halvingDays - 863} days past avg bottom`)
+      : '';
+    const ctxEl = document.createElement('div');
+    ctxEl.style.cssText = 'font-family:Space Mono,monospace;font-size:8px;color:#a78bfa;margin-top:8px;padding:6px 10px;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);border-radius:6px;line-height:1.6';
+    ctxEl.innerHTML = `<strong>${halvingPhase}</strong>${emotionBadge}`
+      + (daysCtx ? ` | ${daysCtx}` : '')
+      + `<br><span style="color:#5a7a68">Halving cycle: Day ${halvingDays} · Score: ${halvingInd.score}/100</span>`;
+    vs.parentElement.appendChild(ctxEl);
   }
 
   // Render indicator cards
@@ -6851,12 +6949,23 @@ function scoreSlTpResults(results, metric) {
 function renderSlTpOptimizer(results, baseOpts) {
   const panel = $('slTpOptPanel');
   const el    = $('slTpOptContent');
-  if (!el || !results.length) return;
+  if (!el || !results || !results.length) {
+    if (panel) {
+      panel.style.display = 'block';
+      if (el) el.innerHTML = '<div style="padding:24px;text-align:center;color:#aaa;font-family:Space Mono,monospace;font-size:11px">No valid SL/TP combinations found for this strategy. Try widening the SL/TP range or changing parameters.</div>';
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    return;
+  }
   panel.style.display = 'block';
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   const metric  = $('slTpMetric')?.value || 'sharpe';
   const sorted  = scoreSlTpResults(results, metric);
+  if (!sorted.length) {
+    el.innerHTML = '<div style="padding:24px;text-align:center;color:#aaa;font-family:Space Mono,monospace;font-size:11px">No valid SL/TP combinations found.</div>';
+    return;
+  }
   const best    = sorted[0];
   const current = { sl: baseOpts.stopLossPct, tp: baseOpts.takeProfitPct };
 
@@ -11446,9 +11555,41 @@ async function probeKlines(sym, interval) {
   const end   = Date.now();
   const start = end - 200 * intervalMs(interval);
   const url   = `https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${interval}&startTime=${start}&endTime=${end}&limit=200`;
-  const res   = await fetch(url);
-  if (!res.ok) throw new Error(`Binance ${sym} ${interval}: HTTP ${res.status}`);
-  const raw = await res.json();
+
+  // 15-second timeout
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  let raw;
+  try {
+    // Try direct Binance first
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      const msg = errBody?.msg || `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+    raw = await res.json();
+  } catch (e) {
+    // If real Binance error (not CORS/network), throw
+    if (e.message && e.message.startsWith('HTTP')) throw e;
+    // Fallback to allorigins proxy
+    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+    const controller2 = new AbortController();
+    const timeout2 = setTimeout(() => controller2.abort(), 15000);
+    try {
+      const r2 = await fetch(proxyUrl, { signal: controller2.signal });
+      clearTimeout(timeout2);
+      if (!r2.ok) throw new Error(`Proxy error: HTTP ${r2.status}`);
+      raw = await r2.json();
+    } catch (e2) {
+      clearTimeout(timeout2);
+      throw new Error(`Binance ${sym} ${interval}: Network error — both direct and proxy fetch failed.`);
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+
   return raw.map(k => ({ t: new Date(k[0]).toISOString(), o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5] }));
 }
 
@@ -11944,20 +12085,44 @@ function buildProbArc(prob, color) {
 
 const ETF_STATE = { loaded: false, loading: false, data: null };
 
+// Current ETF asset selection (bitcoin, ethereum, solana)
+let etfCurrentAsset = 'bitcoin';
+
+function switchEtfAsset(asset) {
+  etfCurrentAsset = asset;
+  // Update tab styling
+  ['bitcoin', 'ethereum', 'solana'].forEach(a => {
+    const tab = $('etfAssetTab_' + a);
+    if (!tab) return;
+    if (a === asset) {
+      tab.style.background = 'rgba(99,179,237,0.15)';
+      tab.style.borderColor = 'rgba(99,179,237,0.4)';
+      tab.style.color = '#63b3ed';
+      tab.style.fontWeight = '700';
+    } else {
+      tab.style.background = 'transparent';
+      tab.style.borderColor = 'rgba(255,255,255,0.1)';
+      tab.style.color = '#aaa';
+      tab.style.fontWeight = '400';
+    }
+  });
+  // Reload data for new asset
+  ETF_STATE.loaded = false;
+  loadEtfFlows();
+}
+
 async function loadEtfFlows() {
   if (ETF_STATE.loading) return;
   ETF_STATE.loading = true;
 
   const btn = document.querySelector('[onclick="loadEtfFlows()"]');
-  if (btn) { btn.textContent = '⟳ Loading...'; btn.disabled = true; }
+  if (btn) { btn.textContent = '⟳'; btn.disabled = true; }
 
   const msg = $('etfChartMsg');
-  if (msg) msg.textContent = 'Fetching ETF flow data...';
+  if (msg) msg.textContent = 'Fetching ' + etfCurrentAsset.toUpperCase() + ' ETF flow data...';
 
   try {
-    // CoinGlass free public endpoint for BTC ETF flows
-    // Returns daily net flows in USD millions
-    const url = 'https://api.coinglass.com/api/etf/bitcoin/flow-chart';
+    const url = 'https://api.coinglass.com/api/etf/' + etfCurrentAsset + '/flow-chart';
     const res = await fetch(url, { headers: { 'accept': 'application/json,*/*' } });
 
     let flowData = null;
@@ -11980,16 +12145,31 @@ async function loadEtfFlows() {
       ETF_STATE.data   = flowData;
       ETF_STATE.loaded = true;
       renderEtfFlows(flowData);
-    } else {
-      // Use synthetic demo data so the UI isn't empty
+    } else if (etfCurrentAsset === 'bitcoin') {
       renderEtfFlowsFallback();
+    } else {
+      // No data available for this asset
+      const msgEl = $('etfChartMsg');
+      if (msgEl) { msgEl.style.display = 'flex'; msgEl.innerHTML = '<span style="color:#f5c400">⚠️ No ETF data available for ' + etfCurrentAsset.toUpperCase() + ' yet. <a href="https://www.coinglass.com/' + etfCurrentAsset + '-etf" target="_blank" style="color:#63b3ed">Check CoinGlass ↗</a></span>'; }
+      $('etfToday')?.replaceChildren(document.createTextNode('—'));
+      $('etf7d')?.replaceChildren(document.createTextNode('—'));
+      $('etf30d')?.replaceChildren(document.createTextNode('—'));
+      $('etfSignal')?.replaceChildren(document.createTextNode('—'));
+      const issuerEl = $('etfIssuerBreakdown');
+      if (issuerEl) issuerEl.innerHTML = '<div style="text-align:center;padding:16px;color:#5a7a68">No issuer data available for ' + etfCurrentAsset.toUpperCase() + ' ETFs</div>';
+      if (ETF_STATE.chart) { try { ETF_STATE.chart.destroy(); } catch {} ETF_STATE.chart = null; }
     }
   } catch (e) {
     console.warn('[ETF] Fetch failed:', e.message);
-    renderEtfFlowsFallback();
+    if (etfCurrentAsset === 'bitcoin') {
+      renderEtfFlowsFallback();
+    } else {
+      const msgEl = $('etfChartMsg');
+      if (msgEl) { msgEl.style.display = 'flex'; msgEl.textContent = 'Failed to load ' + etfCurrentAsset.toUpperCase() + ' ETF data.'; }
+    }
   } finally {
     ETF_STATE.loading = false;
-    if (btn) { btn.textContent = '🔄 Refresh'; btn.disabled = false; }
+    if (btn) { btn.textContent = '🔄'; btn.disabled = false; }
   }
 }
 
@@ -13851,7 +14031,7 @@ async function pollOneStrategy(id) {
     const state = ptStateLoad(id);
     const today = new Date().toDateString();
     if (state.dailyDate !== today) { state.dailyDate = today; state.dailyTradeCount = 0; }
-    const maxDaily   = parseInt($('policyMaxDaily')?.value  || 5);
+    const maxDaily   = parseInt($('policyMaxDaily')?.value  || 999);
     const maxConsec  = parseInt($('policyConsecLoss')?.value || 3);
 
     // ── BUG FIX: Process ALL new closed candles, not just n-2 ─
@@ -14340,7 +14520,9 @@ function renderStrategyDetail(id) {
       const showAll = $('ptShowAllTrades')?.checked;
       const displayTrades = showAll ? [...trades].reverse() : [...trades].reverse().slice(0, 20);
       const hiddenCount = trades.length - 20;
-      ptSet('ptTradeLogCount', showAll ? `${trades.length} total` : (hiddenCount > 0 ? `latest 20 of ${trades.length}` : `${trades.length} trades`));
+      const openCount = (state.positions || []).length;
+      const openLabel = openCount > 0 ? ' + ' + openCount + ' open' : '';
+      ptSet('ptTradeLogCount', showAll ? trades.length + ' total' + openLabel : (hiddenCount > 0 ? 'latest 20 of ' + trades.length + openLabel : trades.length + ' trades' + openLabel));
       // Build open position rows (live, not yet closed)
       const openRows = (state.positions || []).map(pos => {
         const livePrice = state.lastKnownPrice || pos.entry;
