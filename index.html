@@ -565,7 +565,7 @@ details[open] summary::before{transform:rotate(90deg)}
 .login-box .remember-row{display:flex;align-items:center;gap:6px;margin:4px 0 8px;justify-content:flex-start}
 .login-box .remember-row input[type=checkbox]{width:14px;height:14px;accent-color:var(--primary)}
 .login-box .remember-row label{font-family:'Space Mono',monospace;font-size:10px;color:var(--text-muted);cursor:pointer}
-.logout-btn{position:fixed;top:6px;right:20px;z-index:10001;background:rgba(20,20,30,0.95);border:1px solid rgba(255,77,109,0.4);
+.logout-btn{position:absolute;top:10px;right:16px;z-index:10;background:rgba(20,20,30,0.95);border:1px solid rgba(255,77,109,0.4);
   color:var(--red);padding:5px 12px;border-radius:6px;font-family:'Space Mono',monospace;font-size:9px;cursor:pointer;
   letter-spacing:1px;text-transform:uppercase;transition:all 0.3s;backdrop-filter:blur(12px);box-shadow:0 2px 8px rgba(0,0,0,0.4)}
 .logout-btn:hover{background:rgba(255,77,109,0.25);border-color:var(--red)}
@@ -588,7 +588,7 @@ details[open] summary::before{transform:rotate(90deg)}
 
 <script>window.CBP_BACKEND="https://dashboard-ultimate-production.up.railway.app";</script>
 
-<button class="logout-btn" id="logoutBtn" style="display:none">⏻ LOGOUT</button>
+
 
 <script>
 (function(){
@@ -660,7 +660,8 @@ details[open] summary::before{transform:rotate(90deg)}
 </div>
 <div class="toast" id="toast"></div>
 
-<header>
+<header style="position:relative">
+  <button class="logout-btn" id="logoutBtn" style="display:none">⏻ LOGOUT</button>
   <h1>⚡ CRYPTO BACKTESTER PRO</h1>
   <div class="subtitle"><span class="live-dot"></span>Live Binance · Multi-TF Signals · Leverage & Risk Control · Smart Optimizer</div>
 </header>
