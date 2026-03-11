@@ -1036,6 +1036,7 @@ details[open] summary::before{transform:rotate(90deg)}
     </div>
     <label>Timeframes to test across</label>
     <div class="checkbox-group" style="margin-top:2px">
+      <div class="checkbox-item"><input type="checkbox" id="optTF5m"><label for="optTF5m">5m</label></div>
       <div class="checkbox-item"><input type="checkbox" id="optTF15m"><label for="optTF15m">15m</label></div>
       <div class="checkbox-item"><input type="checkbox" id="optTF30m"><label for="optTF30m">30m</label></div>
       <div class="checkbox-item"><input type="checkbox" id="optTF1h" checked><label for="optTF1h">1h</label></div>
@@ -4162,7 +4163,7 @@ $('optimizeBtn').addEventListener('click', async function(){
   if(!data){toast('Load data first!','error');return}
 
   const TF_MAP = {
-    '15m': $('optTF15m').checked, '30m': $('optTF30m').checked,
+    '5m': $('optTF5m').checked, '15m': $('optTF15m').checked, '30m': $('optTF30m').checked,
     '1h': $('optTF1h').checked,   '4h': $('optTF4h').checked,
     '1d': $('optTF1d').checked
   };
