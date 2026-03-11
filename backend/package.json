@@ -21,11 +21,6 @@
     "pg": "^8.20.0",
     "bs58": "^5.0.0"
   },
-  "optionalDependencies": {
-    "@solana/web3.js": "^1.95.0",
-    "@drift-labs/sdk": "^2.100.0",
-    "@coral-xyz/anchor": "^0.30.0"
-  },
   "engines": {
     "node": ">=18.0.0"
   }
