@@ -37,7 +37,7 @@ app.use(cors({
 app.use(express.json({ limit: '5mb' }));
 
 // Health check - always works even if DB is down
-app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: 'v2-live', time: new Date().toISOString() }));
 app.get('/', (req, res) => res.json({ status: 'ok', service: 'Crypto Backtester Backend' }));
 
 // Start HTTP server FIRST so Railway sees it's alive
@@ -94,7 +94,8 @@ async function initDB() {
       liveEngine.start();
       console.log('Live trading routes loaded. Engine started.');
     } catch (liveErr) {
-      console.error('Live trading init error (core routes still working):', liveErr.message);
+      console.error('Live trading init error (core routes still working):', liveErr.message, liveErr.stack);
+      app.get('/live/debug', (req, res) => res.json({ error: liveErr.message, stack: liveErr.stack }));
     }
 
     console.log('Server fully ready.');
