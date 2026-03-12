@@ -1940,7 +1940,7 @@ details[open] summary::before{transform:rotate(90deg)}
     <!-- On-chain & macro signals -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div class="intel-section">
-        <div class="intel-section-title">📡 On-Chain Signals</div>
+        <div class="intel-section-title">📡 Market Structure Signals</div>
         <div id="onchainSignals">
           <div style="color:#5a7a68;font-size:8px;font-family:'Space Mono',monospace">Loading...</div>
         </div>
@@ -2584,8 +2584,8 @@ details[open] summary::before{transform:rotate(90deg)}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:14px">
         <div><span style="color:#5a7a68">Collateral:</span> <span id="bfCollateral" style="color:#fff"></span></div>
         <div><span style="color:#5a7a68">Position size:</span> <span id="bfSize" style="color:#fff;font-weight:700"></span></div>
-        <div><span style="color:#5a7a68">Mark price:</span> <span id="bfMark" style="color:#fff"></span></div>
-        <div><span style="color:#5a7a68">Liq. price:</span> <span id="bfLiq" style="color:#ff4d6d;font-weight:700"></span></div>
+        <div><span style="color:#5a7a68">Last Price:</span> <span id="bfMark" style="color:#fff"></span> <span id="bfPriceAge" style="color:#555;font-size:10px"></span></div>
+        <div><span style="color:#5a7a68">Liq. price:</span> <span id="bfLiq" style="color:#ff4d6d;font-weight:700"></span><div id="bfLiqDisclaimer" style="font-size:10px;color:#886644;margin-top:2px;line-height:1.3">⚠️ Estimated — actual liquidation depends on exchange margin tiers. Check BloFin for exact values.</div></div>
         <div><span style="color:#5a7a68">Stop Loss:</span> <span id="bfSL" style="color:#ff4d6d"></span></div>
         <div><span style="color:#5a7a68">Take Profit:</span> <span id="bfTP" style="color:#00f5a0"></span></div>
       </div>
@@ -9858,8 +9858,11 @@ function computeCyclePosition(global, coins) {
     ? `${fmtD(projBotMin)}–${fmtD(projBotMax)} avg (Day ${avgBotDay}, −83% from ATH hist.)`
     : 'Not yet in distribution phase';
 
-  // ATH-based projection (2025 ATH was ~Jan 20 2025)
-  const ath2024 = new Date('2025-01-20');
+  // ATH-based projection — uses live ath_date from CoinGecko if available
+  const btcCoinForATH = Array.isArray(coins) ? coins.find(c => c.id === 'bitcoin') : null;
+  const liveAthDate = btcCoinForATH?.ath_date ? new Date(btcCoinForATH.ath_date) : null;
+  // Fallback: hardcoded date (update manually if CoinGecko data unavailable)
+  const ath2024 = (liveAthDate && !isNaN(liveAthDate.getTime())) ? liveAthDate : new Date('2025-01-20');
   const avgATHtoBot = 383; // historical avg days ATH→bottom (410, 363, 376)
   const projBotFromATH = new Date(ath2024.getTime() + avgATHtoBot * 86400000);
   const daysSinceATH2024 = Math.round((new Date() - ath2024) / 86400000);
@@ -9976,8 +9979,8 @@ function renderOverview() {
     { label:'Best 7d performers', value: topGainers.map(c => `${c.symbol?.toUpperCase()} +${c.c7d?.toFixed(0)}%`).join(', '), color: '#00f5a0' },
     { label:'Worst 7d performers', value: topLosers.map(c => `${c.symbol?.toUpperCase()} ${c.c7d?.toFixed(0)}%`).join(', '), color: '#ff4d6d' },
     { label:'Cycle tailwind', value: cycle.daysSince < 450 ? '✅ Within historical bull window' : cycle.daysSince < 560 ? '⚠️ Inside historical peak zone (Day 366–546 prior peaks)' : '🔴 Past all historical peak windows — Day 366/526/546', color: cycle.daysSince < 450 ? '#00f5a0' : cycle.daysSince < 560 ? '#ff6b35' : '#ff4d6d' },
-    { label:'ETF / Institutional', value: '🟢 BTC/ETH spot ETFs active, sustained inflows', color: '#63b3ed' },
-    { label:'Key risk', value: 'Macro: Fed policy, geopolitical uncertainty, regulatory', color: '#ff6b35' },
+    { label:'ETF / Institutional', value: (ETF_STATE.loaded && ETF_STATE.data) ? (() => { const d = Array.isArray(ETF_STATE.data) ? ETF_STATE.data : []; const last7 = d.slice(-7); const net7 = last7.reduce((s,x) => s + parseFloat(x.totalNetFlow ?? x.netFlow ?? x.value ?? x.flow ?? 0), 0); return net7 > 500 ? '🟢 Strong ETF inflows (7d)' : net7 > 0 ? '🟡 Mild ETF inflows (7d)' : net7 > -300 ? '⚪ Mixed ETF flows (7d)' : '🔴 ETF outflows (7d)'; })() : 'Data not loaded', color: (ETF_STATE.loaded && ETF_STATE.data) ? '#63b3ed' : '#888' },
+    { label:'⚠️ Standing risks', value: 'Macro: Fed policy, geopolitical uncertainty, regulatory (static reminder)', color: '#888' },
   ];
   $('macroSignals').innerHTML = macroRows.map(r => `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04);gap:8px">
@@ -12358,38 +12361,24 @@ function renderEtfFlows(data) {
 }
 
 function renderEtfFlowsFallback() {
-  // Synthetic data showing realistic ETF flow pattern when API unavailable
-  const base = new Date();
-  base.setDate(base.getDate() - 30);
-  const synthetic = [];
-  const issuers = { ibit: 0, fbtc: 0, arkb: 0, bitb: 0, gbtc: 0 };
-
-  for (let i = 0; i < 30; i++) {
-    const d = new Date(base);
-    d.setDate(base.getDate() + i);
-    if (d.getDay() === 0 || d.getDay() === 6) continue; // skip weekends
-    // Realistic flow variation
-    const flow = (Math.random() - 0.38) * 600 + 120;
-    const ibit = flow * (0.4 + Math.random() * 0.1);
-    const fbtc = flow * (0.2 + Math.random() * 0.05);
-    const gbtc = (Math.random() - 0.6) * 150;
-    synthetic.push({
-      date: d.toISOString().slice(0, 10),
-      flow: Math.round(flow),
-      ibit: Math.round(ibit),
-      fbtc: Math.round(fbtc),
-      arkb: Math.round(flow * 0.08),
-      bitb: Math.round(flow * 0.06),
-      gbtc: Math.round(gbtc),
-    });
-  }
+  // Show clear error state instead of fake data when API is unavailable
+  const todayEl = $('etfToday'), d7El = $('etf7d'), d30El = $('etf30d'), sigEl = $('etfSignal');
+  if (todayEl) { todayEl.textContent = '—'; todayEl.style.color = '#5a7a68'; }
+  if (d7El)    { d7El.textContent = '—';    d7El.style.color = '#5a7a68'; }
+  if (d30El)   { d30El.textContent = '—';   d30El.style.color = '#5a7a68'; }
+  if (sigEl)   { sigEl.textContent = 'Data unavailable'; sigEl.style.color = '#888'; }
 
   const msg = $('etfChartMsg');
-  if (msg) msg.innerHTML = `<span style="color:#f5c400">⚠️ Live data unavailable — showing illustrative example. <a href="https://www.coinglass.com/btc-etf" target="_blank" style="color:#63b3ed">View on CoinGlass ↗</a></span>`;
+  if (msg) {
+    msg.style.display = 'flex';
+    msg.innerHTML = '<span style="color:#ff6b35">⚠️ Unable to load ETF flow data. CoinGlass API may require an API key. <a href="https://www.coinglass.com/btc-etf" target="_blank" style="color:#63b3ed">View on CoinGlass ↗</a></span>';
+  }
 
-  updateEtfSummary(synthetic);
-  renderEtfChart(synthetic);
-  renderEtfIssuerBreakdown(synthetic);
+  // Destroy old chart if exists
+  if (ETF_STATE.chart) { try { ETF_STATE.chart.destroy(); } catch {} ETF_STATE.chart = null; }
+
+  const issuerEl = $('etfIssuerBreakdown');
+  if (issuerEl) issuerEl.innerHTML = '<div style="text-align:center;padding:16px;color:#5a7a68">ETF issuer data unavailable</div>';
 }
 
 function updateEtfSummary(series) {
@@ -12479,11 +12468,16 @@ function renderEtfIssuerBreakdown(series) {
 
   const last = series[series.length - 1];
   const issuers = [
-    { key: 'ibit', name: 'IBIT', issuer: 'BlackRock',    color: '#63b3ed' },
-    { key: 'fbtc', name: 'FBTC', issuer: 'Fidelity',     color: '#00f5a0' },
-    { key: 'arkb', name: 'ARKB', issuer: 'ARK Invest',   color: '#f5c400' },
-    { key: 'bitb', name: 'BITB', issuer: 'Bitwise',      color: '#a78bfa' },
-    { key: 'gbtc', name: 'GBTC', issuer: 'Grayscale',    color: '#ff8c69' },
+    { key: 'ibit', name: 'IBIT', issuer: 'BlackRock',          color: '#63b3ed' },
+    { key: 'fbtc', name: 'FBTC', issuer: 'Fidelity',           color: '#00f5a0' },
+    { key: 'arkb', name: 'ARKB', issuer: 'ARK Invest',         color: '#f5c400' },
+    { key: 'bitb', name: 'BITB', issuer: 'Bitwise',            color: '#a78bfa' },
+    { key: 'gbtc', name: 'GBTC', issuer: 'Grayscale',          color: '#ff8c69' },
+    { key: 'hodl', name: 'HODL', issuer: 'VanEck',             color: '#e0a526' },
+    { key: 'brrr', name: 'BRRR', issuer: 'Valkyrie',           color: '#ff6b9d' },
+    { key: 'btcw', name: 'BTCW', issuer: 'WisdomTree',         color: '#6bcf7f' },
+    { key: 'ezbc', name: 'EZBC', issuer: 'Franklin Templeton', color: '#4fc3f7' },
+    { key: 'btco', name: 'BTCO', issuer: 'Invesco',            color: '#ce93d8' },
   ];
 
   const totalAbs = issuers.reduce((s, i) => s + Math.abs(last[i.key] || 0), 0) || 1;
@@ -15284,7 +15278,8 @@ function updateBlofinDisplay() {
   if (!blofinPending) return;
   const p = blofinPending;
   const lev = blofinLev || 1;
-  const markPrice = p.markPrice;
+  // NOTE: This is last traded price from ticker endpoint, NOT the exchange mark price used for liquidation calculations
+  const lastPrice = p.lastPrice;
   const collateralUsd = p.sizing;
   const direction = p.setup.direction;
   const slPct = p.slPct || 0;
@@ -15292,17 +15287,22 @@ function updateBlofinDisplay() {
 
   const positionSize = collateralUsd * lev;
   const liqPct = 0.9 / lev;
-  const liqPrice = direction === 'long' ? markPrice * (1 - liqPct) : markPrice * (1 + liqPct);
-  const slPrice = slPct > 0 ? (direction === 'long' ? markPrice * (1 - slPct / 100) : markPrice * (1 + slPct / 100)) : null;
-  const tpPrice = tpPct > 0 ? (direction === 'long' ? markPrice * (1 + tpPct / 100) : markPrice * (1 - tpPct / 100)) : null;
+  const liqPrice = direction === 'long' ? lastPrice * (1 - liqPct) : lastPrice * (1 + liqPct);
+  const slPrice = slPct > 0 ? (direction === 'long' ? lastPrice * (1 - slPct / 100) : lastPrice * (1 + slPct / 100)) : null;
+  const tpPrice = tpPct > 0 ? (direction === 'long' ? lastPrice * (1 + tpPct / 100) : lastPrice * (1 - tpPct / 100)) : null;
   const instId = p.instId;
   const fmt = n => n ? n.toLocaleString(undefined, {maximumFractionDigits: 4}) : '--';
 
   const el = id => $(id);
   if (el('bfCollateral')) el('bfCollateral').textContent = '$' + collateralUsd.toFixed(0) + ' USDT';
   if (el('bfSize'))       el('bfSize').textContent       = '$' + positionSize.toLocaleString(undefined, {maximumFractionDigits: 0});
-  if (el('bfMark'))       el('bfMark').textContent       = '$' + fmt(markPrice);
-  if (el('bfLiq'))        el('bfLiq').textContent        = '$' + fmt(liqPrice) + ' (' + (liqPct * 100).toFixed(1) + '% move)';
+  if (el('bfMark'))       el('bfMark').textContent       = '$' + fmt(lastPrice);
+  // Show time since last price update
+  if (el('bfPriceAge') && p.priceTimestamp) {
+    const ago = Math.round((Date.now() - p.priceTimestamp) / 1000);
+    el('bfPriceAge').textContent = ago < 2 ? 'just now' : ago + 's ago';
+  }
+  if (el('bfLiq'))        el('bfLiq').innerHTML          = '<span style="opacity:0.7">$' + fmt(liqPrice) + ' (' + (liqPct * 100).toFixed(1) + '% move)</span>';
   if (el('bfSL'))         el('bfSL').textContent         = slPrice ? '$' + fmt(slPrice) + ' (-' + slPct + '%)' : 'None';
   if (el('bfTP'))         el('bfTP').textContent         = tpPrice ? '$' + fmt(tpPrice) + ' (+' + tpPct + '%)' : 'None';
   if (el('bfInstId'))     el('bfInstId').textContent     = instId;
@@ -15346,22 +15346,56 @@ async function openBlofinModal(setup) {
   if (sub) sub.textContent = setup.direction.toUpperCase() + ' ' + instId + ' · $' + sizing + ' · PERPS';
 
   try {
-    let markPrice;
+    // Fetch last traded price (not exchange mark price used for liquidation)
+    let lastPrice;
     try {
       const r = await fetch(LIVE_API + '/ticker?instId=' + encodeURIComponent(instId), { headers: liveHeaders() });
-      if (r.ok) { const d = await r.json(); markPrice = d.ticker?.last || d.ticker?.bid; }
+      if (r.ok) { const d = await r.json(); lastPrice = d.ticker?.last || d.ticker?.bid; }
     } catch {}
-    if (!markPrice) {
+    if (!lastPrice) {
       const klRes = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=' + setup.sym);
-      if (klRes.ok) { const kl = await klRes.json(); markPrice = parseFloat(kl.price); }
+      if (klRes.ok) { const kl = await klRes.json(); lastPrice = parseFloat(kl.price); }
     }
-    if (!markPrice) throw new Error('Could not fetch mark price');
+    if (!lastPrice) throw new Error('Could not fetch price');
 
-    blofinPending = { setup, instId, sizing, slPct, tpPct, markPrice, leverage: blofinLev, positionSize: sizing * blofinLev };
+    blofinPending = { setup, instId, sizing, slPct, tpPct, lastPrice, leverage: blofinLev, positionSize: sizing * blofinLev, priceTimestamp: Date.now() };
     updateBlofinDisplay();
 
     if (confirmBtn) confirmBtn.disabled = false;
     if (statusEl) statusEl.innerHTML = '<span style="color:#00f5a0">Quote ready — review and confirm</span>';
+
+    // FIX 3: Start price refresh interval (every 5s)
+    if (window._blofinPriceInterval) clearInterval(window._blofinPriceInterval);
+    window._blofinPriceInterval = setInterval(async () => {
+      if (!blofinPending || !$('blofinModal') || $('blofinModal').style.display === 'none') {
+        clearInterval(window._blofinPriceInterval);
+        window._blofinPriceInterval = null;
+        return;
+      }
+      try {
+        let newPrice;
+        try {
+          const r2 = await fetch(LIVE_API + '/ticker?instId=' + encodeURIComponent(blofinPending.instId), { headers: liveHeaders() });
+          if (r2.ok) { const d2 = await r2.json(); newPrice = d2.ticker?.last || d2.ticker?.bid; }
+        } catch {}
+        if (!newPrice) {
+          const kr = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=' + blofinPending.setup.sym);
+          if (kr.ok) { const kd = await kr.json(); newPrice = parseFloat(kd.price); }
+        }
+        if (newPrice && blofinPending) {
+          blofinPending.lastPrice = newPrice;
+          blofinPending.priceTimestamp = Date.now();
+          updateBlofinDisplay();
+          // Flash effect on price update
+          const markEl = $('bfMark');
+          if (markEl) {
+            markEl.style.transition = 'background 0.3s';
+            markEl.style.background = 'rgba(0,245,160,0.15)';
+            setTimeout(() => { if (markEl) markEl.style.background = 'transparent'; }, 600);
+          }
+        }
+      } catch {}
+    }, 5000);
   } catch(e) {
     if (statusEl) statusEl.innerHTML = '<span style="color:#ff4d6d">' + e.message + '</span>';
   }
@@ -15380,7 +15414,11 @@ async function confirmBlofinExec() {
     const marginMode = $('bfMarginMode')?.value || 'cross';
     const limitPrice = orderType !== 'market' ? parseFloat($('bfLimitPrice')?.value) : undefined;
     const side = p.setup.direction === 'long' ? 'buy' : 'sell';
-    const contractSize = (p.positionSize / p.markPrice).toFixed(4);
+    // FIX 4: Round contract size to proper increments per pair
+    const rawSize = p.positionSize / p.lastPrice;
+    const isBtc = p.instId.toUpperCase().startsWith('BTC');
+    const decimals = isBtc ? 4 : 2;
+    const contractSize = rawSize.toFixed(decimals);
 
     const body = { instId: p.instId, side, orderType, size: contractSize, leverage: p.leverage, marginMode };
     if (p.tpPrice) body.tpPrice = p.tpPrice;
@@ -15405,6 +15443,11 @@ function closeBlofinModal() {
   const m = $('blofinModal');
   if (m) m.style.display = 'none';
   blofinPending = null;
+  // Clear price refresh interval
+  if (window._blofinPriceInterval) {
+    clearInterval(window._blofinPriceInterval);
+    window._blofinPriceInterval = null;
+  }
 }
 
 // ════════════════════════════════════════════════════════════════

@@ -10,16 +10,38 @@ const RSS_FEEDS = [
 
 const POLL_INTERVAL = 2 * 60 * 1000; // 2 minutes
 
+// Weighted keyword lists: { word, weight }
+const STRONG_POSITIVE = ['surge', 'soars', 'breakout', 'ath', 'all-time high'];
+const MODERATE_POSITIVE = ['gains', 'rally', 'adoption', 'upgrade', 'accumulation', 'institutional', 'halving', 'recovery', 'momentum'];
+const MILD_POSITIVE = ['partnership', 'milestone', 'integration', 'listing', 'mainnet', 'airdrop', 'expansion', 'approval', 'bullish', 'inflows', 'record'];
+
+const STRONG_NEGATIVE = ['crash', 'hack', 'exploit', 'scam', 'fraud', 'rug pull', 'rugpull', 'ponzi'];
+const MODERATE_NEGATIVE = ['selloff', 'plunge', 'dump', 'lawsuit', 'insolvency', 'bankruptcy', 'delisted', 'liquidation'];
+const MILD_NEGATIVE = ['crackdown', 'outflows', 'vulnerability', 'ban', 'bearish', 'sec charges', 'contagion', 'frozen', 'investigation'];
+
 const POSITIVE_WORDS = [
-  'surge', 'rally', 'approval', 'bullish', 'soars', 'gains', 'breakout',
-  'adoption', 'inflows', 'upgrade', 'record', 'partnership', 'milestone',
-  'ath', 'all-time high',
+  ...STRONG_POSITIVE.map(w => ({ word: w, weight: 0.8 })),
+  ...MODERATE_POSITIVE.map(w => ({ word: w, weight: 0.5 })),
+  ...MILD_POSITIVE.map(w => ({ word: w, weight: 0.3 })),
 ];
 const NEGATIVE_WORDS = [
-  'crash', 'hack', 'ban', 'bearish', 'sec charges', 'exploit', 'scam',
-  'plunge', 'selloff', 'outflows', 'lawsuit', 'crackdown', 'vulnerability',
-  'fraud', 'dump',
+  ...STRONG_NEGATIVE.map(w => ({ word: w, weight: -0.8 })),
+  ...MODERATE_NEGATIVE.map(w => ({ word: w, weight: -0.5 })),
+  ...MILD_NEGATIVE.map(w => ({ word: w, weight: -0.3 })),
 ];
+
+// FIX 1: Word boundary matching instead of substring includes
+const wordMatch = (text, word) => new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(text);
+
+// FIX 3: Negation handling
+const NEGATION_WORDS = ['not', 'no', 'never', 'fails to', 'failed to', 'without', 'lack of', 'unlikely', "don't", "doesn't", "didn't", "won't", "isn't", "aren't"];
+
+function isNegated(text, word) {
+  const idx = text.indexOf(word);
+  if (idx === -1) return false;
+  const before = text.substring(Math.max(0, idx - 30), idx).toLowerCase();
+  return NEGATION_WORDS.some(neg => before.includes(neg));
+}
 
 let articles = [];
 let seenUrls = new Set();
@@ -37,24 +59,37 @@ function stripHtml(str) {
 
 function scoreSentiment(title, desc) {
   const text = ((title || '') + ' ' + (desc || '')).toLowerCase();
-  let positiveCount = 0;
-  let negativeCount = 0;
+  let score = 0;
 
-  for (const word of POSITIVE_WORDS) {
-    if (text.includes(word)) positiveCount++;
+  for (const { word, weight } of POSITIVE_WORDS) {
+    if (wordMatch(text, word)) {
+      if (isNegated(text, word)) {
+        // Negated positive -> count as mild negative
+        score -= 0.3;
+      } else {
+        score += weight;
+      }
+    }
   }
-  for (const word of NEGATIVE_WORDS) {
-    if (text.includes(word)) negativeCount++;
+  for (const { word, weight } of NEGATIVE_WORDS) {
+    if (wordMatch(text, word)) {
+      if (isNegated(text, word)) {
+        // Negated negative -> count as mild positive
+        score += 0.3;
+      } else {
+        score += weight; // weight is already negative
+      }
+    }
   }
 
-  let score = positiveCount - negativeCount;
+  // Clamp score to [-1, 1]
   score = Math.max(-1, Math.min(1, score));
 
   let label = 'neutral';
   if (score > 0.1) label = 'bullish';
   else if (score < -0.1) label = 'bearish';
 
-  return { score, label };
+  return { score: Math.round(score * 100) / 100, label };
 }
 
 function parseFeed(xml, sourceName) {
@@ -187,19 +222,28 @@ function getSentimentRolling(hours) {
   const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000);
   const recent = articles.filter((a) => new Date(a.publishedAt) >= cutoff);
 
-  if (recent.length === 0) {
-    return { score: 0, label: 'neutral', count: 0 };
+  const count = recent.length;
+
+  // FIX 5: Confidence based on sample size
+  let confidence;
+  if (count >= 10) confidence = 'high';
+  else if (count >= 5) confidence = 'medium';
+  else if (count >= 1) confidence = 'low';
+  else confidence = 'none';
+
+  if (count === 0) {
+    return { score: 0, label: 'neutral', count: 0, confidence };
   }
 
   const avgScore =
-    recent.reduce((sum, a) => sum + a.sentiment.score, 0) / recent.length;
+    recent.reduce((sum, a) => sum + a.sentiment.score, 0) / count;
   const clampedScore = Math.max(-1, Math.min(1, avgScore));
 
   let label = 'neutral';
   if (clampedScore > 0.1) label = 'bullish';
   else if (clampedScore < -0.1) label = 'bearish';
 
-  return { score: Math.round(clampedScore * 100) / 100, label, count: recent.length };
+  return { score: Math.round(clampedScore * 100) / 100, label, count, confidence };
 }
 
 function addSseClient(res) {
