@@ -15222,7 +15222,7 @@ document.addEventListener('DOMContentLoaded', () => {
 const LIVE_API = (window.CBP_BACKEND || 'http://localhost:3001') + '/live';
 
 function liveHeaders() {
-  const token = localStorage.getItem('authToken');
+  const token = localStorage.getItem('dash_token');
   return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
 }
 
@@ -15389,7 +15389,7 @@ async function liveDeleteCredentials() {
 // ── SSE Stream (real-time updates) ────────────────────────────
 function connectLiveStream() {
   if (_liveSSE) return;
-  const token = localStorage.getItem('authToken');
+  const token = localStorage.getItem('dash_token');
   if (!token) return;
   try {
     _liveSSE = new EventSource(LIVE_API + '/stream?token=' + encodeURIComponent(token));
