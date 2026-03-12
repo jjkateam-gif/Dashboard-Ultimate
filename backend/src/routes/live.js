@@ -17,16 +17,17 @@ router.use(authenticate);
 // POST /live/credentials - Store encrypted BloFin API credentials
 router.post('/credentials', async (req, res) => {
   try {
-    const { encryptedData } = req.body;
+    const { encryptedData, demo } = req.body;
     if (!encryptedData) {
       return res.status(400).json({ error: 'encryptedData required' });
     }
-    // Store in the same trading_wallets table, repurposed for BloFin keys
+    // Store demo/live flag in public_key column: 'blofin-demo' or 'blofin-live'
+    const publicKey = demo ? 'blofin-demo' : 'blofin-live';
     await pool.query(
       `INSERT INTO trading_wallets (user_id, public_key, encrypted_data)
        VALUES ($1, $2, $3)
        ON CONFLICT (user_id) DO UPDATE SET public_key=$2, encrypted_data=$3, updated_at=NOW()`,
-      [req.user.id, 'blofin', JSON.stringify(encryptedData)]
+      [req.user.id, publicKey, JSON.stringify(encryptedData)]
     );
     res.json({ success: true });
   } catch (err) {
@@ -39,14 +40,16 @@ router.post('/credentials', async (req, res) => {
 router.get('/credentials', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT created_at, updated_at FROM trading_wallets WHERE user_id=$1',
+      'SELECT created_at, updated_at, public_key FROM trading_wallets WHERE user_id=$1',
       [req.user.id]
     );
     if (result.rows.length === 0) return res.json({ hasCredentials: false, unlocked: false });
     const unlocked = liveEngine.isUnlocked(req.user.id);
+    const demo = result.rows[0].public_key === 'blofin-demo';
     res.json({
       hasCredentials: true,
       unlocked,
+      demo,
       createdAt: result.rows[0].created_at,
       updatedAt: result.rows[0].updated_at,
     });
@@ -204,10 +207,11 @@ router.get('/positions', async (req, res) => {
 
     // Enrich with live mark price + PnL from BloFin if credentials are unlocked
     const creds = liveEngine.getCredentials(req.user.id);
+    const demo = liveEngine.isDemo(req.user.id);
     let livePositions = [];
     if (creds) {
       try {
-        livePositions = await blofinClient.getPositions(creds);
+        livePositions = await blofinClient.getPositions(creds, demo);
       } catch {}
     }
 
@@ -266,12 +270,13 @@ router.post('/order', async (req, res) => {
     const creds = liveEngine.getCredentials(req.user.id);
     if (!creds) return res.status(400).json({ error: 'Credentials not unlocked' });
 
+    const demo = liveEngine.isDemo(req.user.id);
     const { instId, side, orderType, size, price, leverage, tpPrice, slPrice, marginMode } = req.body;
     if (!instId || !side || !size) return res.status(400).json({ error: 'instId, side, and size required' });
 
     const direction = side === 'buy' ? 'long' : 'short';
     const lev = leverage || 1;
-    const sizeUsd = parseFloat(size) * (await blofinClient.getMarkPrice(instId) || 0);
+    const sizeUsd = parseFloat(size) * (await blofinClient.getMarkPrice(instId, demo) || 0);
 
     // Safety check
     await safetyGuard.canOpenPosition(req.user.id, sizeUsd / lev, lev);
@@ -287,6 +292,7 @@ router.post('/order', async (req, res) => {
       tpPrice,
       slPrice,
       marginMode,
+      demo,
     });
 
     res.json({ success: true, orderId: result.orderId });
@@ -302,10 +308,11 @@ router.post('/close', async (req, res) => {
     const creds = liveEngine.getCredentials(req.user.id);
     if (!creds) return res.status(400).json({ error: 'Credentials not unlocked' });
 
+    const demo = liveEngine.isDemo(req.user.id);
     const { instId, direction } = req.body;
     if (!instId || !direction) return res.status(400).json({ error: 'instId and direction required' });
 
-    const result = await blofinClient.closePosition({ creds, instId, direction });
+    const result = await blofinClient.closePosition({ creds, instId, direction, demo });
     res.json({ success: true, orderId: result.orderId });
   } catch (err) {
     console.error('Close position error:', err.message);
@@ -318,7 +325,8 @@ router.get('/ticker', async (req, res) => {
   try {
     const { instId } = req.query;
     if (!instId) return res.status(400).json({ error: 'instId required' });
-    const ticker = await blofinClient.getTicker(instId);
+    const demo = liveEngine.isDemo(req.user.id);
+    const ticker = await blofinClient.getTicker(instId, demo);
     res.json({ ticker });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -420,7 +428,8 @@ router.post('/kill-switch/deactivate', async (req, res) => {
 // GET /live/markets - Available BloFin markets
 router.get('/markets', async (req, res) => {
   try {
-    const markets = await blofinClient.getMarkets();
+    const demo = liveEngine.isDemo(req.user.id);
+    const markets = await blofinClient.getMarkets(demo);
     res.json({ blofin: markets });
   } catch (err) {
     console.error('Markets fetch error:', err.message);
@@ -438,7 +447,8 @@ router.get('/balance', async (req, res) => {
     }
 
     const creds = liveEngine.getCredentials(req.user.id);
-    const balance = await blofinClient.getBalance(creds);
+    const demo = liveEngine.isDemo(req.user.id);
+    const balance = await blofinClient.getBalance(creds, demo);
     res.json({ balance: { ...balance, locked: false } });
   } catch (err) {
     console.error('Balance fetch error:', err);
@@ -470,6 +480,7 @@ router.get('/status', async (req, res) => {
       activeStrategies,
       openPositions,
       killSwitchActive: safetyConfig.kill_switch || false,
+      demo: liveEngine.isDemo(req.user.id),
     });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });

@@ -2,28 +2,26 @@ const WebSocket = require('ws');
 const crypto = require('crypto');
 const EventEmitter = require('events');
 
-const WS_PUBLIC  = process.env.BLOFIN_DEMO === 'true'
-  ? 'wss://demo-trading-openapi.blofin.com/ws/public'
-  : 'wss://openapi.blofin.com/ws/public';
-
-const WS_PRIVATE = process.env.BLOFIN_DEMO === 'true'
-  ? 'wss://demo-trading-openapi.blofin.com/ws/private'
-  : 'wss://openapi.blofin.com/ws/private';
+const DEMO_WS_PUBLIC  = 'wss://demo-trading-openapi.blofin.com/ws/public';
+const LIVE_WS_PUBLIC  = 'wss://openapi.blofin.com/ws/public';
+const DEMO_WS_PRIVATE = 'wss://demo-trading-openapi.blofin.com/ws/private';
+const LIVE_WS_PRIVATE = 'wss://openapi.blofin.com/ws/private';
 
 class BloFinWs extends EventEmitter {
   constructor() {
     super();
     this.publicWs = null;
-    this.privateConnections = new Map(); // userId -> { ws, creds, sseClients: Set }
+    this.privateConnections = new Map(); // userId -> { ws, creds, demo, sseClients: Set }
     this.reconnectDelays = new Map();
   }
 
   /* ── Public WebSocket (singleton) ─────────────────────────── */
 
-  connectPublic(channels) {
+  connectPublic(channels, demo) {
     if (this.publicWs && this.publicWs.readyState === WebSocket.OPEN) return;
 
-    const ws = new WebSocket(WS_PUBLIC);
+    const wsUrl = demo ? DEMO_WS_PUBLIC : LIVE_WS_PUBLIC;
+    const ws = new WebSocket(wsUrl);
     this.publicWs = ws;
 
     ws.on('open', () => {
@@ -56,7 +54,7 @@ class BloFinWs extends EventEmitter {
 
     ws.on('close', () => {
       console.log('[BloFinWs] Public WS disconnected');
-      this._reconnect('public', () => this.connectPublic(channels));
+      this._reconnect('public', () => this.connectPublic(channels, demo));
     });
 
     ws.on('error', (err) => {
@@ -66,16 +64,17 @@ class BloFinWs extends EventEmitter {
 
   /* ── Private WebSocket (per-user) ─────────────────────────── */
 
-  connectPrivate(userId, creds) {
+  connectPrivate(userId, creds, demo) {
     // Close existing connection for this user
     this.disconnectPrivate(userId);
 
-    const ws = new WebSocket(WS_PRIVATE);
-    const entry = { ws, creds, sseClients: new Set() };
+    const wsUrl = demo ? DEMO_WS_PRIVATE : LIVE_WS_PRIVATE;
+    const ws = new WebSocket(wsUrl);
+    const entry = { ws, creds, demo, sseClients: new Set() };
     this.privateConnections.set(userId, entry);
 
     ws.on('open', () => {
-      console.log(`[BloFinWs] Private WS connected for user ${userId}`);
+      console.log(`[BloFinWs] Private WS connected for user ${userId} (demo=${!!demo})`);
       this.reconnectDelays.delete('private:' + userId);
 
       // Authenticate
@@ -97,7 +96,7 @@ class BloFinWs extends EventEmitter {
       try {
         const data = JSON.parse(msg);
 
-        // Login success → subscribe to private channels
+        // Login success -> subscribe to private channels
         if (data.event === 'login' && data.code === '0') {
           ws.send(JSON.stringify({
             op: 'subscribe',
@@ -128,7 +127,7 @@ class BloFinWs extends EventEmitter {
 
     ws.on('close', () => {
       console.log(`[BloFinWs] Private WS disconnected for user ${userId}`);
-      this._reconnect('private:' + userId, () => this.connectPrivate(userId, creds));
+      this._reconnect('private:' + userId, () => this.connectPrivate(userId, creds, demo));
     });
 
     ws.on('error', (err) => {

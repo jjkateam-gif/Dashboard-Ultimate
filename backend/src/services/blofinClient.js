@@ -1,9 +1,12 @@
 const fetch = require('node-fetch');
 const crypto = require('crypto');
 
-const BASE_URL = process.env.BLOFIN_DEMO === 'true'
-  ? 'https://demo-trading-openapi.blofin.com'
-  : 'https://openapi.blofin.com';
+const DEMO_BASE = 'https://demo-trading-openapi.blofin.com';
+const LIVE_BASE = 'https://openapi.blofin.com';
+
+function getBaseUrl(demo) {
+  return demo ? DEMO_BASE : LIVE_BASE;
+}
 
 /* ── Rate limiter (token bucket) ─────────────────────────────── */
 const bucket = { tokens: 500, last: Date.now(), max: 500, refillMs: 60000 };
@@ -43,10 +46,11 @@ function authHeaders(method, requestPath, body, creds) {
 
 /* ── Generic REST helpers ────────────────────────────────────── */
 
-async function publicGet(path, params) {
+async function publicGet(path, params, demo) {
   consumeToken(bucket);
+  const baseUrl = getBaseUrl(demo);
   const qs = params ? '?' + new URLSearchParams(params).toString() : '';
-  const url = BASE_URL + path + qs;
+  const url = baseUrl + path + qs;
   const res = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
   if (!res.ok) throw new Error(`BloFin API ${path}: HTTP ${res.status}`);
   const json = await res.json();
@@ -54,22 +58,24 @@ async function publicGet(path, params) {
   return json.data;
 }
 
-async function privateGet(path, params, creds) {
+async function privateGet(path, params, creds, demo) {
   consumeToken(bucket);
+  const baseUrl = getBaseUrl(demo);
   const qs = params ? '?' + new URLSearchParams(params).toString() : '';
   const requestPath = path + qs;
   const headers = authHeaders('GET', requestPath, null, creds);
-  const res = await fetch(BASE_URL + requestPath, { headers });
+  const res = await fetch(baseUrl + requestPath, { headers });
   if (!res.ok) throw new Error(`BloFin API ${path}: HTTP ${res.status}`);
   const json = await res.json();
   if (json.code !== '0') throw new Error(`BloFin ${path}: ${json.msg || json.code}`);
   return json.data;
 }
 
-async function privatePost(path, body, creds, isTrading = false) {
+async function privatePost(path, body, creds, isTrading = false, demo) {
   consumeToken(isTrading ? tradeBucket : bucket);
+  const baseUrl = getBaseUrl(demo);
   const headers = authHeaders('POST', path, body, creds);
-  const res = await fetch(BASE_URL + path, {
+  const res = await fetch(baseUrl + path, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
@@ -82,8 +88,8 @@ async function privatePost(path, body, creds, isTrading = false) {
 
 /* ── Market Data (Public) ────────────────────────────────────── */
 
-async function getMarkets() {
-  const data = await publicGet('/api/v1/market/instruments', { instType: 'SWAP' });
+async function getMarkets(demo) {
+  const data = await publicGet('/api/v1/market/instruments', { instType: 'SWAP' }, demo);
   return (data || []).map(inst => ({
     name: inst.instId,           // e.g. 'BTC-USDT'
     symbol: inst.instId.replace('-', ''),
@@ -95,8 +101,8 @@ async function getMarkets() {
   }));
 }
 
-async function getTicker(instId) {
-  const data = await publicGet('/api/v1/market/tickers', { instId });
+async function getTicker(instId, demo) {
+  const data = await publicGet('/api/v1/market/tickers', { instId }, demo);
   return data && data[0] ? {
     instId: data[0].instId,
     last: parseFloat(data[0].last),
@@ -109,12 +115,12 @@ async function getTicker(instId) {
   } : null;
 }
 
-async function getCandles(instId, bar, limit) {
-  return publicGet('/api/v1/market/candles', { instId, bar, limit: limit || '100' });
+async function getCandles(instId, bar, limit, demo) {
+  return publicGet('/api/v1/market/candles', { instId, bar, limit: limit || '100' }, demo);
 }
 
-async function getFundingRate(instId) {
-  const data = await publicGet('/api/v1/market/funding-rate', { instId });
+async function getFundingRate(instId, demo) {
+  const data = await publicGet('/api/v1/market/funding-rate', { instId }, demo);
   return data && data[0] ? {
     instId: data[0].instId,
     fundingRate: parseFloat(data[0].fundingRate),
@@ -122,15 +128,15 @@ async function getFundingRate(instId) {
   } : null;
 }
 
-async function getMarkPrice(instId) {
-  const data = await publicGet('/api/v1/market/mark-price', { instId, instType: 'SWAP' });
+async function getMarkPrice(instId, demo) {
+  const data = await publicGet('/api/v1/market/mark-price', { instId, instType: 'SWAP' }, demo);
   return data && data[0] ? parseFloat(data[0].markPrice) : null;
 }
 
 /* ── Account (Private) ───────────────────────────────────────── */
 
-async function getBalance(creds) {
-  const data = await privateGet('/api/v1/account/balance', null, creds);
+async function getBalance(creds, demo) {
+  const data = await privateGet('/api/v1/account/balance', null, creds, demo);
   // BloFin returns array of account details
   if (!data || data.length === 0) return { usdt: 0, locked: false };
   const acct = data[0];
@@ -144,8 +150,8 @@ async function getBalance(creds) {
   };
 }
 
-async function getPositions(creds) {
-  const data = await privateGet('/api/v1/account/positions', null, creds);
+async function getPositions(creds, demo) {
+  const data = await privateGet('/api/v1/account/positions', null, creds, demo);
   return (data || []).map(p => ({
     instId: p.instId,
     market: p.instId,
@@ -165,27 +171,27 @@ async function getPositions(creds) {
 
 /* ── Trading (Private) ───────────────────────────────────────── */
 
-async function setLeverage(creds, instId, lever, marginMode) {
+async function setLeverage(creds, instId, lever, marginMode, demo) {
   return privatePost('/api/v1/account/set-leverage', {
     instId,
     lever: String(lever),
     marginMode: marginMode || 'cross',
-  }, creds);
+  }, creds, false, demo);
 }
 
-async function setMarginMode(creds, instId, marginMode) {
+async function setMarginMode(creds, instId, marginMode, demo) {
   return privatePost('/api/v1/account/set-margin-mode', {
     instId,
     marginMode, // 'cross' or 'isolated'
-  }, creds);
+  }, creds, false, demo);
 }
 
-async function openPosition({ creds, instId, direction, size, leverage, orderType, price, tpPrice, slPrice, marginMode }) {
+async function openPosition({ creds, instId, direction, size, leverage, orderType, price, tpPrice, slPrice, marginMode, demo }) {
   const mode = marginMode || 'cross';
 
   // Set leverage first
   try {
-    await setLeverage(creds, instId, leverage, mode);
+    await setLeverage(creds, instId, leverage, mode, demo);
   } catch (e) {
     // Leverage may already be set — non-fatal
     console.warn(`[BloFin] setLeverage warning: ${e.message}`);
@@ -205,7 +211,7 @@ async function openPosition({ creds, instId, direction, size, leverage, orderTyp
     body.price = String(price);
   }
 
-  const orderData = await privatePost('/api/v1/trade/order', body, creds, true);
+  const orderData = await privatePost('/api/v1/trade/order', body, creds, true, demo);
   const orderId = orderData && orderData[0] ? orderData[0].orderId : (orderData?.orderId || null);
 
   // Set TP/SL if provided
@@ -220,7 +226,7 @@ async function openPosition({ creds, instId, direction, size, leverage, orderTyp
         tpslBody.slTriggerPrice = String(slPrice);
         tpslBody.slOrderPrice = '-1'; // market price
       }
-      await privatePost('/api/v1/trade/order-tpsl', tpslBody, creds, true);
+      await privatePost('/api/v1/trade/order-tpsl', tpslBody, creds, true, demo);
     } catch (e) {
       console.warn(`[BloFin] TP/SL setting warning: ${e.message}`);
     }
@@ -230,7 +236,7 @@ async function openPosition({ creds, instId, direction, size, leverage, orderTyp
   return { orderId, protocol: 'blofin' };
 }
 
-async function closePosition({ creds, instId, direction }) {
+async function closePosition({ creds, instId, direction, demo }) {
   const side = direction === 'long' ? 'sell' : 'buy';
   const body = {
     instId,
@@ -242,28 +248,30 @@ async function closePosition({ creds, instId, direction }) {
     reduceOnly: true,
   };
 
-  const data = await privatePost('/api/v1/trade/order', body, creds, true);
+  const data = await privatePost('/api/v1/trade/order', body, creds, true, demo);
   const orderId = data && data[0] ? data[0].orderId : (data?.orderId || null);
   console.log(`[BloFin] Closed ${direction} ${instId} | Order: ${orderId}`);
   return { orderId };
 }
 
-async function cancelOrder(creds, instId, orderId) {
-  return privatePost('/api/v1/trade/cancel-order', { instId, orderId }, creds, true);
+async function cancelOrder(creds, instId, orderId, demo) {
+  return privatePost('/api/v1/trade/cancel-order', { instId, orderId }, creds, true, demo);
 }
 
-async function getActiveOrders(creds, instId) {
+async function getActiveOrders(creds, instId, demo) {
   const params = instId ? { instId } : {};
-  return privateGet('/api/v1/trade/active-orders', params, creds);
+  return privateGet('/api/v1/trade/active-orders', params, creds, demo);
 }
 
-async function getOrderHistory(creds, instId) {
+async function getOrderHistory(creds, instId, demo) {
   const params = instId ? { instId } : {};
-  return privateGet('/api/v1/trade/order-history', params, creds);
+  return privateGet('/api/v1/trade/order-history', params, creds, demo);
 }
 
 module.exports = {
-  BASE_URL,
+  getBaseUrl,
+  DEMO_BASE,
+  LIVE_BASE,
   getMarkets,
   getTicker,
   getCandles,

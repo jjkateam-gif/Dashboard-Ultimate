@@ -15333,7 +15333,7 @@ async function liveStoreCredentials() {
     const r = await fetch(LIVE_API + '/credentials', {
       method: 'POST',
       headers: liveHeaders(),
-      body: JSON.stringify({ encryptedData: encrypted }),
+      body: JSON.stringify({ encryptedData: encrypted, demo: !!document.getElementById('blofinDemoMode')?.checked }),
     });
     const d = await r.json();
     if (d.success) {
@@ -15343,6 +15343,7 @@ async function liveStoreCredentials() {
       document.getElementById('blofinSecretKey').value = '';
       document.getElementById('blofinPassphrase').value = '';
       document.getElementById('blofinEncPwd').value = '';
+      document.getElementById('blofinDemoMode').checked = false;
       liveRefreshCredentials();
     } else {
       alert('Failed: ' + (d.error || 'Unknown error'));

@@ -10,7 +10,7 @@ const crypto = require('crypto');
 class LiveEngine {
   constructor() {
     this.strategies = new Map(); // id -> { config, userId, interval }
-    this.credentials = new Map(); // userId -> { apiKey, secretKey, passphrase }
+    this.credentials = new Map(); // userId -> { apiKey, secretKey, passphrase, demo }
     this.running = false;
   }
 
@@ -18,10 +18,12 @@ class LiveEngine {
 
   async unlockCredentials(userId, password) {
     const result = await pool.query(
-      'SELECT encrypted_data FROM trading_wallets WHERE user_id=$1',
+      'SELECT encrypted_data, public_key FROM trading_wallets WHERE user_id=$1',
       [userId]
     );
     if (result.rows.length === 0) throw new Error('No BloFin credentials found');
+
+    const demo = result.rows[0].public_key === 'blofin-demo';
 
     const envelope = JSON.parse(result.rows[0].encrypted_data);
     // Frontend encryptBytes() sends salt, iv, data as plain byte arrays (not hex).
@@ -42,12 +44,14 @@ class LiveEngine {
     if (!creds.apiKey || !creds.secretKey || !creds.passphrase) {
       throw new Error('Invalid credential data');
     }
+    // Store demo flag alongside credentials
+    creds.demo = demo;
     this.credentials.set(userId, creds);
 
-    console.log(`[LiveEngine] Credentials unlocked for user ${userId} (key: ${creds.apiKey.slice(0, 8)}...)`);
+    console.log(`[LiveEngine] Credentials unlocked for user ${userId} (key: ${creds.apiKey.slice(0, 8)}..., demo: ${demo})`);
 
-    // Start WebSocket connection for this user
-    blofinWs.connectPrivate(userId, creds);
+    // Start WebSocket connection for this user, passing demo flag
+    blofinWs.connectPrivate(userId, creds, demo);
 
     // Start any active strategies for this user
     const strats = await pool.query(
@@ -80,6 +84,12 @@ class LiveEngine {
 
   getCredentials(userId) {
     return this.credentials.get(userId) || null;
+  }
+
+  /** Returns the demo flag for a user (from stored credentials) */
+  isDemo(userId) {
+    const creds = this.credentials.get(userId);
+    return creds ? !!creds.demo : false;
   }
 
   /* ── engine lifecycle ───────────────────────────────────── */
@@ -135,6 +145,7 @@ class LiveEngine {
       const creds = this.credentials.get(userId);
       if (!creds) return;
 
+      const demo = !!creds.demo;
       const symbol = config.symbol || 'BTCUSDT';
       const tf = config.timeframe || '1h';
       const instId = this._mkt(symbol);
@@ -227,6 +238,7 @@ class LiveEngine {
               creds,
               instId,
               direction: openPos.direction,
+              demo,
             });
 
             const entryPrice = parseFloat(openPos.entry_price);
@@ -285,7 +297,7 @@ class LiveEngine {
 
         if (allowEntry) {
           // Get USDT balance from BloFin
-          const balance = await blofinClient.getBalance(creds);
+          const balance = await blofinClient.getBalance(creds, demo);
           const availableUsd = balance.availableBalance || 0;
           const desiredCollateral = (config.capital || availableUsd) * (tradePct / 100);
           const collateralUsd = Math.min(desiredCollateral, availableUsd);
@@ -335,6 +347,7 @@ class LiveEngine {
               orderType: 'market',
               slPrice,
               tpPrice,
+              demo,
             });
 
             await pool.query(
@@ -405,6 +418,7 @@ class LiveEngine {
   async killSwitch(userId) {
     console.log(`[LiveEngine] KILL SWITCH activated for user ${userId}`);
     const creds = this.credentials.get(userId);
+    const demo = creds ? !!creds.demo : false;
 
     // Close all open positions for this user
     const openPositions = await pool.query(
@@ -419,6 +433,7 @@ class LiveEngine {
             creds,
             instId: pos.market,
             direction: pos.direction,
+            demo,
           });
 
           await pool.query(
