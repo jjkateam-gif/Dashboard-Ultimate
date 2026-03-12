@@ -534,6 +534,16 @@ details[open] summary::before{transform:rotate(90deg)}
 .intel-sub-tabs{display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:0}
 .intel-sub-tab{font-family:'Space Mono',monospace;font-size:9px;padding:7px 16px;background:transparent;border:1px solid transparent;border-bottom:none;color:#aaa;cursor:pointer;border-radius:6px 6px 0 0;margin-bottom:-1px;transition:all 0.15s}
 .intel-sub-tab.active{background:rgba(99,179,237,0.1);border-color:rgba(99,179,237,0.3);color:#63b3ed}
+.news-sentiment-card{background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px 12px;text-align:center}
+.news-filter-btn{font-family:'Space Mono',monospace;font-size:9px;padding:5px 12px;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#5a7a68;border-radius:4px;cursor:pointer;transition:all 0.15s}
+.news-filter-btn.active,.news-filter-btn:hover{background:rgba(99,179,237,0.15);border-color:rgba(99,179,237,0.3);color:#63b3ed}
+.news-item{display:flex;flex-direction:column;gap:4px;padding:10px 12px;background:rgba(0,0,0,0.2);border-radius:8px;margin-bottom:6px;border-left:3px solid rgba(255,255,255,0.1);transition:background 0.15s}
+.news-item:hover{background:rgba(0,0,0,0.35)}
+.news-item-new{animation:newsFlash 1.5s ease}
+@keyframes newsFlash{0%{background:rgba(99,179,237,0.25)}100%{background:rgba(0,0,0,0.2)}}
+.news-item.bullish{border-left-color:#00f5a0}
+.news-item.bearish{border-left-color:#ff4d6d}
+.news-item.neutral{border-left-color:rgba(255,255,255,0.1)}
 @keyframes intelPulse{0%,100%{opacity:1}50%{opacity:0.5}}
 .thinking-dot{display:inline-block;animation:intelPulse 1s ease-in-out infinite}
 .thinking-dot:nth-child(2){animation-delay:0.2s}
@@ -1737,6 +1747,7 @@ details[open] summary::before{transform:rotate(90deg)}
     <button class="intel-sub-tab" id="intelTab_picks" onclick="switchIntelTab('picks')">🤖 AI Top Picks</button>
     <button class="intel-sub-tab" id="intelTab_astro" onclick="switchIntelTab('astro')">🌙 Astro Cycles</button>
     <button class="intel-sub-tab" id="intelTab_etf" onclick="switchIntelTab('etf')">🏦 ETF Flows</button>
+    <button class="intel-sub-tab" id="intelTab_news" onclick="switchIntelTab('news')">📰 News Feed</button>
   </div>
 
   <!-- Overview panel -->
@@ -1771,6 +1782,13 @@ details[open] summary::before{transform:rotate(90deg)}
             <div id="fearGreedNeedle" style="position:absolute;top:-4px;width:3px;height:14px;background:#fff;border-radius:2px;transform:translateX(-50%);box-shadow:0 0 5px rgba(255,255,255,0.7);transition:left 0.8s ease;left:50%;opacity:0.3"></div>
           </div>
           <div id="fearGreedSub" style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace"></div>
+        </div>
+      </div>
+      <div class="intel-section" style="margin-top:16px">
+        <div class="intel-section-title">📰 News Sentiment</div>
+        <div style="text-align:center;padding:10px 0">
+          <div id="newsSentimentValue" style="font-size:36px;font-weight:900;font-family:'Space Mono',monospace;color:#5a7a68">—</div>
+          <div id="newsSentimentLabel" style="font-size:11px;font-family:'Space Mono',monospace;margin-top:4px;color:#5a7a68">Loading...</div>
         </div>
       </div>
     </div>
@@ -1955,6 +1973,36 @@ details[open] summary::before{transform:rotate(90deg)}
     </div>
   </div>
 
+
+  <!-- ── News Feed tab ───────────────────────────────────── -->
+  <div id="intelView_news" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div>
+        <div style="font-family:'Space Mono',monospace;font-size:14px;font-weight:700;color:#63b3ed">📰 Crypto News Feed</div>
+        <div style="font-size:9px;color:#5a7a68;margin-top:2px">Real-time market-moving news from top sources</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span id="newsSSEDot" style="width:8px;height:8px;border-radius:50%;background:#ff4d6d;display:inline-block" title="SSE disconnected"></span>
+        <button onclick="loadNews()" style="font-family:'Space Mono',monospace;font-size:9px;padding:6px 14px;background:rgba(99,179,237,0.15);border:1px solid rgba(99,179,237,0.3);color:#63b3ed;border-radius:6px;cursor:pointer">↻ Refresh</button>
+      </div>
+    </div>
+    <div id="newsSentimentCards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
+      <div class="news-sentiment-card"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">1h Sentiment</div><div id="newsSent1h" style="font-size:18px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">—</div></div>
+      <div class="news-sentiment-card"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">4h Sentiment</div><div id="newsSent4h" style="font-size:18px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">—</div></div>
+      <div class="news-sentiment-card"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">24h Sentiment</div><div id="newsSent24h" style="font-size:18px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">—</div></div>
+      <div class="news-sentiment-card"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Sentiment Gauge</div><div id="newsSentGauge" style="height:12px;border-radius:6px;background:linear-gradient(to right,#ff4d6d,#5a7a68,#00f5a0);position:relative;margin-top:8px"><div id="newsSentNeedle" style="position:absolute;top:-2px;left:50%;width:3px;height:16px;background:#fff;border-radius:2px;transform:translateX(-50%)"></div></div></div>
+    </div>
+    <div id="newsFilterBar" style="display:flex;gap:6px;margin-bottom:10px">
+      <button class="news-filter-btn active" onclick="filterNews('all')">All</button>
+      <button class="news-filter-btn" onclick="filterNews('markets')">Markets</button>
+      <button class="news-filter-btn" onclick="filterNews('regulation')">Regulation</button>
+      <button class="news-filter-btn" onclick="filterNews('technology')">Tech</button>
+      <button class="news-filter-btn" onclick="filterNews('defi')">DeFi</button>
+    </div>
+    <div id="newsFeedList" style="max-height:600px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 transparent">
+      <div style="text-align:center;padding:40px;color:#5a7a68;font-family:'Space Mono',monospace;font-size:10px">Loading news feed...</div>
+    </div>
+  </div>
 </div><!-- end page_intel -->
 
 <!-- ========== BEST TRADES PAGE ========== -->
@@ -9397,7 +9445,7 @@ function renderCycleImmediate() {
 // ── Sub-tab switching ──────────────────────────────────────
 function switchIntelTab(tab) {
   INTEL.currentSubTab = tab;
-  ['overview','screener','picks','astro','etf'].forEach(t => {
+  ['overview','screener','picks','astro','etf','news'].forEach(t => {
     const btn  = $('intelTab_' + t);
     const view = $('intelView_' + t);
     if (btn)  { btn.classList.toggle('active', t === tab); }
@@ -9408,6 +9456,7 @@ function switchIntelTab(tab) {
   }
   if (tab === 'astro') { runAstroAnalysis(); }
   if (tab === 'etf')   { loadEtfFlows(); }
+  if (tab === 'news')  { loadNews(); }
 }
 
 // ── Main entry point ───────────────────────────────────────
@@ -12339,6 +12388,171 @@ function renderEtfIssuerBreakdown(series) {
         <div style="width:60px;text-align:right;font-size:8px;color:${c};font-family:'Space Mono',monospace;font-weight:700">${flow >= 0 ? '+' : ''}${flow.toFixed(0)}M</div>
       </div>`;
   }).join('');
+}
+
+// ════════════════════════════════════════════════════════════════
+// 📰 NEWS FEED ENGINE
+// ════════════════════════════════════════════════════════════════
+const NEWS_STATE = { loaded: false, loading: false, data: [], sseConnected: false, filter: 'all' };
+let _newsSSE = null;
+
+async function loadNews() {
+  if (NEWS_STATE.loading) return;
+  NEWS_STATE.loading = true;
+  try {
+    const token = localStorage.getItem('dash_token');
+    const r = await fetch(BACKEND_URL + '/news/feed?limit=50', { headers: { 'Authorization': 'Bearer ' + token } });
+    if (!r.ok) throw new Error('Failed to load news');
+    const data = await r.json();
+    NEWS_STATE.data = data.articles || [];
+    NEWS_STATE.loaded = true;
+    renderNewsFeed();
+    updateNewsSentiment();
+    if (!NEWS_STATE.sseConnected) connectNewsStream();
+  } catch (e) {
+    const el = $('newsFeedList');
+    if (el) el.innerHTML = '<div style="text-align:center;padding:40px;color:#ff4d6d;font-family:\'Space Mono\',monospace;font-size:10px">Failed to load news: ' + e.message + '</div>';
+  } finally {
+    NEWS_STATE.loading = false;
+  }
+}
+
+function connectNewsStream() {
+  if (_newsSSE) return;
+  const token = localStorage.getItem('dash_token');
+  if (!token) return;
+  try {
+    _newsSSE = new EventSource(BACKEND_URL + '/news/stream?token=' + encodeURIComponent(token));
+    _newsSSE.addEventListener('connected', () => {
+      NEWS_STATE.sseConnected = true;
+      const dot = $('newsSSEDot');
+      if (dot) { dot.style.background = '#00f5a0'; dot.title = 'SSE connected'; }
+    });
+    _newsSSE.addEventListener('news', (e) => {
+      try {
+        const newArticles = JSON.parse(e.data);
+        if (Array.isArray(newArticles)) {
+          newArticles.forEach(a => prependNewsItem(a));
+          updateNewsSentiment();
+        }
+      } catch {}
+    });
+    _newsSSE.onerror = () => {
+      _newsSSE.close(); _newsSSE = null; NEWS_STATE.sseConnected = false;
+      const dot = $('newsSSEDot');
+      if (dot) { dot.style.background = '#ff4d6d'; dot.title = 'SSE disconnected'; }
+      setTimeout(connectNewsStream, 15000);
+    };
+  } catch {}
+}
+
+function renderNewsFeed() {
+  const el = $('newsFeedList');
+  if (!el) return;
+  let filtered = NEWS_STATE.data;
+  if (NEWS_STATE.filter !== 'all') {
+    filtered = filtered.filter(a => {
+      const cats = (a.categories || []).map(c => c.toLowerCase()).join(' ');
+      const title = (a.title || '').toLowerCase();
+      const f = NEWS_STATE.filter.toLowerCase();
+      if (f === 'markets') return cats.includes('market') || cats.includes('price') || cats.includes('trading') || title.includes('price') || title.includes('market');
+      if (f === 'regulation') return cats.includes('regulat') || cats.includes('policy') || cats.includes('sec') || cats.includes('law') || title.includes('sec ') || title.includes('regulat');
+      if (f === 'technology') return cats.includes('tech') || cats.includes('develop') || cats.includes('protocol') || title.includes('upgrade') || title.includes('launch');
+      if (f === 'defi') return cats.includes('defi') || cats.includes('dex') || cats.includes('yield') || title.includes('defi') || title.includes('tvl');
+      return true;
+    });
+  }
+  if (filtered.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:10px">No articles found' + (NEWS_STATE.filter !== 'all' ? ' for this category' : '') + '</div>';
+    return;
+  }
+  el.innerHTML = filtered.map(a => renderNewsItem(a)).join('');
+}
+
+function renderNewsItem(a) {
+  const sent = a.sentiment || {};
+  const sentClass = sent.label === 'bullish' ? 'bullish' : sent.label === 'bearish' ? 'bearish' : 'neutral';
+  const sentBadge = sent.label === 'bullish' ? '<span style="color:#00f5a0;font-size:8px">🟢 Bullish</span>' : sent.label === 'bearish' ? '<span style="color:#ff4d6d;font-size:8px">🔴 Bearish</span>' : '<span style="color:#5a7a68;font-size:8px">⚪ Neutral</span>';
+  const timeAgo = formatNewsTimeAgo(a.publishedAt);
+  const cats = (a.categories || []).slice(0, 3).map(c => '<span style="font-size:7px;padding:2px 6px;background:rgba(255,255,255,0.05);border-radius:3px;color:#888">' + c + '</span>').join(' ');
+  const coin = extractCoinFromTitle(a.title);
+  const tradeBtn = coin ? ' <button onclick="openBlofinModal({sym:\'' + coin + '-USDT\',dir:\'LONG\',sz:100})" style="font-size:7px;padding:2px 8px;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:3px;cursor:pointer;font-family:\'Space Mono\',monospace">⚡ ' + coin + '</button>' : '';
+  return '<div class="news-item ' + sentClass + '" data-url="' + (a.url || '') + '">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center">' +
+      '<div style="display:flex;gap:8px;align-items:center">' +
+        '<span style="font-size:8px;color:#888;font-family:\'Space Mono\',monospace">' + (a.source || 'Unknown') + '</span>' +
+        '<span style="font-size:7px;color:#555">' + timeAgo + '</span>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px;align-items:center">' + sentBadge + tradeBtn + '</div>' +
+    '</div>' +
+    '<a href="' + (a.url || '#') + '" target="_blank" rel="noopener" style="font-family:\'Space Mono\',monospace;font-size:11px;color:#e0e0e0;text-decoration:none;line-height:1.4;display:block;margin:2px 0">' + (a.title || 'Untitled') + '</a>' +
+    '<div style="display:flex;gap:4px;flex-wrap:wrap">' + cats + '</div>' +
+  '</div>';
+}
+
+function prependNewsItem(article) {
+  const el = $('newsFeedList');
+  if (!el) return;
+  if (el.querySelector('[data-url="' + (article.url || '') + '"]')) return;
+  NEWS_STATE.data.unshift(article);
+  if (NEWS_STATE.data.length > 100) NEWS_STATE.data.pop();
+  if (NEWS_STATE.filter !== 'all') { renderNewsFeed(); return; }
+  const div = document.createElement('div');
+  div.innerHTML = renderNewsItem(article);
+  const row = div.firstChild;
+  row.classList.add('news-item-new');
+  el.insertBefore(row, el.firstChild);
+  while (el.children.length > 50) el.removeChild(el.lastChild);
+}
+
+async function updateNewsSentiment() {
+  try {
+    const token = localStorage.getItem('dash_token');
+    const r = await fetch(BACKEND_URL + '/news/sentiment', { headers: { 'Authorization': 'Bearer ' + token } });
+    if (!r.ok) return;
+    const data = await r.json();
+    const fmt = (s) => { if (!s || s.count === 0) return { text: '—', color: '#5a7a68' }; const v = (s.score * 100).toFixed(0); return { text: (s.score > 0 ? '+' : '') + v, color: s.label === 'bullish' ? '#00f5a0' : s.label === 'bearish' ? '#ff4d6d' : '#5a7a68' }; };
+    const h1 = fmt(data.h1), h4 = fmt(data.h4), h24 = fmt(data.h24);
+    const e1 = $('newsSent1h'); if (e1) { e1.textContent = h1.text; e1.style.color = h1.color; }
+    const e4 = $('newsSent4h'); if (e4) { e4.textContent = h4.text; e4.style.color = h4.color; }
+    const e24 = $('newsSent24h'); if (e24) { e24.textContent = h24.text; e24.style.color = h24.color; }
+    const needle = $('newsSentNeedle');
+    if (needle && data.h4) { needle.style.left = ((data.h4.score + 1) * 50) + '%'; }
+    const ovVal = $('newsSentimentValue'); const ovLabel = $('newsSentimentLabel');
+    if (ovVal && data.h4) { const f = fmt(data.h4); ovVal.textContent = f.text; ovVal.style.color = f.color; }
+    if (ovLabel && data.h4) { ovLabel.textContent = data.h4.label ? data.h4.label.charAt(0).toUpperCase() + data.h4.label.slice(1) : ''; ovLabel.style.color = fmt(data.h4).color; }
+  } catch {}
+}
+
+function filterNews(category) {
+  NEWS_STATE.filter = category;
+  document.querySelectorAll('.news-filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent.toLowerCase().replace(/\s/g,'') === category || (category === 'all' && btn.textContent === 'All'));
+  });
+  renderNewsFeed();
+}
+
+function formatNewsTimeAgo(dateStr) {
+  if (!dateStr) return '';
+  const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
+  if (diff < 60) return Math.floor(diff) + 's ago';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return Math.floor(diff / 86400) + 'd ago';
+}
+
+function extractCoinFromTitle(title) {
+  if (!title) return null;
+  const coins = ['BTC','ETH','SOL','BNB','XRP','ADA','DOGE','AVAX','DOT','MATIC','LINK','UNI','AAVE','SUI','APT','ARB','OP','TIA','SEI','INJ','FET','RNDR','WIF','PEPE','BONK','JUP','PYTH','JTO','STRK'];
+  const upper = title.toUpperCase();
+  for (const c of coins) {
+    if (upper.includes(c + ' ') || upper.includes(c + ':') || upper.includes(c + "'") || upper.includes(c + ',') || upper.includes(c + '.') || upper.includes(c + ')') || upper.endsWith(c)) return c;
+  }
+  const nameMap = { 'BITCOIN': 'BTC', 'ETHEREUM': 'ETH', 'SOLANA': 'SOL', 'DOGECOIN': 'DOGE', 'RIPPLE': 'XRP', 'CARDANO': 'ADA', 'AVALANCHE': 'AVAX', 'POLKADOT': 'DOT', 'CHAINLINK': 'LINK', 'UNISWAP': 'UNI' };
+  for (const [name, sym] of Object.entries(nameMap)) {
+    if (upper.includes(name)) return sym;
+  }
+  return null;
 }
 
 // ════════════════════════════════════════════════════════════════

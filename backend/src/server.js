@@ -98,6 +98,17 @@ async function initDB() {
       app.get('/live/debug', (req, res) => res.json({ error: liveErr.message, stack: liveErr.stack }));
     }
 
+    // Load news aggregator routes (separate try/catch so it doesn't break core routes)
+    try {
+      const newsAggregator = require('./services/newsAggregator');
+      const newsRoutes = require('./routes/news');
+      app.use('/news', newsRoutes);
+      newsAggregator.start();
+      console.log('News aggregator started.');
+    } catch (newsErr) {
+      console.error('News aggregator init error (core routes still working):', newsErr.message);
+    }
+
     console.log('Server fully ready.');
   } catch (err) {
     console.error('DB init error (server still running):', err.message);
