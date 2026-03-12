@@ -24,10 +24,14 @@ class LiveEngine {
     if (result.rows.length === 0) throw new Error('No BloFin credentials found');
 
     const envelope = JSON.parse(result.rows[0].encrypted_data);
-    const salt = Buffer.from(envelope.salt, 'hex');
-    const iv = Buffer.from(envelope.iv, 'hex');
-    const tag = Buffer.from(envelope.tag, 'hex');
-    const ciphertext = Buffer.from(envelope.data, 'hex');
+    // Frontend encryptBytes() sends salt, iv, data as plain byte arrays (not hex).
+    // WebCrypto AES-GCM appends the 16-byte auth tag to the ciphertext in 'data'.
+    const salt = Buffer.from(envelope.salt);
+    const iv = Buffer.from(envelope.iv);
+    const fullData = Buffer.from(envelope.data);
+    // Separate ciphertext and GCM auth tag (last 16 bytes)
+    const ciphertext = fullData.slice(0, fullData.length - 16);
+    const tag = fullData.slice(fullData.length - 16);
 
     const key = crypto.pbkdf2Sync(password, salt, 100000, 32, 'sha256');
     const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
