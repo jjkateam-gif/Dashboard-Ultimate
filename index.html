@@ -12568,14 +12568,15 @@ function renderEtfIssuerBreakdown(series) {
 // ════════════════════════════════════════════════════════════════
 
 async function saveRecommendation(rec) {
+  console.log("Saving recommendation:", rec);
   try {
     const token = localStorage.getItem('dash_token');
-    await fetch(BACKEND_URL + '/stats/recommendations', {
+    const resp = await fetch(BACKEND_URL + '/stats/recommendations', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
       body: JSON.stringify(rec)
     });
-  } catch {}
+    console.log("Save response:", resp.status, await resp.text().catch(()=>"")); } catch(e) { console.error("Save rec error:", e); }
 }
 
 async function loadRecommendations() {
