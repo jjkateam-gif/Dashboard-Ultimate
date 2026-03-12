@@ -4,7 +4,8 @@ CREATE TABLE IF NOT EXISTS trading_wallets (
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
   public_key VARCHAR(64) NOT NULL,
   encrypted_data TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Live strategies (mirrors paper_strategies with protocol choice)
