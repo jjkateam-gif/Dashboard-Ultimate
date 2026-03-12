@@ -109,6 +109,15 @@ async function initDB() {
       console.error('News aggregator init error (core routes still working):', newsErr.message);
     }
 
+    // Start recommendation tracker (resolves pending recs every 5 min)
+    try {
+      const recommendationTracker = require('./services/recommendationTracker');
+      recommendationTracker.start();
+      console.log('Recommendation tracker started.');
+    } catch (recErr) {
+      console.error('Recommendation tracker init error (core routes still working):', recErr.message);
+    }
+
     console.log('Server fully ready.');
   } catch (err) {
     console.error('DB init error (server still running):', err.message);

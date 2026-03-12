@@ -2054,6 +2054,25 @@ details[open] summary::before{transform:rotate(90deg)}
     outputs probability + estimated R/R based on ATR-derived targets. Higher confluence = higher probability.
     <span style="color:#3a5a48"> · Not financial advice.</span>
   </div>
+
+  <!-- Track Record Section -->
+  <div style="margin-top:20px;border-top:1px solid rgba(255,255,255,0.05);padding-top:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#ff6b35">RECOMMENDATION TRACK RECORD</div>
+      <button onclick="loadRecommendations()" style="font-family:'Space Mono',monospace;font-size:9px;padding:5px 12px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:6px;cursor:pointer">Refresh</button>
+    </div>
+    <div id="recSummaryCards" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px">
+      <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Total</div><div id="recTotal" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#e0e0e0">0</div></div>
+      <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Win Rate</div><div id="recWinRate" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">&mdash;</div></div>
+      <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Wins</div><div id="recWins" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#00f5a0">0</div></div>
+      <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Losses</div><div id="recLosses" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#ff4d6d">0</div></div>
+      <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Avg P&amp;L</div><div id="recAvgPnl" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">&mdash;</div></div>
+    </div>
+    <div id="recHistoryList" style="max-height:300px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 transparent">
+      <div style="text-align:center;padding:20px;color:#5a7a68;font-family:'Space Mono',monospace;font-size:10px">Run the Probability Engine to start tracking recommendations</div>
+    </div>
+  </div>
+
 </div><!-- end page_trades -->
 
 <!-- ========== ALERTS PAGE ========== -->
@@ -8181,6 +8200,7 @@ function switchPageTab(tab) {
     const dot = $('tradeAlertDot');
     if (dot) dot.style.display = 'none';
     if (!PROBE.lastRun) runProbEngine();
+    loadRecommendations();
   } else if (tab === 'alerts') {
     renderAlertList();
     loadTgCredentialsIntoForm();
@@ -11959,6 +11979,23 @@ async function runProbEngine() {
 
   renderProbeResults(results, tf);
 
+  // Save high-confidence recommendations for tracking
+  results.forEach(r => {
+    if (r.prob >= 60) {
+      saveRecommendation({
+        symbol: r.sym || r.asset,
+        direction: r.direction.toUpperCase(),
+        probability: r.prob,
+        entryPrice: r.price,
+        targetPrice: r.rrData ? r.rrData.target : null,
+        stopPrice: r.rrData ? r.rrData.stop : null,
+        rrRatio: r.rr
+      });
+    }
+  });
+  loadRecommendations();
+
+
   if (btn) { btn.disabled = false; btn.textContent = '⚡ Scan Now'; }
   PROBE.running = false;
 
@@ -12387,6 +12424,72 @@ function renderEtfIssuerBreakdown(series) {
         </div>
         <div style="width:60px;text-align:right;font-size:8px;color:${c};font-family:'Space Mono',monospace;font-weight:700">${flow >= 0 ? '+' : ''}${flow.toFixed(0)}M</div>
       </div>`;
+// ════════════════════════════════════════════════════════════════
+// RECOMMENDATION TRACKER
+// ════════════════════════════════════════════════════════════════
+
+async function saveRecommendation(rec) {
+  try {
+    const token = localStorage.getItem('dash_token');
+    await fetch(BACKEND_URL + '/stats/recommendations', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify(rec)
+    });
+  } catch {}
+}
+
+async function loadRecommendations() {
+  try {
+    const token = localStorage.getItem('dash_token');
+    const [histR, sumR] = await Promise.all([
+      fetch(BACKEND_URL + '/stats/recommendations?limit=50', { headers: { 'Authorization': 'Bearer ' + token } }),
+      fetch(BACKEND_URL + '/stats/recommendations/summary', { headers: { 'Authorization': 'Bearer ' + token } })
+    ]);
+    if (histR.ok) {
+      const hist = await histR.json();
+      renderRecHistory(hist.recommendations || []);
+    }
+    if (sumR.ok) {
+      const sum = await sumR.json();
+      renderRecSummary(sum);
+    }
+  } catch {}
+}
+
+function renderRecSummary(s) {
+  const el = (id, val, color) => { const e = document.getElementById(id); if (e) { e.textContent = val; if (color) e.style.color = color; } };
+  el('recTotal', s.total || 0);
+  const wr = s.winRate != null ? s.winRate.toFixed(1) + '%' : '—';
+  const wrColor = s.winRate >= 55 ? '#00f5a0' : s.winRate >= 45 ? '#ffd60a' : s.winRate != null ? '#ff4d6d' : '#5a7a68';
+  el('recWinRate', wr, wrColor);
+  el('recWins', s.wins || 0, '#00f5a0');
+  el('recLosses', s.losses || 0, '#ff4d6d');
+  const avg = s.avgPnl != null ? (s.avgPnl > 0 ? '+' : '') + s.avgPnl.toFixed(2) + '%' : '—';
+  const avgColor = s.avgPnl > 0 ? '#00f5a0' : s.avgPnl < 0 ? '#ff4d6d' : '#5a7a68';
+  el('recAvgPnl', avg, avgColor);
+}
+
+function renderRecHistory(recs) {
+  const el = document.getElementById('recHistoryList');
+  if (!el) return;
+  if (recs.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:#5a7a68;font-family:&apos;Space Mono&apos;,monospace;font-size:10px">No recommendations yet</div>';
+    return;
+  }
+  const header = '<div style="display:grid;grid-template-columns:90px 70px 60px 65px 65px 60px 50px;gap:6px;padding:6px 8px;font-size:8px;color:#5a7a68;font-family:&apos;Space Mono&apos;,monospace;text-transform:uppercase;border-bottom:1px solid rgba(255,255,255,0.05)"><span>Date</span><span>Symbol</span><span>Dir</span><span>Prob</span><span>Outcome</span><span>P&amp;L</span><span>Status</span></div>';
+  const rows = recs.map(r => {
+    const date = new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const dirColor = r.direction === 'LONG' ? '#00f5a0' : '#ff4d6d';
+    const outcomeIcon = r.outcome === 'win' ? 'W' : r.outcome === 'loss' ? 'L' : r.outcome === 'expired' ? 'EXP' : '...';
+    const outcomeColor = r.outcome === 'win' ? '#00f5a0' : r.outcome === 'loss' ? '#ff4d6d' : '#888';
+    const pnl = r.actual_pnl_pct != null ? (r.actual_pnl_pct > 0 ? '+' : '') + Number(r.actual_pnl_pct).toFixed(1) + '%' : '—';
+    const pnlColor = r.actual_pnl_pct > 0 ? '#00f5a0' : r.actual_pnl_pct < 0 ? '#ff4d6d' : '#5a7a68';
+    return '<div style="display:grid;grid-template-columns:90px 70px 60px 65px 65px 60px 50px;gap:6px;padding:6px 8px;font-size:9px;font-family:&apos;Space Mono&apos;,monospace;border-bottom:1px solid rgba(255,255,255,0.02)"><span style="color:#888">' + date + '</span><span style="color:#e0e0e0">' + r.symbol + '</span><span style="color:' + dirColor + '">' + r.direction + '</span><span style="color:#63b3ed">' + (r.probability || 0) + '%</span><span style="color:' + outcomeColor + '">' + outcomeIcon + '</span><span style="color:' + pnlColor + '">' + pnl + '</span><span style="color:#888">' + (r.outcome || 'pending') + '</span></div>';
+  }).join('');
+  el.innerHTML = header + rows;
+}
+
   }).join('');
 }
 

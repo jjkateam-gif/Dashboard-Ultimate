@@ -1,6 +1,7 @@
 const express = require('express');
 const { pool } = require('../db');
 const { authenticate } = require('../middleware/auth');
+const recommendationTracker = require('../services/recommendationTracker');
 
 const router = express.Router();
 router.use(authenticate);
@@ -42,6 +43,41 @@ router.get('/me', async (req, res) => {
       recent: recent.rows,
       daily: daily.rows
     });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /stats/recommendations
+router.get('/recommendations', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const recommendations = await recommendationTracker.getHistory(req.user.id, limit);
+    res.json({ recommendations });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /stats/recommendations/summary
+router.get('/recommendations/summary', async (req, res) => {
+  try {
+    const summary = await recommendationTracker.getSummary(req.user.id);
+    res.json(summary);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /stats/recommendations
+router.post('/recommendations', async (req, res) => {
+  try {
+    const rec = req.body;
+    if (!rec.symbol || !rec.direction) {
+      return res.status(400).json({ error: 'symbol and direction required' });
+    }
+    const result = await recommendationTracker.saveRecommendation(req.user.id, rec);
+    res.json({ success: true, id: result.id });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
