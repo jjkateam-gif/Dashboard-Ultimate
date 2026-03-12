@@ -187,6 +187,9 @@ async function pollAllFeeds() {
       .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt))
       .slice(0, 100);
 
+    // Rebuild seenUrls from surviving articles to prevent unbounded growth
+    seenUrls = new Set(articles.map(a => a.url));
+
     broadcastNew(newArticles);
     console.log(`[NewsAggregator] ${newArticles.length} new articles. Total: ${articles.length}`);
   }

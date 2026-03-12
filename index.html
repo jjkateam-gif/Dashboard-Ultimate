@@ -2,9 +2,10 @@
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
 <title>Ultimate Crypto Backtester Pro</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js" defer></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
 
@@ -46,12 +47,39 @@ label { font-size: 11px !important; }
 [style*="font-size:11px"] { font-size: 14px !important; }
 /* === END GLOBAL TEXT SIZE BOOST === */
 
+/* === RESPONSIVE BREAKPOINTS === */
+@media(max-width:768px){
+  #page_predictions>div[style*="grid-template-columns"]{grid-template-columns:1fr!important}
+  #page_live>div[style*="grid-template-columns"]{grid-template-columns:1fr!important}
+  #page_paper>div[style*="grid-template-columns"]{grid-template-columns:1fr!important}
+  .rec-summary{grid-template-columns:repeat(2,1fr)!important}
+}
+@media(max-width:480px){
+  #pageTabs{flex-wrap:wrap!important}
+  #pageTabs button{flex:1 1 auto!important;min-width:70px!important}
+  .rec-summary{grid-template-columns:1fr!important}
+}
+
+/* === TOUCH TARGETS === */
+button,[onclick],select{min-height:32px}
+#pageTabs button{min-height:34px!important}
+.news-filter-btn{min-height:30px!important;padding:6px 14px!important}
+.opt-tab{min-height:30px!important;padding:6px 10px!important}
+
+/* === SMALL FONT BOOSTS (class-defined) === */
+.bm-stat-lbl,.zone-labels,.zone-labels span{font-size:9px!important}
+.degen-badge,.live-stat-pill{font-size:9px!important}
+.intel-kpi-label{font-size:9px!important}
+.screener-table th{font-size:9px!important}
+.sector-badge{font-size:8px!important}
+.ticker-item{font-size:10px!important}
+
 :root{
   --primary:#00f5a0;--primary-dim:rgba(0,245,160,0.12);--primary-glow:rgba(0,245,160,0.3);
   --accent:#ff3cac;--accent2:#00c9ff;--warn:#ffd60a;
   --bg:#04040f;--panel:rgba(8,8,28,0.9);--panel2:rgba(12,12,35,0.85);
   --border:rgba(0,245,160,0.12);--border-bright:rgba(0,245,160,0.35);
-  --text:#dff5ea;--text-muted:#5a7a68;
+  --text:#dff5ea;--text-muted:#8aaa98;
   --red:#ff4d6d;--green:#00f5a0;--blue:#00c9ff;--yellow:#ffd60a;
 }
 *{margin:0;padding:0;box-sizing:border-box}
@@ -798,7 +826,7 @@ details[open] summary::before{transform:rotate(90deg)}
 <div class="container">
 
 <!-- ========== PAGE TABS ========== -->
-<div id="pageTabs" style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid rgba(0,245,160,0.15);padding-bottom:0">
+<div id="pageTabs" role="tablist" style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid rgba(0,245,160,0.15);padding-bottom:0">
 <style>#pageTabs button{font-size:9px!important;padding:6px 12px!important}</style>
   <button onclick="switchPageTab('backtester')" id="pageTab_backtester"
     style="font-family:'Space Mono',monospace;font-size:10px;padding:8px 20px;background:rgba(0,245,160,0.12);border:1px solid rgba(0,245,160,0.4);border-bottom:none;color:#00f5a0;cursor:pointer;border-radius:8px 8px 0 0;font-weight:bold;margin-bottom:-1px">
@@ -1838,7 +1866,7 @@ details[open] summary::before{transform:rotate(90deg)}
 
 
 <!-- DNA Modal -->
-<div id="dnaModal" class="dna-modal" style="display:none" onclick="if(event.target===this)closeDNAModal()">
+<div id="dnaModal" role="dialog" aria-modal="true" class="dna-modal" style="display:none" onclick="if(event.target===this)closeDNAModal()">
   <div class="dna-modal-inner">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div>
@@ -2534,7 +2562,7 @@ details[open] summary::before{transform:rotate(90deg)}
 
 
 <!-- ========== BLOFIN EXECUTE MODAL ========== -->
-<div id="blofinModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;align-items:center;justify-content:center">
+<div id="blofinModal" role="dialog" aria-modal="true" onclick="if(event.target===this)closeBlofinModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#0a1a10;border:1px solid rgba(0,245,160,0.3);border-radius:14px;padding:28px;width:560px;max-width:96vw">
 
     <!-- Header -->
@@ -2598,7 +2626,7 @@ details[open] summary::before{transform:rotate(90deg)}
     <div id="blofinExecStatus" style="font-size:12px;font-family:'Space Mono',monospace;color:#5a7a68;min-height:18px;margin-bottom:12px"></div>
 
     <div style="display:flex;gap:8px">
-      <button id="blofinConfirmBtn" onclick="confirmBlofinExec()"
+      <button id="blofinConfirmBtn" onclick="document.getElementById('blofinConfirmBtn').style.display='none';document.getElementById('bfFinalConfirm').style.display='flex'"
         style="flex:1;padding:12px;margin:0;background:rgba(0,245,160,0.2);border:1px solid rgba(0,245,160,0.5);color:#00f5a0;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-size:13px;font-weight:700">
         ⚡ Confirm Execute
       </button>
@@ -3857,7 +3885,10 @@ async function fetchTicker(){
     }
   }catch(e){}
 }
-fetchTicker(); setInterval(fetchTicker,30000);
+let _tickerInterval = null;
+function startTicker() { if (!_tickerInterval) { fetchTicker(); _tickerInterval = setInterval(fetchTicker, 60000); } }
+function stopTicker() { if (_tickerInterval) { clearInterval(_tickerInterval); _tickerInterval = null; } }
+startTicker();
 
 // ===== FETCH KLINES — paginated, fetches ALL candles regardless of date range =====
 // ══════════════════════════════════════════════════════
@@ -5623,6 +5654,14 @@ function toggleChartFullscreen() {
 }
 // ESC key closes fullscreen
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && chartIsFullscreen) toggleChartFullscreen(); });
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    var bf = document.getElementById('blofinModal');
+    if (bf && bf.style.display !== 'none') { closeBlofinModal(); return; }
+    var dn = document.getElementById('dnaModal');
+    if (dn && dn.style.display !== 'none') { closeDNAModal(); return; }
+  }
+});
 
 // ============================================================
 // ===== INDICATOR SUB-PANELS =================================
@@ -12592,6 +12631,17 @@ async function loadNews() {
   }
 }
 
+// === SSE EXPONENTIAL BACKOFF ===
+const _sseBackoff = { news: 5000, live: 5000, pred: 5000 };
+const _sseRetries = { news: 0, live: 0, pred: 0 };
+function sseDelay(key) {
+  _sseRetries[key]++;
+  if (_sseRetries[key] > 20) return -1;
+  const d = _sseBackoff[key];
+  _sseBackoff[key] = Math.min(d * 1.5, 120000);
+  return d;
+}
+function sseReset(key) { _sseBackoff[key] = 5000; _sseRetries[key] = 0; }
 function connectNewsStream() {
   if (_newsSSE) return;
   const token = localStorage.getItem('dash_token');
@@ -12599,7 +12649,7 @@ function connectNewsStream() {
   try {
     _newsSSE = new EventSource(BACKEND_URL + '/news/stream?token=' + encodeURIComponent(token));
     _newsSSE.addEventListener('connected', () => {
-      NEWS_STATE.sseConnected = true;
+      NEWS_STATE.sseConnected = true; sseReset('news');
       const dot = $('newsSSEDot');
       if (dot) { dot.style.background = '#00f5a0'; dot.title = 'SSE connected'; }
     });
@@ -12616,7 +12666,7 @@ function connectNewsStream() {
       _newsSSE.close(); _newsSSE = null; NEWS_STATE.sseConnected = false;
       const dot = $('newsSSEDot');
       if (dot) { dot.style.background = '#ff4d6d'; dot.title = 'SSE disconnected'; }
-      setTimeout(connectNewsStream, 15000);
+      const _nd = sseDelay('news'); if (_nd > 0) setTimeout(connectNewsStream, _nd);
     };
   } catch {}
 }
@@ -15852,7 +15902,7 @@ function connectLiveStream() {
       _liveSSE.close();
       _liveSSE = null;
       // Reconnect after 10s
-      setTimeout(connectLiveStream, 10000);
+      const _ld = sseDelay('live'); if (_ld > 0) setTimeout(connectLiveStream, _ld);
     };
   } catch {}
 }
@@ -16176,7 +16226,7 @@ function connectPredictionStream() {
       _predSSE.close(); _predSSE = null; PRED_STATE.sseConnected = false;
       const dot = document.getElementById('predSSEDot');
       if (dot) { dot.style.background = '#ff4d6d'; dot.title = 'SSE disconnected'; }
-      setTimeout(connectPredictionStream, 15000);
+      const _pd = sseDelay('pred'); if (_pd > 0) setTimeout(connectPredictionStream, _pd);
     };
   } catch {}
 }

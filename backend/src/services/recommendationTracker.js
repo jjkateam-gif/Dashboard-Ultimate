@@ -19,19 +19,22 @@ const COINGECKO_IDS = {
   MATIC: 'matic-network',
 };
 
-async function fetchCurrentPrice(symbol) {
-  // Normalize symbol (strip -USDT, /USDT, etc.)
-  const clean = symbol.replace(/[-\/]?USDT$/i, '').toUpperCase();
-  const cgId = COINGECKO_IDS[clean];
-  if (!cgId) return null;
-
+// Batch fetch prices from CoinGecko (single API call for all symbols)
+async function fetchPricesBatch(symbols) {
+  const ids = [...new Set(symbols.map(s => COINGECKO_IDS[s]).filter(Boolean))];
+  if (ids.length === 0) return {};
   try {
-    const resp = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${cgId}&vs_currencies=usd`);
-    if (!resp.ok) return null;
+    const resp = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd`);
+    if (!resp.ok) return {};
     const data = await resp.json();
-    return data[cgId]?.usd ?? null;
-  } catch {
-    return null;
+    const prices = {};
+    for (const [sym, cgId] of Object.entries(COINGECKO_IDS)) {
+      if (data[cgId]?.usd) prices[sym] = data[cgId].usd;
+    }
+    return prices;
+  } catch (e) {
+    console.error('[RecTracker] Batch price fetch error:', e.message);
+    return {};
   }
 }
 
@@ -55,13 +58,9 @@ async function resolveRecommendations() {
 
     if (unresolved.length === 0) return;
 
-    // Collect unique symbols to batch price fetches
+    // Batch fetch all prices in a single API call
     const symbols = [...new Set(unresolved.map(r => r.symbol.replace(/[-\/]?USDT$/i, '').toUpperCase()))];
-    const prices = {};
-    for (const sym of symbols) {
-      const p = await fetchCurrentPrice(sym);
-      if (p != null) prices[sym] = p;
-    }
+    const prices = await fetchPricesBatch(symbols);
 
     const now = new Date();
     const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
