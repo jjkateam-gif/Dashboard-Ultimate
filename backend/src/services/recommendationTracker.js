@@ -41,12 +41,29 @@ async function fetchPricesBatch(symbols) {
 async function saveRecommendation(userId, rec) {
   const { symbol, direction, probability, entryPrice, targetPrice, stopPrice, rrRatio,
           source, timeframe, confidence, leverage, mode } = rec;
+  const srcVal = source || 'auto';
+
+  // For auto-saves: skip if same symbol+direction+timeframe was already saved within 1 hour (prevents flooding)
+  if (srcVal === 'auto') {
+    const { rows: existing } = await pool.query(
+      `SELECT id FROM trade_recommendations
+       WHERE user_id = $1 AND symbol = $2 AND direction = $3
+         AND source = 'auto' AND outcome IS NULL
+         AND created_at > NOW() - INTERVAL '1 hour'
+       LIMIT 1`,
+      [userId, symbol, direction.toUpperCase()]
+    );
+    if (existing.length > 0) {
+      return { id: existing[0].id, deduplicated: true };
+    }
+  }
+
   const result = await pool.query(
     `INSERT INTO trade_recommendations (user_id, symbol, direction, probability, entry_price, target_price, stop_price, rr_ratio, source, timeframe, confidence, leverage, mode)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING id`,
     [userId, symbol, direction.toUpperCase(), probability, entryPrice, targetPrice, stopPrice, rrRatio,
-     source || 'auto', timeframe || null, confidence || null, leverage || 1, mode || 'spot']
+     srcVal, timeframe || null, confidence || null, leverage || 1, mode || 'spot']
   );
   return result.rows[0];
 }

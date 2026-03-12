@@ -5,5 +5,8 @@ ALTER TABLE trade_recommendations ADD COLUMN IF NOT EXISTS confidence VARCHAR(10
 ALTER TABLE trade_recommendations ADD COLUMN IF NOT EXISTS leverage INTEGER DEFAULT 1;
 ALTER TABLE trade_recommendations ADD COLUMN IF NOT EXISTS mode VARCHAR(10) DEFAULT 'spot';
 
+-- Backfill existing records that have NULL source
+UPDATE trade_recommendations SET source = 'auto' WHERE source IS NULL;
+
 -- Index for filtering by source
 CREATE INDEX IF NOT EXISTS idx_recs_source ON trade_recommendations(source);
