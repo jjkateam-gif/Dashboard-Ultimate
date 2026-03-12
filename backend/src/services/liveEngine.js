@@ -48,7 +48,7 @@ class LiveEngine {
     creds.demo = demo;
     this.credentials.set(userId, creds);
 
-    console.log(`[LiveEngine] Credentials unlocked for user ${userId} (key: ${creds.apiKey.slice(0, 8)}..., demo: ${demo})`);
+    console.log(`[LiveEngine] Credentials unlocked for user ${userId} (demo: ${demo})`);
 
     // Start WebSocket connection for this user, passing demo flag
     blofinWs.connectPrivate(userId, creds, demo);

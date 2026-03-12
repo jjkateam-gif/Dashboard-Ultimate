@@ -26,15 +26,33 @@ const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
 
 app.use(cors({
   origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, etc)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    // In production, also allow the Railway domain itself
-    callback(null, true); // permissive for now during setup
+    const allowed = [
+      'https://jjkateam-gif.github.io',
+      'http://localhost:3000',
+      'http://localhost:5500',
+      'http://127.0.0.1:5500'
+    ];
+    if (allowed.some(a => origin.startsWith(a))) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
   },
   credentials: true
 }));
 
 app.use(express.json({ limit: '5mb' }));
+
+// Security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
 
 // Health check - always works even if DB is down
 app.get('/health', (req, res) => res.json({ status: 'ok', version: 'v2-live', time: new Date().toISOString() }));
@@ -60,7 +78,11 @@ async function initDB() {
     const bcrypt = require('bcryptjs');
     const adminCheck = await pool.query("SELECT id FROM users WHERE role='admin' LIMIT 1");
     if (adminCheck.rows.length === 0) {
-      const hash = await bcrypt.hash('Todayi$Monday', 12);
+      const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'ChangeMeImmediately!2024';
+      if (!process.env.ADMIN_PASSWORD) {
+        console.warn('[SECURITY] Using default admin password. Set ADMIN_PASSWORD env var in production!');
+      }
+      const hash = await bcrypt.hash(ADMIN_PASSWORD, 12);
       await pool.query(
         "INSERT INTO users (username, password_hash, role) VALUES ($1, $2, 'admin')",
         ['Josh', hash]
@@ -94,8 +116,8 @@ async function initDB() {
       liveEngine.start();
       console.log('Live trading routes loaded. Engine started.');
     } catch (liveErr) {
-      console.error('Live trading init error (core routes still working):', liveErr.message, liveErr.stack);
-      app.get('/live/debug', (req, res) => res.json({ error: liveErr.message, stack: liveErr.stack }));
+      console.error('Live trading init error (core routes still working):', liveErr.message);
+      // Debug endpoint removed for security - do not expose stack traces
     }
 
     // Load news aggregator routes (separate try/catch so it doesn't break core routes)

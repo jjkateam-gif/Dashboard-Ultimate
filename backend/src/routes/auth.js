@@ -7,8 +7,32 @@ const { authenticate, hashToken } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Rate limiting for login attempts
+const loginAttempts = new Map();
+const LOGIN_WINDOW = 15 * 60 * 1000; // 15 minutes
+const MAX_ATTEMPTS = 10;
+
+function loginRateLimit(req, res, next) {
+  const ip = req.ip || req.connection.remoteAddress;
+  const now = Date.now();
+  const attempts = loginAttempts.get(ip) || [];
+  const recent = attempts.filter(t => now - t < LOGIN_WINDOW);
+  if (recent.length >= MAX_ATTEMPTS) {
+    return res.status(429).json({ error: 'Too many login attempts. Try again in 15 minutes.' });
+  }
+  recent.push(now);
+  loginAttempts.set(ip, recent);
+  // Clean up old entries periodically
+  if (loginAttempts.size > 1000) {
+    for (const [key, val] of loginAttempts) {
+      if (val.filter(t => now - t < LOGIN_WINDOW).length === 0) loginAttempts.delete(key);
+    }
+  }
+  next();
+}
+
 // POST /auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', loginRateLimit, async (req, res) => {
   try {
     const { username, password, remember } = req.body;
     if (!username || !password) {
