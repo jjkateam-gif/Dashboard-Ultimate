@@ -52,7 +52,8 @@ router.get('/me', async (req, res) => {
 router.get('/recommendations', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
-    const recommendations = await recommendationTracker.getHistory(req.user.id, limit);
+    const source = req.query.source || null; // 'manual', 'auto', or null for all
+    const recommendations = await recommendationTracker.getHistory(req.user.id, limit, source);
     res.json({ recommendations });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -62,7 +63,8 @@ router.get('/recommendations', async (req, res) => {
 // GET /stats/recommendations/summary
 router.get('/recommendations/summary', async (req, res) => {
   try {
-    const summary = await recommendationTracker.getSummary(req.user.id);
+    const source = req.query.source || null;
+    const summary = await recommendationTracker.getSummary(req.user.id, source);
     res.json(summary);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });

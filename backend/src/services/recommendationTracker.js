@@ -39,12 +39,14 @@ async function fetchPricesBatch(symbols) {
 }
 
 async function saveRecommendation(userId, rec) {
-  const { symbol, direction, probability, entryPrice, targetPrice, stopPrice, rrRatio } = rec;
+  const { symbol, direction, probability, entryPrice, targetPrice, stopPrice, rrRatio,
+          source, timeframe, confidence, leverage, mode } = rec;
   const result = await pool.query(
-    `INSERT INTO trade_recommendations (user_id, symbol, direction, probability, entry_price, target_price, stop_price, rr_ratio)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO trade_recommendations (user_id, symbol, direction, probability, entry_price, target_price, stop_price, rr_ratio, source, timeframe, confidence, leverage, mode)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING id`,
-    [userId, symbol, direction.toUpperCase(), probability, entryPrice, targetPrice, stopPrice, rrRatio]
+    [userId, symbol, direction.toUpperCase(), probability, entryPrice, targetPrice, stopPrice, rrRatio,
+     source || 'auto', timeframe || null, confidence || null, leverage || 1, mode || 'spot']
   );
   return result.rows[0];
 }
@@ -119,20 +121,34 @@ async function resolveRecommendations() {
   }
 }
 
-async function getHistory(userId, limit = 50) {
-  const { rows } = await pool.query(
-    `SELECT id, symbol, direction, probability, entry_price, target_price, stop_price, rr_ratio,
-            created_at, resolved_at, outcome, actual_pnl_pct
-     FROM trade_recommendations
-     WHERE user_id = $1
-     ORDER BY created_at DESC
-     LIMIT $2`,
-    [userId, limit]
-  );
+async function getHistory(userId, limit = 50, source = null) {
+  let query = `SELECT id, symbol, direction, probability, entry_price, target_price, stop_price, rr_ratio,
+                      created_at, resolved_at, outcome, actual_pnl_pct, source, timeframe, confidence, leverage, mode
+               FROM trade_recommendations
+               WHERE user_id = $1`;
+  const params = [userId];
+
+  if (source) {
+    query += ` AND source = $${params.length + 1}`;
+    params.push(source);
+  }
+
+  query += ` ORDER BY created_at DESC LIMIT $${params.length + 1}`;
+  params.push(limit);
+
+  const { rows } = await pool.query(query, params);
   return rows;
 }
 
-async function getSummary(userId) {
+async function getSummary(userId, source = null) {
+  let whereClause = 'WHERE user_id = $1';
+  const params = [userId];
+
+  if (source) {
+    whereClause += ` AND source = $${params.length + 1}`;
+    params.push(source);
+  }
+
   const { rows } = await pool.query(
     `SELECT
        COUNT(*)::int AS total,
@@ -147,20 +163,25 @@ async function getSummary(userId) {
               ELSE NULL END, 1
        ) AS "winRate"
      FROM trade_recommendations
-     WHERE user_id = $1`,
-    [userId]
+     ${whereClause}`,
+    params
   );
 
   const summary = rows[0] || {};
 
   // Calculate current streak
-  const { rows: streakRows } = await pool.query(
-    `SELECT outcome FROM trade_recommendations
-     WHERE user_id = $1 AND outcome IN ('win','loss')
-     ORDER BY resolved_at DESC
-     LIMIT 20`,
-    [userId]
-  );
+  let streakQuery = `SELECT outcome FROM trade_recommendations
+     WHERE user_id = $1 AND outcome IN ('win','loss')`;
+  const streakParams = [userId];
+
+  if (source) {
+    streakQuery += ` AND source = $${streakParams.length + 1}`;
+    streakParams.push(source);
+  }
+
+  streakQuery += ` ORDER BY resolved_at DESC LIMIT 20`;
+
+  const { rows: streakRows } = await pool.query(streakQuery, streakParams);
 
   let streak = 0;
   let streakType = null;

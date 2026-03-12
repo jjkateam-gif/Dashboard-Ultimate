@@ -2318,18 +2318,30 @@ function switchAuthView(view) {
 
   <!-- Track Record Section -->
   <div style="margin-top:20px;border-top:1px solid rgba(255,255,255,0.05);padding-top:16px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#ff6b35">RECOMMENDATION TRACK RECORD</div><div style="font-family:'Space Mono',monospace;font-size:11px;color:#5a7a68;margin-top:2px">Setups scoring 60%+ probability are automatically logged for performance tracking.</div>
-      <button onclick="loadRecommendations()" style="font-family:'Space Mono',monospace;font-size:9px;padding:5px 12px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:6px;cursor:pointer">Refresh</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#ff6b35">📊 TRADE LOG & TRACK RECORD</div>
+        <div style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;margin-top:2px">Log trades manually or auto-track 60%+ setups. Backend resolves win/loss every 5 min.</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <!-- Filter tabs -->
+        <div id="recFilterTabs" style="display:flex;gap:3px;background:rgba(0,0,0,0.25);border-radius:6px;padding:2px">
+          <button onclick="setRecFilter(null)" id="recFilterAll" style="font-size:8px;padding:4px 10px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;border:none;background:rgba(255,107,53,0.2);color:#ff6b35;font-weight:700">All</button>
+          <button onclick="setRecFilter('manual')" id="recFilterManual" style="font-size:8px;padding:4px 10px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;border:none;background:transparent;color:#5a7a68;font-weight:700">📋 My Logged</button>
+          <button onclick="setRecFilter('auto')" id="recFilterAuto" style="font-size:8px;padding:4px 10px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;border:none;background:transparent;color:#5a7a68;font-weight:700">🤖 Auto</button>
+        </div>
+        <button onclick="loadRecommendations()" style="font-family:'Space Mono',monospace;font-size:9px;padding:5px 12px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:6px;cursor:pointer;width:auto;margin:0">Refresh</button>
+      </div>
     </div>
-    <div id="recSummaryCards" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px">
+    <div id="recSummaryCards" style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px">
       <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Total</div><div id="recTotal" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#e0e0e0">0</div></div>
       <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Win Rate</div><div id="recWinRate" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">&mdash;</div></div>
       <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Wins</div><div id="recWins" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#00f5a0">0</div></div>
       <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Losses</div><div id="recLosses" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#ff4d6d">0</div></div>
       <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Avg P&amp;L</div><div id="recAvgPnl" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">&mdash;</div></div>
+      <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Streak</div><div id="recStreak" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">&mdash;</div></div>
     </div>
-    <div id="recHistoryList" style="max-height:300px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 transparent">
+    <div id="recHistoryList" style="max-height:500px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 transparent">
       <div style="text-align:center;padding:20px;color:#5a7a68;font-family:'Space Mono',monospace;font-size:10px">Run the Probability Engine to start tracking recommendations</div>
     </div>
   </div>
@@ -12132,6 +12144,7 @@ function detectCurrentRegime(d) {
 async function runProbEngine() {
   if (PROBE.running) return;
   PROBE.running = true;
+  _loggedTradeIdxs.clear(); // Reset logged state for new scan
 
   const btn = $('probeBtn');
   if (btn) { btn.disabled = true; btn.textContent = '⟳ Scanning...'; }
@@ -12205,7 +12218,10 @@ async function runProbEngine() {
       entryPrice: r.price,
       targetPrice: r.rrData ? r.rrData.target : null,
       stopPrice: r.rrData ? r.rrData.stop : null,
-      rrRatio: r.rr
+      rrRatio: r.rr,
+      source: 'auto',
+      timeframe: tf,
+      confidence: r.confidence || null
     })
   );
   await Promise.all(savePromises);
@@ -12638,8 +12654,10 @@ function renderEtfIssuerBreakdown(series) {
 // RECOMMENDATION TRACKER
 // ════════════════════════════════════════════════════════════════
 
+let _recFilterSource = null; // null = all, 'manual', 'auto'
+const _loggedTradeIdxs = new Set(); // track which cards have been logged this scan
+
 async function saveRecommendation(rec) {
-  console.log("Saving recommendation:", rec);
   try {
     const token = localStorage.getItem('dash_token');
     const resp = await fetch(BACKEND_URL + '/stats/recommendations', {
@@ -12647,15 +12665,31 @@ async function saveRecommendation(rec) {
       headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
       body: JSON.stringify(rec)
     });
-    console.log("Save response:", resp.status, await resp.text().catch(()=>"")); } catch(e) { console.error("Save rec error:", e); }
+    return resp.ok ? await resp.json() : null;
+  } catch(e) { console.error("Save rec error:", e); return null; }
+}
+
+function setRecFilter(source) {
+  _recFilterSource = source;
+  // Update tab styling
+  const tabs = { 'recFilterAll': null, 'recFilterManual': 'manual', 'recFilterAuto': 'auto' };
+  for (const [id, val] of Object.entries(tabs)) {
+    const btn = document.getElementById(id);
+    if (!btn) continue;
+    const active = val === source;
+    btn.style.background = active ? 'rgba(255,107,53,0.2)' : 'transparent';
+    btn.style.color = active ? '#ff6b35' : '#5a7a68';
+  }
+  loadRecommendations();
 }
 
 async function loadRecommendations() {
   try {
     const token = localStorage.getItem('dash_token');
+    const srcParam = _recFilterSource ? '&source=' + _recFilterSource : '';
     const [histR, sumR] = await Promise.all([
-      fetch(BACKEND_URL + '/stats/recommendations?limit=50', { headers: { 'Authorization': 'Bearer ' + token } }),
-      fetch(BACKEND_URL + '/stats/recommendations/summary', { headers: { 'Authorization': 'Bearer ' + token } })
+      fetch(BACKEND_URL + '/stats/recommendations?limit=50' + srcParam, { headers: { 'Authorization': 'Bearer ' + token } }),
+      fetch(BACKEND_URL + '/stats/recommendations/summary?' + (_recFilterSource ? 'source=' + _recFilterSource : ''), { headers: { 'Authorization': 'Bearer ' + token } })
     ]);
     if (histR.ok) {
       const hist = await histR.json();
@@ -12679,26 +12713,91 @@ function renderRecSummary(s) {
   const avg = s.avgPnl != null ? (s.avgPnl > 0 ? '+' : '') + s.avgPnl.toFixed(2) + '%' : '—';
   const avgColor = s.avgPnl > 0 ? '#00f5a0' : s.avgPnl < 0 ? '#ff4d6d' : '#5a7a68';
   el('recAvgPnl', avg, avgColor);
+  // Streak
+  const streak = s.streak || '—';
+  const streakColor = s.streak ? (s.streak.includes('W') ? '#00f5a0' : '#ff4d6d') : '#5a7a68';
+  el('recStreak', streak, streakColor);
 }
 
 function renderRecHistory(recs) {
   const el = document.getElementById('recHistoryList');
   if (!el) return;
   if (recs.length === 0) {
-    el.innerHTML = '<div style="text-align:center;padding:20px;color:#5a7a68;font-family:&apos;Space Mono&apos;,monospace;font-size:10px">No recommendations yet</div>';
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:10px">No trades logged yet. Click 📋 Log Trade on any setup card to start tracking.</div>';
     return;
   }
-  const header = '<div style="display:grid;grid-template-columns:90px 70px 60px 65px 65px 60px 50px;gap:6px;padding:6px 8px;font-size:8px;color:#5a7a68;font-family:&apos;Space Mono&apos;,monospace;text-transform:uppercase;border-bottom:1px solid rgba(255,255,255,0.05)"><span>Date</span><span>Symbol</span><span>Dir</span><span>Prob</span><span>Outcome</span><span>P&amp;L</span><span>Status</span></div>';
+  const header = '<div style="display:grid;grid-template-columns:30px 80px 65px 55px 55px 60px 55px 50px 50px;gap:6px;padding:8px 10px;font-size:7px;color:#5a7a68;font-family:\'Space Mono\',monospace;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.08)"><span></span><span>Date</span><span>Symbol</span><span>Dir</span><span>Prob</span><span>R/R</span><span>Outcome</span><span>P&L</span><span>TF</span></div>';
   const rows = recs.map(r => {
-    const date = new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const date = new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     const dirColor = r.direction === 'LONG' ? '#00f5a0' : '#ff4d6d';
-    const outcomeIcon = r.outcome === 'win' ? 'W' : r.outcome === 'loss' ? 'L' : r.outcome === 'expired' ? 'EXP' : '...';
-    const outcomeColor = r.outcome === 'win' ? '#00f5a0' : r.outcome === 'loss' ? '#ff4d6d' : '#888';
-    const pnl = r.actual_pnl_pct != null ? (r.actual_pnl_pct > 0 ? '+' : '') + Number(r.actual_pnl_pct).toFixed(1) + '%' : '—';
+    const dirIcon = r.direction === 'LONG' ? '▲' : '▼';
+    const sourceIcon = r.source === 'manual' ? '📋' : '🤖';
+    const outcomeLabel = r.outcome === 'win' ? '✅ WIN' : r.outcome === 'loss' ? '❌ LOSS' : r.outcome === 'expired' ? '⏰ EXP' : '⏳ PENDING';
+    const outcomeColor = r.outcome === 'win' ? '#00f5a0' : r.outcome === 'loss' ? '#ff4d6d' : r.outcome === 'expired' ? '#888' : '#f5c400';
+    const pnl = r.actual_pnl_pct != null ? (r.actual_pnl_pct > 0 ? '+' : '') + Number(r.actual_pnl_pct).toFixed(2) + '%' : '—';
     const pnlColor = r.actual_pnl_pct > 0 ? '#00f5a0' : r.actual_pnl_pct < 0 ? '#ff4d6d' : '#5a7a68';
-    return '<div style="display:grid;grid-template-columns:90px 70px 60px 65px 65px 60px 50px;gap:6px;padding:6px 8px;font-size:9px;font-family:&apos;Space Mono&apos;,monospace;border-bottom:1px solid rgba(255,255,255,0.02)"><span style="color:#888">' + date + '</span><span style="color:#e0e0e0">' + r.symbol + '</span><span style="color:' + dirColor + '">' + r.direction + '</span><span style="color:#63b3ed">' + (r.probability || 0) + '%</span><span style="color:' + outcomeColor + '">' + outcomeIcon + '</span><span style="color:' + pnlColor + '">' + pnl + '</span><span style="color:#888">' + (r.outcome || 'pending') + '</span></div>';
+    const borderColor = r.outcome === 'win' ? 'rgba(0,245,160,0.4)' : r.outcome === 'loss' ? 'rgba(255,77,109,0.4)' : r.outcome === 'expired' ? 'rgba(136,136,136,0.2)' : 'rgba(245,196,0,0.25)';
+    const rrDisplay = r.rr_ratio ? Number(r.rr_ratio).toFixed(1) + ':1' : '—';
+    const tf = r.timeframe || '—';
+    return '<div style="display:grid;grid-template-columns:30px 80px 65px 55px 55px 60px 55px 50px 50px;gap:6px;padding:7px 10px;font-size:9px;font-family:\'Space Mono\',monospace;border-bottom:1px solid rgba(255,255,255,0.03);border-left:3px solid ' + borderColor + ';transition:background 0.15s" onmouseenter="this.style.background=\'rgba(255,255,255,0.03)\'" onmouseleave="this.style.background=\'transparent\'"><span style="font-size:10px">' + sourceIcon + '</span><span style="color:#888;font-size:8px">' + date + '</span><span style="color:#e0e0e0;font-weight:700">' + (r.symbol || '').replace(/USDT$/i,'') + '</span><span style="color:' + dirColor + '">' + dirIcon + ' ' + r.direction + '</span><span style="color:#63b3ed">' + (r.probability || 0) + '%</span><span style="color:#a78bfa">' + rrDisplay + '</span><span style="color:' + outcomeColor + ';font-size:8px">' + outcomeLabel + '</span><span style="color:' + pnlColor + ';font-weight:700">' + pnl + '</span><span style="color:#5a7a68">' + tf + '</span></div>';
   }).join('');
   el.innerHTML = header + rows;
+}
+
+async function logBestTrade(idx) {
+  const r = PROBE.results && PROBE.results[idx];
+  if (!r) { toast('Run a scan first', 'error'); return; }
+  if (_loggedTradeIdxs.has(idx)) { toast('Already logged this trade', 'warning'); return; }
+
+  // Read custom SL/TP/mode/leverage from card inputs
+  const slPct  = parseFloat(document.getElementById('bt_sl_' + idx)?.value || r.rrData?.stopPct || 2);
+  const tpPct  = parseFloat(document.getElementById('bt_tp_' + idx)?.value || r.rrData?.targetPct || 4);
+  const lev    = parseInt(document.getElementById('bt_lev_' + idx)?.value || 1);
+  const modeBtn = document.getElementById('btMode_perps_' + idx);
+  const mode   = modeBtn?.style?.background?.includes('167') ? 'perps' : 'spot';
+
+  // Calculate actual target/stop prices from percentages
+  const entry = r.price;
+  const isLong = r.direction === 'long';
+  const targetPrice = isLong ? entry * (1 + tpPct / 100) : entry * (1 - tpPct / 100);
+  const stopPrice   = isLong ? entry * (1 - slPct / 100) : entry * (1 + slPct / 100);
+
+  // Get current timeframe
+  const tfSel = document.getElementById('probeTfSelect');
+  const tf = tfSel ? tfSel.value : '15m';
+
+  const result = await saveRecommendation({
+    symbol: r.sym || r.asset,
+    direction: r.direction.toUpperCase(),
+    probability: r.prob,
+    entryPrice: entry,
+    targetPrice: targetPrice,
+    stopPrice: stopPrice,
+    rrRatio: r.rr,
+    source: 'manual',
+    timeframe: tf,
+    confidence: r.confidence || null,
+    leverage: lev,
+    mode: mode
+  });
+
+  if (result && result.success) {
+    _loggedTradeIdxs.add(idx);
+    toast('Trade logged! Tracking ' + r.asset + ' ' + r.direction.toUpperCase() + ' (SL ' + slPct + '% / TP ' + tpPct + '%)', 'success');
+    // Mark the card as logged
+    const logBtn = document.getElementById('btLogBtn_' + idx);
+    if (logBtn) {
+      logBtn.textContent = '✅ Logged';
+      logBtn.style.background = 'rgba(0,245,160,0.1)';
+      logBtn.style.borderColor = 'rgba(0,245,160,0.3)';
+      logBtn.style.color = '#00f5a0';
+      logBtn.style.cursor = 'default';
+    }
+    // Refresh track record
+    loadRecommendations();
+  } else {
+    toast('Failed to log trade', 'error');
+  }
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -15706,18 +15805,25 @@ renderProbeResults = function(results, tf) {
         ${hitBars}${missBars}
       </div>
 
-      <!-- Probs + Execute -->
+      <!-- Probs + Log/Execute -->
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
         <div style="font-size:7px;font-family:'Space Mono',monospace">
           <span style="color:#00f5a0">▲ Long ${r.longProb}%</span>
           <span style="color:#5a7a68;margin:0 5px">|</span>
           <span style="color:#ff4d6d">▼ Short ${r.shortProb}%</span>
         </div>
-        <button onclick="execFromBestTrades(${idx})"
-          style="font-size:8px;padding:6px 14px;width:auto;margin:0;border-radius:5px;font-family:'Space Mono',monospace;font-weight:700;${execStyle}"
-          title="${execReady ? 'Execute on Jupiter' : 'Set up trading wallet first'}">
-          ⚡ Execute
-        </button>
+        <div style="display:flex;gap:5px">
+          <button id="btLogBtn_${idx}" onclick="logBestTrade(${idx})"
+            style="font-size:8px;padding:6px 12px;width:auto;margin:0;border-radius:5px;font-family:'Space Mono',monospace;font-weight:700;background:rgba(245,196,0,0.12);border:1px solid rgba(245,196,0,0.35);color:#f5c400;cursor:pointer"
+            title="Log this trade for tracking">
+            ${_loggedTradeIdxs.has(idx) ? '✅ Logged' : '📋 Log Trade'}
+          </button>
+          <button onclick="execFromBestTrades(${idx})"
+            style="font-size:8px;padding:6px 14px;width:auto;margin:0;border-radius:5px;font-family:'Space Mono',monospace;font-weight:700;${execStyle}"
+            title="${execReady ? 'Execute on BloFin' : 'Set up trading wallet first'}">
+            ⚡ Execute
+          </button>
+        </div>
       </div>
     </div>`;
   }).join('');
