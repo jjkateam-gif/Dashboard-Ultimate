@@ -90,6 +90,14 @@ async function initDB() {
       console.log('Admin user created: Josh');
     }
 
+    // Initialize email service
+    try {
+      const emailService = require('./services/emailService');
+      emailService.init();
+    } catch (emailErr) {
+      console.warn('Email service init error (registration will work without email):', emailErr.message);
+    }
+
     // Load core routes (these must always work)
     const authRoutes = require('./routes/auth');
     const adminRoutes = require('./routes/admin');

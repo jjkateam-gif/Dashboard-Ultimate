@@ -668,49 +668,148 @@ details[open] summary::before{transform:rotate(90deg)}
 <button class="logout-btn" id="logoutBtn" style="display:none">⏻ LOGOUT</button>
 
 <script>
+// === AUTH SYSTEM (Login / Register / Forgot / Reset) ===
+function switchAuthView(view) {
+  ['loginView','registerView','forgotView','resetView'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.style.display = id === view+'View' ? 'block' : 'none';
+  });
+  ['loginError','regError','forgotError','resetError'].forEach(function(id){
+    var el = document.getElementById(id); if(el) el.textContent='';
+  });
+}
+
 (function(){
   var overlay = document.getElementById('loginOverlay');
-  var btn = document.getElementById('loginBtn');
-  var userIn = document.getElementById('loginUser');
-  var passIn = document.getElementById('loginPass');
-  var errEl = document.getElementById('loginError');
-  var rememberBox = document.getElementById('loginRemember');
   var logoutBtn = document.getElementById('logoutBtn');
+
+  // Check for reset token in URL hash
+  var hash = window.location.hash;
+  if (hash.startsWith('#reset=')) {
+    window._resetToken = hash.substring(7);
+    switchAuthView('reset');
+    history.replaceState(null, '', window.location.pathname);
+  }
 
   // Check existing token
   var savedToken = localStorage.getItem('dash_token');
-  if(savedToken){
+  if(savedToken && !window._resetToken){
     overlay.style.display='none';
     logoutBtn.style.display='block';
   }
 
+  // --- LOGIN ---
+  var loginBtn = document.getElementById('loginBtn');
   async function tryLogin(){
-    var u=userIn.value.trim(), p=passIn.value;
+    var u=document.getElementById('loginUser').value.trim();
+    var p=document.getElementById('loginPass').value;
+    var errEl=document.getElementById('loginError');
+    var rememberBox=document.getElementById('loginRemember');
     if(!u||!p){errEl.textContent='Enter username and password';return;}
-    errEl.textContent='Logging in...';
-    btn.disabled=true;
+    errEl.textContent='Logging in...';errEl.style.color='var(--text-muted)';
+    loginBtn.disabled=true;
     try{
-      var res = await fetch(window.CBP_BACKEND+'/auth/login',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
+      var res=await fetch(window.CBP_BACKEND+'/auth/login',{
+        method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({username:u,password:p,remember:rememberBox.checked})
       });
-      var data = await res.json();
+      var data=await res.json();
       if(!res.ok) throw new Error(data.error||'Login failed');
       localStorage.setItem('dash_token',data.token);
-      authToken=data.token;
-      currentUser=data.user;
-      overlay.style.display='none';
-      logoutBtn.style.display='block';
+      authToken=data.token;currentUser=data.user;
+      overlay.style.display='none';logoutBtn.style.display='block';
       errEl.textContent='';
       if(typeof authBoot==='function') authBoot();
     }catch(e){
-      errEl.textContent=e.message||'Invalid credentials';
-      passIn.value='';passIn.focus();
+      errEl.textContent=e.message||'Invalid credentials';errEl.style.color='var(--red)';
+      document.getElementById('loginPass').value='';
     }
-    btn.disabled=false;
+    loginBtn.disabled=false;
   }
+  loginBtn.addEventListener('click',tryLogin);
+  document.getElementById('loginPass').addEventListener('keydown',function(e){if(e.key==='Enter')tryLogin();});
+  document.getElementById('loginUser').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('loginPass').focus();});
 
+  // --- REGISTER ---
+  var regBtn = document.getElementById('regBtn');
+  regBtn.addEventListener('click', async function(){
+    var u=document.getElementById('regUser').value.trim();
+    var em=document.getElementById('regEmail').value.trim();
+    var p=document.getElementById('regPass').value;
+    var pc=document.getElementById('regPassConfirm').value;
+    var errEl=document.getElementById('regError');
+    if(!u||!em||!p){errEl.textContent='All fields required';errEl.style.color='var(--red)';return;}
+    if(p.length<8){errEl.textContent='Password must be at least 8 characters';errEl.style.color='var(--red)';return;}
+    if(p!==pc){errEl.textContent='Passwords do not match';errEl.style.color='var(--red)';return;}
+    errEl.textContent='Creating account...';errEl.style.color='var(--text-muted)';
+    regBtn.disabled=true;
+    try{
+      var res=await fetch(window.CBP_BACKEND+'/auth/register',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({username:u,email:em,password:p})
+      });
+      var data=await res.json();
+      if(!res.ok) throw new Error(data.error||'Registration failed');
+      localStorage.setItem('dash_token',data.token);
+      authToken=data.token;currentUser=data.user;
+      overlay.style.display='none';logoutBtn.style.display='block';
+      errEl.textContent='';
+      if(typeof authBoot==='function') authBoot();
+    }catch(e){
+      errEl.textContent=e.message;errEl.style.color='var(--red)';
+    }
+    regBtn.disabled=false;
+  });
+  document.getElementById('regPassConfirm').addEventListener('keydown',function(e){if(e.key==='Enter')regBtn.click();});
+
+  // --- FORGOT PASSWORD ---
+  var forgotBtn = document.getElementById('forgotBtn');
+  forgotBtn.addEventListener('click', async function(){
+    var em=document.getElementById('forgotEmail').value.trim();
+    var errEl=document.getElementById('forgotError');
+    if(!em){errEl.textContent='Enter your email';errEl.style.color='var(--red)';return;}
+    errEl.textContent='Sending reset link...';errEl.style.color='var(--text-muted)';
+    forgotBtn.disabled=true;
+    try{
+      await fetch(window.CBP_BACKEND+'/auth/forgot-password',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({email:em})
+      });
+      errEl.textContent='If that email exists, a reset link has been sent. Check your inbox!';
+      errEl.style.color='var(--green)';
+    }catch(e){
+      errEl.textContent='Error sending reset. Try again later.';errEl.style.color='var(--red)';
+    }
+    forgotBtn.disabled=false;
+  });
+
+  // --- RESET PASSWORD (from email link) ---
+  var resetBtn = document.getElementById('resetBtn');
+  resetBtn.addEventListener('click', async function(){
+    var p=document.getElementById('resetPass').value;
+    var pc=document.getElementById('resetPassConfirm').value;
+    var errEl=document.getElementById('resetError');
+    if(!p||p.length<8){errEl.textContent='Password must be at least 8 characters';errEl.style.color='var(--red)';return;}
+    if(p!==pc){errEl.textContent='Passwords do not match';errEl.style.color='var(--red)';return;}
+    errEl.textContent='Resetting password...';errEl.style.color='var(--text-muted)';
+    resetBtn.disabled=true;
+    try{
+      var res=await fetch(window.CBP_BACKEND+'/auth/reset-password',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({token:window._resetToken,password:p})
+      });
+      var data=await res.json();
+      if(!res.ok) throw new Error(data.error||'Reset failed');
+      errEl.textContent='Password reset successfully! Redirecting to login...';errEl.style.color='var(--green)';
+      window._resetToken=null;
+      setTimeout(function(){switchAuthView('login');},2000);
+    }catch(e){
+      errEl.textContent=e.message;errEl.style.color='var(--red)';
+    }
+    resetBtn.disabled=false;
+  });
+
+  // --- LOGOUT ---
   logoutBtn.addEventListener('click',async function(){
     try{
       var tk=localStorage.getItem('dash_token');
@@ -721,13 +820,11 @@ details[open] summary::before{transform:rotate(90deg)}
     sessionStorage.removeItem('cbp_auth');
     logoutBtn.style.display='none';
     overlay.style.display='flex';
-    userIn.value='';passIn.value='';errEl.textContent='';
-    userIn.focus();
+    switchAuthView('login');
+    document.getElementById('loginUser').value='';
+    document.getElementById('loginPass').value='';
+    document.getElementById('loginUser').focus();
   });
-
-  btn.addEventListener('click',tryLogin);
-  passIn.addEventListener('keydown',function(e){if(e.key==='Enter')tryLogin();});
-  userIn.addEventListener('keydown',function(e){if(e.key==='Enter')passIn.focus();});
 })();
 </script>
 
