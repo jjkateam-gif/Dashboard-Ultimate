@@ -1765,7 +1765,7 @@ details[open] summary::before{transform:rotate(90deg)}
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       <div id="degenScanStatus" style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace"></div>
-      <button onclick="forceDεgenScan()" id="degenScanBtn"
+      <button onclick="forceDegenScan()" id="degenScanBtn"
         style="font-size:9px;padding:7px 14px;width:auto;margin:0;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace">
         🔄 Force Rescan
       </button>
@@ -2489,7 +2489,7 @@ details[open] summary::before{transform:rotate(90deg)}
           <div id="walletPublicKey" style="font-size:9px;color:#00f5a0;font-family:'Space Mono',monospace;word-break:break-all"></div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button onclick="openWithdrawPanel()" style="font-size:8px;padding:6px 10px;width:auto;margin:0;background:rgba(99,179,237,0.12);border:1px solid rgba(99,179,237,0.35);color:#63b3ed;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700">↑ Withdraw</button>
+          
           <button onclick="exportWalletBackup()" style="font-size:8px;padding:6px 10px;width:auto;margin:0;background:rgba(245,196,0,0.1);border:1px solid rgba(245,196,0,0.3);color:#f5c400;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace">📥 Export Backup</button>
           <button onclick="lockWallet()" style="font-size:8px;padding:6px 10px;width:auto;margin:0;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);color:#666;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace">🔒 Lock</button>
         </div>
@@ -2523,67 +2523,6 @@ details[open] summary::before{transform:rotate(90deg)}
       </div>
       <div id="backupWarning" style="display:none;background:rgba(245,196,0,0.08);border:1px solid rgba(245,196,0,0.3);border-radius:6px;padding:8px;font-size:8px;color:#f5c400;font-family:'Space Mono',monospace;margin-bottom:8px">
         ⚠️ Export your wallet backup before live trading. If you clear browser storage without a backup, funds are unrecoverable.
-      </div>
-      <!-- ↑ Withdraw Panel -->
-      <div id="withdrawPanel" style="display:none;margin-top:10px;background:rgba(99,179,237,0.05);border:1px solid rgba(99,179,237,0.25);border-radius:8px;padding:14px">
-
-        <div style="font-size:9px;font-weight:700;color:#63b3ed;font-family:'Space Mono',monospace;letter-spacing:1px;margin-bottom:4px">↑ WITHDRAW FUNDS</div>
-
-        <!-- Solana-only notice -->
-        <div style="background:rgba(99,179,237,0.08);border:1px solid rgba(99,179,237,0.2);border-radius:5px;padding:8px 10px;margin-bottom:12px;font-size:8px;font-family:'Space Mono',monospace;line-height:1.7;color:#aaa">
-          ⚠️ <strong style="color:#63b3ed">Solana network only.</strong>
-          Only send to a <strong style="color:#fff">Solana wallet address</strong> (Phantom, Solflare, Coinbase, etc.).
-          Sending to an Ethereum, Bitcoin, or any other network address will result in <strong style="color:#ff4d6d">permanent loss of funds</strong>.
-          If you're unsure, open Phantom and copy your address from there — it will start with a random mix of letters and numbers, typically 32–44 characters long.
-        </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-          <!-- Token selector -->
-          <div>
-            <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px">Token</div>
-            <select id="withdrawToken"
-              style="width:100%;font-size:9px;padding:6px 8px;background:rgba(0,0,0,0.3);border:1px solid rgba(99,179,237,0.25);color:#ddd;border-radius:5px;font-family:'Space Mono',monospace">
-              <option value="SOL">SOL — Solana</option>
-              <option value="USDC">USDC — USD Coin (Solana)</option>
-            </select>
-          </div>
-          <!-- Amount -->
-          <div>
-            <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px">Amount</div>
-            <div style="display:flex;gap:4px">
-              <input id="withdrawAmount" type="number" placeholder="0.00" min="0" step="any"
-                style="flex:1;font-size:9px;padding:6px 8px;background:rgba(0,0,0,0.3);border:1px solid rgba(99,179,237,0.25);color:#ddd;border-radius:5px;font-family:'Space Mono',monospace;box-sizing:border-box">
-              <button onclick="setWithdrawMax()" style="font-size:7px;padding:4px 7px;width:auto;margin:0;background:rgba(99,179,237,0.1);border:1px solid rgba(99,179,237,0.2);color:#63b3ed;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace">MAX</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Destination address -->
-        <div style="margin-bottom:10px">
-          <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px">Destination — Solana address only</div>
-          <input id="withdrawDest" type="text" placeholder="Paste your Phantom / Solflare address here (32–44 chars)"
-            style="width:100%;font-size:9px;padding:7px 8px;background:rgba(0,0,0,0.3);border:1px solid rgba(99,179,237,0.25);color:#ddd;border-radius:5px;font-family:'Space Mono',monospace;box-sizing:border-box">
-          <div id="withdrawDestWarning" style="display:none;font-size:7px;color:#ff4d6d;font-family:'Space Mono',monospace;margin-top:3px"></div>
-        </div>
-
-        <!-- Balances -->
-        <div id="withdrawBalances" style="font-size:8px;font-family:'Space Mono',monospace;color:#5a7a68;margin-bottom:10px">
-          <span style="color:#3a5a48">Load balances: </span>
-          <button onclick="loadWithdrawBalances()" style="font-size:7px;padding:2px 8px;width:auto;margin:0;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#5a7a68;border-radius:3px;cursor:pointer;font-family:'Space Mono',monospace">Check balance</button>
-        </div>
-
-        <div id="withdrawStatus" style="font-size:8px;font-family:'Space Mono',monospace;color:#5a7a68;min-height:16px;margin-bottom:10px"></div>
-
-        <div style="display:flex;gap:8px">
-          <button onclick="confirmWithdraw()" id="withdrawConfirmBtn"
-            style="flex:1;padding:9px;margin:0;background:rgba(99,179,237,0.15);border:1px solid rgba(99,179,237,0.4);color:#63b3ed;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-size:9px;font-weight:700">
-            ↑ Send on Solana
-          </button>
-          <button onclick="closeWithdrawPanel()"
-            style="padding:9px 16px;margin:0;background:transparent;border:1px solid rgba(255,255,255,0.08);color:#666;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-size:9px">
-            Cancel
-          </button>
-        </div>
       </div>
 
       <div id="walletReadyStatus" style="font-size:8px;font-family:'Space Mono',monospace;color:#5a7a68;margin-top:8px"></div>
@@ -9005,7 +8944,7 @@ async function loadDegenResults() {
   await runClientDegenScan();
 }
 
-async function forceDεgenScan() {
+async function forceDegenScan() {
   degenData = null;
   await runClientDegenScan();
 }
