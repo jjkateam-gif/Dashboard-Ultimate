@@ -2393,24 +2393,24 @@ details[open] summary::before{transform:rotate(90deg)}
 
 <!-- ========== BLOFIN EXECUTE MODAL ========== -->
 <div id="blofinModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;align-items:center;justify-content:center">
-  <div style="background:#0a1a10;border:1px solid rgba(0,245,160,0.3);border-radius:14px;padding:24px;width:480px;max-width:96vw">
+  <div style="background:#0a1a10;border:1px solid rgba(0,245,160,0.3);border-radius:14px;padding:28px;width:560px;max-width:96vw">
 
     <!-- Header -->
     <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:14px">
       <div>
-        <div style="font-size:13px;font-weight:800;color:#00f5a0;font-family:'Space Mono',monospace">⚡ Execute Trade on BloFin</div>
-        <div id="blofinModalSub" style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px">Fetching...</div>
+        <div style="font-size:16px;font-weight:800;color:#00f5a0;font-family:'Space Mono',monospace">⚡ Execute Trade on BloFin</div>
+        <div id="blofinModalSub" style="font-size:11px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px">Fetching...</div>
       </div>
       <!-- Order Type + Margin Mode -->
       <div style="display:flex;gap:4px;flex-direction:column">
-        <select id="bfOrderType" onchange="updateBlofinDisplay()" style="font-size:8px;padding:3px 6px;background:rgba(0,0,0,0.4);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:4px;font-family:'Space Mono',monospace">
+        <select id="bfOrderType" onchange="updateBlofinDisplay()" style="font-size:12px;padding:5px 10px;background:rgba(0,0,0,0.4);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:4px;font-family:'Space Mono',monospace">
           <option value="market">Market</option>
           <option value="limit">Limit</option>
           <option value="post_only">Post Only</option>
           <option value="fok">FOK</option>
           <option value="ioc">IOC</option>
         </select>
-        <select id="bfMarginMode" style="font-size:8px;padding:3px 6px;background:rgba(0,0,0,0.4);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:4px;font-family:'Space Mono',monospace">
+        <select id="bfMarginMode" style="font-size:12px;padding:5px 10px;background:rgba(0,0,0,0.4);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:4px;font-family:'Space Mono',monospace">
           <option value="cross">Cross</option>
           <option value="isolated">Isolated</option>
         </select>
@@ -2419,27 +2419,27 @@ details[open] summary::before{transform:rotate(90deg)}
 
     <!-- Limit price input (hidden for market orders) -->
     <div id="bfLimitPriceRow" style="display:none;margin-bottom:10px">
-      <input id="bfLimitPrice" type="number" placeholder="Limit price" style="width:100%;padding:6px;background:rgba(0,0,0,0.4);border:1px solid rgba(245,196,0,0.3);color:#f5c400;border-radius:4px;font-size:11px;box-sizing:border-box;font-family:'Space Mono',monospace">
+      <input id="bfLimitPrice" type="number" placeholder="Limit price" style="width:100%;padding:8px;background:rgba(0,0,0,0.4);border:1px solid rgba(245,196,0,0.3);color:#f5c400;border-radius:4px;font-size:14px;box-sizing:border-box;font-family:'Space Mono',monospace">
     </div>
 
     <!-- Position stats panel -->
-    <div style="background:rgba(0,0,0,0.3);border-radius:8px;padding:12px;margin-bottom:10px;font-family:'Space Mono',monospace">
+    <div style="background:rgba(0,0,0,0.3);border-radius:8px;padding:16px;margin-bottom:14px;font-family:'Space Mono',monospace">
       <!-- Leverage selector -->
-      <div style="margin-bottom:10px">
-        <div style="font-size:7px;color:#5a7a68;margin-bottom:5px;text-transform:uppercase;letter-spacing:1px">Leverage</div>
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;color:#5a7a68;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px">Leverage</div>
         <div id="leverageBtns" style="display:flex;gap:4px;flex-wrap:wrap">
-          <button onclick="setBlofinLeverage(1)"  class="lev-btn" data-lev="1"  style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);color:#00f5a0;font-weight:700">1x</button>
-          <button onclick="setBlofinLeverage(2)"  class="lev-btn" data-lev="2"  style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#aaa">2x</button>
-          <button onclick="setBlofinLeverage(5)"  class="lev-btn" data-lev="5"  style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#aaa">5x</button>
-          <button onclick="setBlofinLeverage(10)" class="lev-btn" data-lev="10" style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#aaa">10x</button>
-          <button onclick="setBlofinLeverage(25)" class="lev-btn" data-lev="25" style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#aaa">25x</button>
-          <button onclick="setBlofinLeverage(50)" class="lev-btn" data-lev="50" style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:rgba(245,196,0,0.08);border:1px solid rgba(245,196,0,0.2);color:#f5c400">50x</button>
-          <button onclick="setBlofinLeverage(100)" class="lev-btn" data-lev="100" style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:rgba(255,77,109,0.08);border:1px solid rgba(255,77,109,0.2);color:#ff4d6d">100x</button>
-          <button onclick="setBlofinLeverage(150)" class="lev-btn" data-lev="150" style="font-size:8px;padding:4px 8px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:rgba(255,0,0,0.1);border:1px solid rgba(255,0,0,0.3);color:#ff0000">150x</button>
+          <button onclick="setBlofinLeverage(1)"  class="lev-btn" data-lev="1"  style="font-size:12px;padding:6px 12px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);color:#00f5a0;font-weight:700">1x</button>
+          <button onclick="setBlofinLeverage(2)"  class="lev-btn" data-lev="2"  style="font-size:12px;padding:6px 12px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#aaa">2x</button>
+          <button onclick="setBlofinLeverage(5)"  class="lev-btn" data-lev="5"  style="font-size:12px;padding:6px 12px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#aaa">5x</button>
+          <button onclick="setBlofinLeverage(10)" class="lev-btn" data-lev="10" style="font-size:12px;padding:6px 12px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#aaa">10x</button>
+          <button onclick="setBlofinLeverage(25)" class="lev-btn" data-lev="25" style="font-size:12px;padding:6px 12px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#aaa">25x</button>
+          <button onclick="setBlofinLeverage(50)" class="lev-btn" data-lev="50" style="font-size:12px;padding:6px 12px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:rgba(245,196,0,0.08);border:1px solid rgba(245,196,0,0.2);color:#f5c400">50x</button>
+          <button onclick="setBlofinLeverage(100)" class="lev-btn" data-lev="100" style="font-size:12px;padding:6px 12px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:rgba(255,77,109,0.08);border:1px solid rgba(255,77,109,0.2);color:#ff4d6d">100x</button>
+          <button onclick="setBlofinLeverage(150)" class="lev-btn" data-lev="150" style="font-size:12px;padding:6px 12px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;background:rgba(255,0,0,0.1);border:1px solid rgba(255,0,0,0.3);color:#ff0000">150x</button>
         </div>
       </div>
       <!-- Stats grid -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:9px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:14px">
         <div><span style="color:#5a7a68">Collateral:</span> <span id="bfCollateral" style="color:#fff"></span></div>
         <div><span style="color:#5a7a68">Position size:</span> <span id="bfSize" style="color:#fff;font-weight:700"></span></div>
         <div><span style="color:#5a7a68">Mark price:</span> <span id="bfMark" style="color:#fff"></span></div>
@@ -2447,21 +2447,21 @@ details[open] summary::before{transform:rotate(90deg)}
         <div><span style="color:#5a7a68">Stop Loss:</span> <span id="bfSL" style="color:#ff4d6d"></span></div>
         <div><span style="color:#5a7a68">Take Profit:</span> <span id="bfTP" style="color:#00f5a0"></span></div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:8px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.05)">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:12px;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.05)">
         <div><span style="color:#3a5a48">Maker: 0.02% · Taker: 0.06%</span></div>
         <div><span style="color:#3a5a48">Instrument:</span> <span id="bfInstId" style="color:#5a7a68"></span></div>
       </div>
     </div>
 
-    <div id="blofinExecStatus" style="font-size:8px;font-family:'Space Mono',monospace;color:#5a7a68;min-height:18px;margin-bottom:12px"></div>
+    <div id="blofinExecStatus" style="font-size:12px;font-family:'Space Mono',monospace;color:#5a7a68;min-height:18px;margin-bottom:12px"></div>
 
     <div style="display:flex;gap:8px">
       <button id="blofinConfirmBtn" onclick="confirmBlofinExec()"
-        style="flex:1;padding:10px;margin:0;background:rgba(0,245,160,0.2);border:1px solid rgba(0,245,160,0.5);color:#00f5a0;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-size:9px;font-weight:700">
+        style="flex:1;padding:12px;margin:0;background:rgba(0,245,160,0.2);border:1px solid rgba(0,245,160,0.5);color:#00f5a0;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-size:13px;font-weight:700">
         ⚡ Confirm Execute
       </button>
       <button onclick="closeBlofinModal()"
-        style="flex:1;padding:10px;margin:0;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#666;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-size:9px">
+        style="flex:1;padding:12px;margin:0;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#666;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-size:13px">
         Cancel
       </button>
     </div>
@@ -9741,7 +9741,7 @@ function renderOverview() {
     { label:'ETH Dominance', value: (g.market_cap_percentage?.eth||0).toFixed(1)+'%', sub: 'ETH market share', color: '#63b3ed' },
     { label:'Active Cryptos', value: (g.active_cryptocurrencies||0).toLocaleString(), sub: 'tracked globally', color: '#aaa' },
     { label:'Total Volume 24h', value: fmtBig(g.total_volume?.usd||0), sub: 'cross-exchange', color: '#a78bfa' },
-    { label:'Cycle Day', value: 'Day ' + cycle.daysSince, sub: cycle.phase.replace(' ⚠️',''), color: cycle.phaseColor },
+    { label:'Cycle Day', value: 'Day ' + cycle.daysSince, sub: 'post-halving', color: cycle.phaseColor },
     { label:'BTC Price', value: btcCoin ? '$' + (btcCoin.current_price||0).toLocaleString() : '—', sub: btcCoin ? (btcCoin.c7d||0).toFixed(1)+'% 7d' : '', color: '#f5c400' },
     { label:'ETH Price', value: ethCoin ? '$' + (ethCoin.current_price||0).toLocaleString() : '—', sub: ethCoin ? (ethCoin.c7d||0).toFixed(1)+'% 7d' : '', color: '#63b3ed' },
   ];
@@ -9811,7 +9811,6 @@ function renderOverview() {
     { label:'Market cap vs 24h vol', value: fmtBig(g.total_volume?.usd||0) + ' / ' + fmtBig(g.total_market_cap?.usd||0), color: '#aaa' },
     { label:'Top DeFi TVL (DeFiLlama)', value: INTEL.defiTVL[0] ? `$${(INTEL.defiTVL[0].tvl/1e9).toFixed(1)}B — ${INTEL.defiTVL[0].name}` : 'Loading...', color: '#a78bfa' },
     { label:'Active cryptos', value: (g.active_cryptocurrencies||0).toLocaleString() + ' tracked', color: '#aaa' },
-    { label:'Halving cycle phase', value: cycle.phase, color: cycle.phaseColor },
     { label:'vs historical peaks', value: cycle.historicalNote || '', color: cycle.daysSince >= 560 ? '#ff4d6d' : cycle.daysSince >= 450 ? '#ff6b35' : '#00f5a0' },
     { label:'Projected bottom window', value: cycle.bottomProjection || '—', color: '#a78bfa' },
   ];
