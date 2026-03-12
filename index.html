@@ -12119,19 +12119,18 @@ async function runProbEngine() {
   renderProbeResults(results, tf);
 
   // Save high-confidence recommendations for tracking
-  results.forEach(r => {
-    if (r.prob >= 60) {
-      saveRecommendation({
-        symbol: r.sym || r.asset,
-        direction: r.direction.toUpperCase(),
-        probability: r.prob,
-        entryPrice: r.price,
-        targetPrice: r.rrData ? r.rrData.target : null,
-        stopPrice: r.rrData ? r.rrData.stop : null,
-        rrRatio: r.rr
-      });
-    }
-  });
+  const savePromises = results.filter(r => r.prob >= 60).map(r =>
+    saveRecommendation({
+      symbol: r.sym || r.asset,
+      direction: r.direction.toUpperCase(),
+      probability: r.prob,
+      entryPrice: r.price,
+      targetPrice: r.rrData ? r.rrData.target : null,
+      stopPrice: r.rrData ? r.rrData.stop : null,
+      rrRatio: r.rr
+    })
+  );
+  await Promise.all(savePromises);
   loadRecommendations();
 
 
@@ -12628,9 +12627,6 @@ function renderRecHistory(recs) {
     return '<div style="display:grid;grid-template-columns:90px 70px 60px 65px 65px 60px 50px;gap:6px;padding:6px 8px;font-size:9px;font-family:&apos;Space Mono&apos;,monospace;border-bottom:1px solid rgba(255,255,255,0.02)"><span style="color:#888">' + date + '</span><span style="color:#e0e0e0">' + r.symbol + '</span><span style="color:' + dirColor + '">' + r.direction + '</span><span style="color:#63b3ed">' + (r.probability || 0) + '%</span><span style="color:' + outcomeColor + '">' + outcomeIcon + '</span><span style="color:' + pnlColor + '">' + pnl + '</span><span style="color:#888">' + (r.outcome || 'pending') + '</span></div>';
   }).join('');
   el.innerHTML = header + rows;
-}
-
-  }).join('');
 }
 
 // ════════════════════════════════════════════════════════════════
