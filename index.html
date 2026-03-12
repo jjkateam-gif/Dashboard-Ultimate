@@ -792,7 +792,103 @@ details[open] summary::before{transform:rotate(90deg)}
     ⚡ Live Trading
     <span id="liveTradeDot" style="display:none;position:absolute;top:6px;right:6px;width:7px;height:7px;background:#ff4d6d;border-radius:50%;animation:livePulse 1.2s ease-in-out infinite"></span>
   </button>
+  <button onclick="switchPageTab('predictions')" id="pageTab_predictions"
+    style="font-family:'Space Mono',monospace;font-size:10px;padding:8px 20px;background:transparent;border:1px solid transparent;border-bottom:none;color:#aaa;cursor:pointer;border-radius:8px 8px 0 0;margin-bottom:-1px">
+    🎲 Predictions
+  </button>
 </div>
+
+<!-- ========== PREDICTIONS PAGE ========== -->
+<div id="page_predictions" style="display:none">
+  <div style="display:grid;grid-template-columns:340px 1fr;gap:16px">
+    <!-- Left Sidebar -->
+    <div>
+      <!-- Bot Status -->
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title" style="color:#a855f7">⚡ BOT STATUS</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0">
+          <span style="font-family:'Space Mono',monospace;font-size:10px;color:#5a7a68">Engine:</span>
+          <span id="predBotStatus" style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:#ff4d6d">Stopped</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0">
+          <span style="font-family:'Space Mono',monospace;font-size:10px;color:#5a7a68">Markets Tracked:</span>
+          <span id="predMarketCount" style="font-family:'Space Mono',monospace;font-size:10px;color:#e0e0e0">0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0">
+          <span style="font-family:'Space Mono',monospace;font-size:10px;color:#5a7a68">Active Signals:</span>
+          <span id="predSignalCount" style="font-family:'Space Mono',monospace;font-size:10px;color:#ffd60a">0</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button onclick="startPredictionBot()" style="flex:1;font-family:'Space Mono',monospace;font-size:9px;padding:8px;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:6px;cursor:pointer">▶ Start Bot</button>
+          <button onclick="stopPredictionBot()" style="flex:1;font-family:'Space Mono',monospace;font-size:9px;padding:8px;background:rgba(255,77,109,0.15);border:1px solid rgba(255,77,109,0.3);color:#ff4d6d;border-radius:6px;cursor:pointer">⏹ Stop Bot</button>
+        </div>
+      </div>
+
+      <!-- Strategy Config -->
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title" style="color:#a855f7">⚙️ STRATEGY CONFIG</div>
+        <div style="margin:8px 0">
+          <label style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;display:block;margin-bottom:4px">Bet Size (USDC)</label>
+          <input id="predBetSize" type="number" value="10" min="1" max="1000" style="width:100%;font-family:'Space Mono',monospace;font-size:11px;padding:6px 8px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#e0e0e0;border-radius:4px">
+        </div>
+        <div style="margin:8px 0">
+          <label style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;display:block;margin-bottom:4px">Edge Threshold (%)</label>
+          <input id="predEdgeThreshold" type="number" value="10" min="1" max="50" style="width:100%;font-family:'Space Mono',monospace;font-size:11px;padding:6px 8px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#e0e0e0;border-radius:4px">
+        </div>
+        <div style="display:flex;gap:8px;margin:10px 0">
+          <label style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;display:flex;align-items:center;gap:4px"><input type="checkbox" id="predSniperEnabled" checked> BTC Sniper</label>
+          <label style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;display:flex;align-items:center;gap:4px"><input type="checkbox" id="predArbEnabled" checked> Yes/No Arb</label>
+        </div>
+        <button onclick="savePredictionConfig()" style="width:100%;font-family:'Space Mono',monospace;font-size:9px;padding:8px;background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.3);color:#a855f7;border-radius:6px;cursor:pointer;margin-top:4px">💾 Save Config</button>
+      </div>
+
+      <!-- Performance Summary -->
+      <div class="card">
+        <div class="card-title" style="color:#a855f7">📊 PERFORMANCE</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+          <div style="text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Win Rate</div><div id="predWinRate" style="font-size:22px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">—</div></div>
+          <div style="text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Total P&L</div><div id="predTotalPnl" style="font-size:22px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">$0</div></div>
+          <div style="text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Trades</div><div id="predTradeCount" style="font-size:18px;font-weight:700;font-family:'Space Mono',monospace;color:#e0e0e0">0</div></div>
+          <div style="text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">ROI</div><div id="predROI" style="font-size:18px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">—</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div>
+      <!-- Active Markets -->
+      <div class="card" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div class="card-title" style="color:#a855f7">🎲 ACTIVE POLYMARKET MARKETS</div>
+          <button onclick="loadPredictionMarkets()" style="font-family:'Space Mono',monospace;font-size:9px;padding:5px 12px;background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.3);color:#a855f7;border-radius:6px;cursor:pointer">↻ Refresh</button>
+        </div>
+        <div id="predMarketsList" style="max-height:300px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 transparent">
+          <div style="text-align:center;padding:30px;color:#5a7a68;font-family:'Space Mono',monospace;font-size:10px">Loading prediction markets...</div>
+        </div>
+      </div>
+
+      <!-- Live Signals -->
+      <div class="card" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div class="card-title" style="color:#ffd60a">⚡ LIVE SIGNALS</div>
+          <span id="predSSEDot" style="width:8px;height:8px;border-radius:50%;background:#ff4d6d;display:inline-block" title="SSE disconnected"></span>
+        </div>
+        <div id="predSignalsList" style="max-height:250px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 transparent">
+          <div style="text-align:center;padding:30px;color:#5a7a68;font-family:'Space Mono',monospace;font-size:10px">Waiting for signals...</div>
+        </div>
+      </div>
+
+      <!-- Trade Log -->
+      <div class="card">
+        <div class="card-title" style="color:#a855f7">📋 TRADE LOG</div>
+        <div id="predTradeLog" style="max-height:200px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 transparent">
+          <div style="text-align:center;padding:20px;color:#5a7a68;font-family:'Space Mono',monospace;font-size:10px">No trades yet</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 
 <!-- ========== LIVE TRADING PAGE ========== -->
 <div id="page_live" style="display:none">
@@ -8168,7 +8264,7 @@ let dnaData           = null;
 // ── Page tab switching ─────────────────────────────────────
 
 function switchPageTab(tab) {
-  ['backtester', 'degen', 'intel', 'trades', 'alerts', 'paper', 'live'].forEach(t => {
+  ['backtester', 'degen', 'intel', 'trades', 'alerts', 'paper', 'live', 'predictions'].forEach(t => {
     const btn  = $('pageTab_' + t);
     const page = $('page_'    + t);
     const active = t === tab;
@@ -8179,6 +8275,7 @@ function switchPageTab(tab) {
         alerts: { bg:'rgba(0,190,255,0.12)',   border:'rgba(0,190,255,0.4)',   text:'#00bfff' },
         paper:  { bg:'rgba(167,139,250,0.12)', border:'rgba(167,139,250,0.4)', text:'#a78bfa' },
         live:   { bg:'rgba(255,77,109,0.12)',  border:'rgba(255,77,109,0.4)',  text:'#ff4d6d' },
+        predictions: { bg:'rgba(168,85,247,0.12)', border:'rgba(168,85,247,0.4)', text:'#a855f7' },
       };
       const c = colorMap[t] || { bg:'rgba(0,245,160,0.12)', border:'rgba(0,245,160,0.4)', text:'#00f5a0' };
       btn.style.background  = active ? c.bg     : 'transparent';
@@ -8211,6 +8308,8 @@ function switchPageTab(tab) {
     checkWalletLoaded();
   } else if (tab === 'live') {
     liveRefreshAll();
+  } else if (tab === 'predictions') {
+    loadPredictionMarkets();
   } else {
     clearInterval(degenRefreshTimer); degenRefreshTimer = null;
     clearInterval(liveFeedTimer);     liveFeedTimer     = null;
@@ -15976,6 +16075,213 @@ function renderLiveMarkets(markets) {
 
 // Auto-refresh live dashboard every 30 seconds when visible
 let liveAutoRefreshTimer = null;
+
+
+// ════════════════════════════════════════════════════════════════
+// 🎲 POLYMARKET PREDICTION ENGINE
+// ════════════════════════════════════════════════════════════════
+const PRED_STATE = { marketsLoaded: false, loading: false, sseConnected: false };
+let _predSSE = null;
+
+async function loadPredictionMarkets() {
+  if (PRED_STATE.loading) return;
+  PRED_STATE.loading = true;
+  try {
+    const token = localStorage.getItem('dash_token');
+    const headers = { 'Authorization': 'Bearer ' + token };
+    const [marketsR, signalsR, perfR] = await Promise.all([
+      fetch(BACKEND_URL + '/predictions/markets', { headers }),
+      fetch(BACKEND_URL + '/predictions/signals', { headers }),
+      fetch(BACKEND_URL + '/predictions/performance', { headers }),
+    ]);
+    if (marketsR.ok) {
+      const data = await marketsR.json();
+      renderPredictionMarkets(data.markets || []);
+      const countEl = document.getElementById('predMarketCount');
+      if (countEl) countEl.textContent = data.total || 0;
+    }
+    if (signalsR.ok) {
+      const data = await signalsR.json();
+      renderPredictionSignals(data.signals || []);
+      const countEl = document.getElementById('predSignalCount');
+      if (countEl) countEl.textContent = (data.signals || []).length;
+    }
+    if (perfR.ok) {
+      const data = await perfR.json();
+      renderPredictionPerformance(data);
+    }
+    PRED_STATE.marketsLoaded = true;
+    if (!PRED_STATE.sseConnected) connectPredictionStream();
+  } catch (e) {
+    console.error('Prediction load error:', e);
+  } finally {
+    PRED_STATE.loading = false;
+  }
+}
+
+function connectPredictionStream() {
+  if (_predSSE) return;
+  const token = localStorage.getItem('dash_token');
+  if (!token) return;
+  try {
+    _predSSE = new EventSource(BACKEND_URL + '/predictions/stream?token=' + encodeURIComponent(token));
+    _predSSE.addEventListener('connected', () => {
+      PRED_STATE.sseConnected = true;
+      const dot = document.getElementById('predSSEDot');
+      if (dot) { dot.style.background = '#00f5a0'; dot.title = 'SSE connected'; }
+    });
+    _predSSE.addEventListener('signals', (e) => {
+      try {
+        const signals = JSON.parse(e.data);
+        renderPredictionSignals(signals);
+      } catch {}
+    });
+    _predSSE.addEventListener('markets', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        const countEl = document.getElementById('predMarketCount');
+        if (countEl) countEl.textContent = data.count || 0;
+      } catch {}
+    });
+    _predSSE.addEventListener('status', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        const el = document.getElementById('predBotStatus');
+        if (el) { el.textContent = data.running ? 'Running' : 'Stopped'; el.style.color = data.running ? '#00f5a0' : '#ff4d6d'; }
+      } catch {}
+    });
+    _predSSE.onerror = () => {
+      _predSSE.close(); _predSSE = null; PRED_STATE.sseConnected = false;
+      const dot = document.getElementById('predSSEDot');
+      if (dot) { dot.style.background = '#ff4d6d'; dot.title = 'SSE disconnected'; }
+      setTimeout(connectPredictionStream, 15000);
+    };
+  } catch {}
+}
+
+function renderPredictionMarkets(markets) {
+  const el = document.getElementById('predMarketsList');
+  if (!el) return;
+  if (markets.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:10px">No crypto prediction markets found</div>';
+    return;
+  }
+  el.innerHTML = markets.slice(0, 30).map(m => {
+    const prices = m.outcomePrices || [];
+    const yesP = prices[0] ? (parseFloat(prices[0]) * 100).toFixed(1) : '\u2014';
+    const noP = prices[1] ? (parseFloat(prices[1]) * 100).toFixed(1) : '\u2014';
+    const vol = m.volume >= 1000000 ? '$' + (m.volume / 1000000).toFixed(1) + 'M' : m.volume >= 1000 ? '$' + (m.volume / 1000).toFixed(1) + 'K' : '$' + m.volume.toFixed(0);
+    const endDate = m.endDate ? new Date(m.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+    return '<div style="padding:8px 10px;background:rgba(0,0,0,0.2);border-radius:6px;margin-bottom:4px;border-left:3px solid rgba(168,85,247,0.4)">' +
+      '<div style="font-family:\'Space Mono\',monospace;font-size:10px;color:#e0e0e0;line-height:1.3;margin-bottom:4px">' + (m.question || 'Unknown market').substring(0, 120) + '</div>' +
+      '<div style="display:flex;gap:12px;font-family:\'Space Mono\',monospace;font-size:9px">' +
+        '<span style="color:#00f5a0">YES ' + yesP + '%</span>' +
+        '<span style="color:#ff4d6d">NO ' + noP + '%</span>' +
+        '<span style="color:#5a7a68">Vol: ' + vol + '</span>' +
+        (endDate ? '<span style="color:#555">Ends: ' + endDate + '</span>' : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function renderPredictionSignals(signals) {
+  const el = document.getElementById('predSignalsList');
+  if (!el) return;
+  const countEl = document.getElementById('predSignalCount');
+  if (countEl) countEl.textContent = signals.length;
+  if (signals.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:10px">No active signals \u2014 monitoring markets...</div>';
+    return;
+  }
+  el.innerHTML = signals.map(s => {
+    const isSniper = s.type === 'sniper';
+    const borderColor = isSniper ? '#ffd60a' : '#00f5a0';
+    const typeLabel = isSniper ? '\ud83c\udfaf SNIPER' : '\u267b\ufe0f ARBITRAGE';
+    const detail = isSniper
+      ? '<span style="color:#ffd60a">Edge: ' + s.edgePct + '% | Direction: ' + s.direction + '</span> <span style="color:#5a7a68">| Real: $' + (s.realPrice||0).toLocaleString() + ' vs Threshold: $' + (s.threshold||0).toLocaleString() + '</span>'
+      : '<span style="color:#00f5a0">Profit: +' + s.guaranteedProfit + '% | YES: $' + (s.yesPrice||0).toFixed(3) + ' + NO: $' + (s.noPrice||0).toFixed(3) + ' = $' + (s.totalCost||0).toFixed(3) + '</span>';
+    const timeAgo = formatNewsTimeAgo(s.timestamp);
+    return '<div style="padding:8px 10px;background:rgba(0,0,0,0.25);border-radius:6px;margin-bottom:4px;border-left:3px solid ' + borderColor + '">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
+        '<span style="font-family:\'Space Mono\',monospace;font-size:9px;font-weight:700;color:' + borderColor + '">' + typeLabel + '</span>' +
+        '<span style="font-family:\'Space Mono\',monospace;font-size:8px;color:#555">' + timeAgo + '</span>' +
+      '</div>' +
+      '<div style="font-family:\'Space Mono\',monospace;font-size:10px;color:#e0e0e0;margin-bottom:3px">' + (s.market || '').substring(0, 100) + '</div>' +
+      '<div style="font-family:\'Space Mono\',monospace;font-size:9px">' + detail + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function renderPredictionPerformance(data) {
+  const perf = data.performance || [];
+  const config = data.config || {};
+  const bs = document.getElementById('predBetSize'); if (bs && config.betSize) bs.value = config.betSize;
+  const et = document.getElementById('predEdgeThreshold'); if (et && config.edgeThreshold) et.value = (config.edgeThreshold * 100);
+  const se = document.getElementById('predSniperEnabled'); if (se) se.checked = config.sniperEnabled !== false;
+  const ae = document.getElementById('predArbEnabled'); if (ae) ae.checked = config.arbEnabled !== false;
+
+  const wins = perf.filter(p => p.outcome === 'win').length;
+  const losses = perf.filter(p => p.outcome === 'loss').length;
+  const total = wins + losses;
+  const winRate = total > 0 ? ((wins / total) * 100).toFixed(1) + '%' : '\u2014';
+  const totalPnl = perf.reduce((s, p) => s + (p.pnl || 0), 0);
+
+  const wrEl = document.getElementById('predWinRate');
+  if (wrEl) { wrEl.textContent = winRate; wrEl.style.color = total > 0 && wins/total >= 0.55 ? '#00f5a0' : total > 0 ? '#ff4d6d' : '#5a7a68'; }
+  const plEl = document.getElementById('predTotalPnl');
+  if (plEl) { plEl.textContent = '$' + totalPnl.toFixed(2); plEl.style.color = totalPnl > 0 ? '#00f5a0' : totalPnl < 0 ? '#ff4d6d' : '#5a7a68'; }
+  const tcEl = document.getElementById('predTradeCount'); if (tcEl) tcEl.textContent = total;
+
+  const logEl = document.getElementById('predTradeLog');
+  if (logEl && perf.length > 0) {
+    logEl.innerHTML = perf.slice(0, 20).map(p => {
+      const icon = p.outcome === 'win' ? '\u2705' : p.outcome === 'loss' ? '\u274c' : '\u23f3';
+      const pnlColor = (p.pnl || 0) > 0 ? '#00f5a0' : (p.pnl || 0) < 0 ? '#ff4d6d' : '#5a7a68';
+      return '<div style="display:flex;justify-content:space-between;padding:4px 8px;font-family:\'Space Mono\',monospace;font-size:9px;border-bottom:1px solid rgba(255,255,255,0.02)">' +
+        '<span style="color:#888">' + new Date(p.timestamp).toLocaleString() + '</span>' +
+        '<span style="color:#e0e0e0">' + (p.market || '').substring(0, 40) + '</span>' +
+        '<span>' + icon + '</span>' +
+        '<span style="color:' + pnlColor + '">' + (p.pnl > 0 ? '+' : '') + (p.pnl || 0).toFixed(2) + '</span>' +
+      '</div>';
+    }).join('');
+  }
+}
+
+async function startPredictionBot() {
+  try {
+    const token = localStorage.getItem('dash_token');
+    await fetch(BACKEND_URL + '/predictions/start', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } });
+    const el = document.getElementById('predBotStatus');
+    if (el) { el.textContent = 'Running'; el.style.color = '#00f5a0'; }
+  } catch {}
+}
+
+async function stopPredictionBot() {
+  try {
+    const token = localStorage.getItem('dash_token');
+    await fetch(BACKEND_URL + '/predictions/stop', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } });
+    const el = document.getElementById('predBotStatus');
+    if (el) { el.textContent = 'Stopped'; el.style.color = '#ff4d6d'; }
+  } catch {}
+}
+
+async function savePredictionConfig() {
+  try {
+    const token = localStorage.getItem('dash_token');
+    const config = {
+      betSize: parseFloat(document.getElementById('predBetSize')?.value || 10),
+      edgeThreshold: parseFloat(document.getElementById('predEdgeThreshold')?.value || 10) / 100,
+      sniperEnabled: document.getElementById('predSniperEnabled')?.checked ?? true,
+      arbEnabled: document.getElementById('predArbEnabled')?.checked ?? true,
+    };
+    await fetch(BACKEND_URL + '/predictions/config', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    });
+    alert('Config saved!');
+  } catch {}
+}
 
 </script>
 </body>

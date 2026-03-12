@@ -109,6 +109,17 @@ async function initDB() {
       console.error('News aggregator init error (core routes still working):', newsErr.message);
     }
 
+    // Load prediction engine routes (separate try/catch so it doesn't break core routes)
+    try {
+      const predictionEngine = require('./services/predictionEngine');
+      const predictionRoutes = require('./routes/predictions');
+      app.use('/predictions', predictionRoutes);
+      predictionEngine.start();
+      console.log('Prediction engine started.');
+    } catch (predErr) {
+      console.error('Prediction engine init error (core routes still working):', predErr.message);
+    }
+
     // Start recommendation tracker (resolves pending recs every 5 min)
     try {
       const recommendationTracker = require('./services/recommendationTracker');
