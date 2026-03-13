@@ -925,7 +925,7 @@ function switchAuthView(view) {
 
 <!-- ========== ONBOARDING MODAL ========== -->
 <div id="onboardingModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:10000;align-items:center;justify-content:center;font-family:'Space Mono',monospace">
-  <div style="max-width:560px;padding:40px;background:linear-gradient(135deg,#0d1f14,#0a1520);border:2px solid rgba(0,245,160,0.3);border-radius:20px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.8)">
+  <div style="max-width:560px;padding:40px;background:linear-gradient(135deg,#0d1f14,#0a1520);border:2px solid rgba(0,245,160,0.3);border-radius:20px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.8);max-height:90vh;overflow-y:auto">
     <div style="font-size:48px;margin-bottom:16px">🎯</div>
     <h2 style="font-size:22px;color:#00f5a0;margin:0 0 8px;font-weight:700">Welcome to Your Trading Dashboard</h2>
     <p style="font-size:13px;color:#5a7a68;margin:0 0 28px">AI-powered crypto trading signals & automation</p>
@@ -1378,8 +1378,8 @@ function switchAuthView(view) {
     </div>
 
     <!-- Upgrade Modal -->
-    <div id="upgradeModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.75);display:none;align-items:center;justify-content:center">
-      <div style="background:#0d1a14;border:1px solid rgba(0,245,160,0.3);border-radius:12px;padding:28px;max-width:420px;width:90%;font-family:'Space Mono',monospace">
+    <div id="upgradeModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.75);align-items:center;justify-content:center">
+      <div style="background:#0d1a14;border:1px solid rgba(0,245,160,0.3);border-radius:12px;padding:28px;max-width:420px;width:90%;font-family:'Space Mono',monospace;max-height:90vh;overflow-y:auto">
         <div style="font-size:14px;font-weight:bold;color:#00f5a0;margin-bottom:6px">🚀 Upgrade Your Plan</div>
         <div style="font-size:9px;color:#aaa;margin-bottom:18px">Unlock more AI calls per month</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px">
@@ -1665,8 +1665,8 @@ function switchAuthView(view) {
 </div>
 
 <!-- ===== PAPER TRADE CONFIG POPUP ===== -->
-<div id="ptPopupOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)">
-  <div style="background:#0d1b0f;border:1px solid rgba(167,139,250,0.4);border-radius:10px;padding:20px 24px;max-width:420px;width:90%;font-family:'Space Mono',monospace;box-shadow:0 8px 40px rgba(0,0,0,0.6)">
+<div id="ptPopupOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(4px)">
+  <div style="background:#0d1b0f;border:1px solid rgba(167,139,250,0.4);border-radius:10px;padding:20px 24px;max-width:420px;width:90%;font-family:'Space Mono',monospace;box-shadow:0 8px 40px rgba(0,0,0,0.6);max-height:90vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <span style="font-size:13px;font-weight:700;color:#a78bfa">📄 Paper Trade Setup</span>
       <button onclick="closePtPopup()" style="background:none;border:none;color:var(--text-muted);font-size:16px;cursor:pointer">&times;</button>
@@ -2414,8 +2414,8 @@ function switchAuthView(view) {
       </div>
 
       <!-- BloFin Connect Popup (hidden by default) -->
-      <div id="blofinConnectPopup" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:none;align-items:center;justify-content:center">
-        <div style="background:#0d1f14;border:1px solid rgba(255,107,53,0.3);border-radius:12px;padding:24px;max-width:480px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.5)">
+      <div id="blofinConnectPopup" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center">
+        <div style="background:#0d1f14;border:1px solid rgba(255,107,53,0.3);border-radius:12px;padding:24px;max-width:480px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.5);max-height:90vh;overflow-y:auto">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
             <div style="font-size:16px;font-weight:800;color:#ff6b35;font-family:'Space Mono',monospace">🔗 Connect BloFin</div>
             <button onclick="closeBlofinConnectPopup()" style="font-size:18px;background:none;border:none;color:#5a7a68;cursor:pointer;padding:4px 8px">✕</button>
@@ -3952,27 +3952,6 @@ function buildADXSignals(d){
     if(adx[i]>minADX&&diP[i-1]>=diN[i-1]&&diP[i]<diN[i])sell[i]=true;
   }
   return{name:'ADX',buy,sell}
-}
-
-function combineSignals(parts,logic){
-  const n=parts[0].buy.length;
-  const rawBuy=Array(n).fill(false),rawSell=Array(n).fill(false);
-  if(logic==='or'){
-    for(let i=0;i<n;i++){for(const p of parts){if(p.buy[i])rawBuy[i]=true;if(p.sell[i])rawSell[i]=true}}
-  } else {
-    for(let i=0;i<n;i++){let b=true,s=true;for(const p of parts){b=b&&p.buy[i];s=s&&p.sell[i]}rawBuy[i]=b;rawSell[i]=s}
-  }
-  // Cooldown: fixed 3-bar minimum, max 10 bars — prevents same-direction signal spam
-  // but does NOT scale with dataset size (that was causing no signals after warmup)
-  const cooldown = 3;
-  const warmup = 50; // skip first 50 bars while indicators warm up
-  const buy=Array(n).fill(false),sell=Array(n).fill(false);
-  let lastBuy=-cooldown, lastSell=-cooldown;
-  for(let i=warmup;i<n;i++){
-    if(rawBuy[i]&&i-lastBuy>=cooldown&&i-lastSell>=2){buy[i]=true;lastBuy=i}
-    if(rawSell[i]&&i-lastSell>=cooldown&&i-lastBuy>=2){sell[i]=true;lastSell=i}
-  }
-  return{buy,sell}
 }
 
 // ============================================================
@@ -13279,7 +13258,7 @@ async function logBestTrade(idx) {
   const stopPrice   = isLong ? entry * (1 - slPct / 100) : entry * (1 + slPct / 100);
 
   // Get current timeframe
-  const tfSel = document.getElementById('probeTfSelect');
+  const tfSel = document.getElementById('probeTimeframe');
   const tf = tfSel ? tfSel.value : '15m';
 
   const result = await saveRecommendation({
@@ -14374,8 +14353,8 @@ function amGetTg() {
   };
 }
 
-// ── Fire a single alert ────────────────────────────────────────
-async function fireAlert(alert, message, detail='') {
+// ── Fire a single alert (core implementation) ─────────────────
+async function fireAlertCore(alert, message, detail='') {
   const now = Date.now();
   const alerts = amLoad();
   const idx    = alerts.findIndex(a => a.id === alert.id);
@@ -16919,9 +16898,8 @@ function execFromBestTrades(idx) {
 }
 
 // ── Wire live strategy alerts → auto-execution ────────────────
-const _origFireAlert = fireAlert;
 async function fireAlert(alert, message, detail) {
-  await _origFireAlert(alert, message, detail);
+  await fireAlertCore(alert, message, detail);
   if (alert.liveExec && alert.type === 'strategy' && walletState.loaded && true /* BloFin supports all */) {
     const isLong  = message.includes('LONG')  || message.includes('🟢');
     const isShort = message.includes('SHORT') || message.includes('🔴');
