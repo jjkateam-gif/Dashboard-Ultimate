@@ -232,9 +232,8 @@ async function openPosition({ creds, instId, direction, size, leverage, orderTyp
     orderType: orderType || 'market',
     size: String(size),     // Number of contracts
     positionSide: direction, // 'long' or 'short' for hedge mode
+    brokerId: creds.brokerId || BROKER_ID || '',  // Always include — BloFin requires this field
   };
-  const bid = creds.brokerId || BROKER_ID;
-  if (bid) body.brokerId = bid;
   if (orderType === 'limit' && price) {
     body.price = String(price);
   }
@@ -282,9 +281,8 @@ async function closePosition({ creds, instId, direction, marginMode, demo }) {
     orderType: 'market',
     size: closeSize,
     positionSide: direction,
+    brokerId: creds.brokerId || BROKER_ID || '',  // Always include
   };
-  const bid2 = creds.brokerId || BROKER_ID;
-  if (bid2) body.brokerId = bid2;
 
   const data = await privatePost('/api/v1/trade/order', body, creds, true, demo);
   const orderId = data && data[0] ? data[0].orderId : (data?.orderId || null);
@@ -293,9 +291,7 @@ async function closePosition({ creds, instId, direction, marginMode, demo }) {
 }
 
 async function cancelOrder(creds, instId, orderId, demo) {
-  const body = { instId, orderId };
-  const bid3 = creds.brokerId || BROKER_ID;
-  if (bid3) body.brokerId = bid3;
+  const body = { instId, orderId, brokerId: creds.brokerId || BROKER_ID || '' };
   return privatePost('/api/v1/trade/cancel-order', body, creds, true, demo);
 }
 
