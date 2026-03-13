@@ -2921,7 +2921,7 @@ function switchAuthView(view) {
       </div>
       <!-- Stats grid -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:14px">
-        <div><span style="color:#5a7a68">Collateral:</span> <span id="bfCollateral" style="color:#fff"></span></div>
+        <div><span style="color:#5a7a68">Collateral:</span> $<input id="bfCollateral" type="number" min="5" step="5" style="width:80px;background:#0a1a10;border:1px solid rgba(0,245,160,0.3);color:#fff;padding:4px 8px;border-radius:4px;font-family:'Space Mono',monospace;font-size:14px;font-weight:700" oninput="updateBlofinCollateral()"> USDT</div>
         <div><span style="color:#5a7a68">Position size:</span> <span id="bfSize" style="color:#fff;font-weight:700"></span></div>
         <div><span style="color:#5a7a68">Last Price:</span> <span id="bfMark" style="color:#fff"></span> <span id="bfPriceAge" style="color:#555;font-size:10px"></span></div>
         <div><span style="color:#5a7a68">Liq. price:</span> <span id="bfLiq" style="color:#ff4d6d;font-weight:700"></span><div id="bfLiqDisclaimer" style="font-size:10px;color:#886644;margin-top:2px;line-height:1.3">⚠️ Estimated — actual liquidation depends on exchange margin tiers. Check BloFin for exact values.</div></div>
@@ -16472,7 +16472,7 @@ function updateBlofinDisplay() {
   const fmt = n => n ? n.toLocaleString(undefined, {maximumFractionDigits: 4}) : '--';
 
   const el = id => $(id);
-  if (el('bfCollateral')) el('bfCollateral').textContent = '$' + collateralUsd.toFixed(0) + ' USDT';
+  if (el('bfCollateral')) el('bfCollateral').value = collateralUsd.toFixed(0);
   if (el('bfSize'))       el('bfSize').textContent       = '$' + positionSize.toLocaleString(undefined, {maximumFractionDigits: 0});
   if (el('bfMark'))       el('bfMark').textContent       = '$' + fmt(lastPrice);
   // Show time since last price update
@@ -16577,6 +16577,25 @@ async function openBlofinModal(setup) {
   } catch(e) {
     if (statusEl) statusEl.innerHTML = '<span style="color:#ff4d6d">' + e.message + '</span>';
   }
+}
+
+function updateBlofinCollateral() {
+  if (!blofinPending) return;
+  const newCollateral = parseFloat($('bfCollateral')?.value || 10);
+  blofinPending.sizing = newCollateral;
+  blofinPending.positionSize = newCollateral * (blofinPending.leverage || 1);
+  // Recalculate SL/TP prices based on new size
+  const el = s => document.getElementById(s);
+  if (el('bfSize')) el('bfSize').textContent = '$' + blofinPending.positionSize.toLocaleString(undefined, {maximumFractionDigits: 0});
+  // Recalculate stop/target prices
+  const lp = blofinPending.lastPrice;
+  const slPct = blofinPending.slPct;
+  const tpPct = blofinPending.tpPct;
+  const dir = blofinPending.setup.direction;
+  blofinPending.slPrice = dir === 'long' ? lp * (1 - slPct/100) : lp * (1 + slPct/100);
+  blofinPending.tpPrice = dir === 'long' ? lp * (1 + tpPct/100) : lp * (1 - tpPct/100);
+  if (el('bfSl')) el('bfSl').innerHTML = '$' + blofinPending.slPrice.toFixed(4) + ' <span style="color:#ff4d6d">(-' + slPct.toFixed(1) + '%)</span>';
+  if (el('bfTp')) el('bfTp').innerHTML = '$' + blofinPending.tpPrice.toFixed(4) + ' <span style="color:#00f5a0">(+' + tpPct.toFixed(1) + '%)</span>';
 }
 
 async function confirmBlofinExec() {
@@ -16814,7 +16833,7 @@ function execFromBestTrades(idx) {
     sym:       r.sym,
     direction: r.direction,
     slPct, tpPct,
-    sizingUsd: parseFloat($('policyMaxSize')?.value || 50),
+    sizingUsd: parseFloat($('autoTradeSize')?.value || $('policyMaxSize')?.value || 50),
     asset:     r.asset,
     mode, leverage: lev,
   });
