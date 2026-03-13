@@ -224,10 +224,10 @@ async function openPosition({ creds, instId, direction, size, leverage, orderTyp
   const side = direction === 'long' ? 'buy' : 'sell';
   const body = {
     instId,
-    tradeMode: mode,
+    marginMode: mode,       // BloFin requires 'marginMode' not 'tradeMode'
     side,
     orderType: orderType || 'market',
-    size: String(size),
+    size: String(size),     // Number of contracts
     positionSide: direction, // 'long' or 'short' for hedge mode
   };
   if (orderType === 'limit' && price) {
@@ -263,7 +263,7 @@ async function closePosition({ creds, instId, direction, demo }) {
   const side = direction === 'long' ? 'sell' : 'buy';
   const body = {
     instId,
-    tradeMode: 'cross',
+    marginMode: 'cross',  // BloFin requires 'marginMode'
     side,
     orderType: 'market',
     size: '0',            // 0 = close all
