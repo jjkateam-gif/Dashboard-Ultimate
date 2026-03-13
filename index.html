@@ -13516,20 +13516,73 @@ function processAutoTrades(results, tf) {
   for (const r of toTrade) {
     const idx = results.indexOf(r);
     if (mode === 'auto') {
-      // Full auto — execute immediately
+      // Full auto — execute directly via API (no modal)
       toast('🤖 Auto-executing: ' + r.asset + ' ' + r.direction.toUpperCase() + ' (' + r.prob + '% prob)', 'info', 3000);
-      try {
-        execFromBestTrades(idx);
-        logBestTrade(idx);
-        _autoTradeOpenCount++;
-      } catch (e) {
-        toast('🤖 Auto-trade failed: ' + e.message, 'error');
-      }
+      (async () => {
+        try {
+          await autoExecDirect(r, idx, posSize);
+          logBestTrade(idx);
+          _autoTradeOpenCount++;
+        } catch (e) {
+          toast('🤖 Auto-trade failed: ' + e.message, 'error');
+        }
+      })();
     } else {
-      // Confirm mode — show notification
+      // Confirm mode — show notification with Execute/Skip
       showAutoTradeConfirm(r, idx, tf);
     }
   }
+}
+
+// Direct execution for Full Auto mode — bypasses modal, places order via API
+async function autoExecDirect(r, idx, posSize) {
+  const instId = r.sym.replace(/USDT$/i, '') + '-USDT';
+  const slPct = parseFloat($('bt_sl_' + idx)?.value || r.rrData?.stopPct || 3);
+  const tpPct = parseFloat($('bt_tp_' + idx)?.value || r.rrData?.targetPct || 6);
+  const modeBtn = $('btMode_perps_' + idx);
+  const tradeMode = modeBtn?.style?.background?.includes('167') ? 'perps' : 'spot';
+  const lev = tradeMode === 'perps' ? parseInt($('bt_lev_' + idx)?.value || 1) : 1;
+  const side = r.direction === 'long' ? 'buy' : 'sell';
+
+  // Fetch current price
+  let lastPrice;
+  try {
+    const tr = await fetch(LIVE_API + '/ticker?instId=' + encodeURIComponent(instId), { headers: liveHeaders() });
+    if (tr.ok) { const td = await tr.json(); lastPrice = td.ticker?.last || td.ticker?.bid; }
+  } catch {}
+  if (!lastPrice) {
+    const br = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=' + r.sym);
+    if (br.ok) { const bd = await br.json(); lastPrice = parseFloat(bd.price); }
+  }
+  if (!lastPrice) throw new Error('Could not fetch price for ' + instId);
+
+  // Calculate order size
+  const effectiveSize = posSize * (lev > 1 ? lev : 1);
+  const rawSize = effectiveSize / lastPrice;
+  const isBtc = instId.toUpperCase().startsWith('BTC');
+  const decimals = isBtc ? 4 : 2;
+  const contractSize = rawSize.toFixed(decimals);
+
+  // Calculate SL/TP prices
+  const slPrice = r.direction === 'long'
+    ? (lastPrice * (1 - slPct / 100)).toFixed(decimals + 2)
+    : (lastPrice * (1 + slPct / 100)).toFixed(decimals + 2);
+  const tpPrice = r.direction === 'long'
+    ? (lastPrice * (1 + tpPct / 100)).toFixed(decimals + 2)
+    : (lastPrice * (1 - tpPct / 100)).toFixed(decimals + 2);
+
+  const body = {
+    instId, side, orderType: 'market', size: contractSize,
+    leverage: lev, marginMode: 'cross',
+    slPrice, tpPrice
+  };
+
+  const resp = await fetch(LIVE_API + '/order', { method: 'POST', headers: liveHeaders(), body: JSON.stringify(body) });
+  const d = await resp.json();
+  if (!resp.ok || !d.success) throw new Error(d.error || 'Order failed');
+
+  toast('🤖 ' + r.asset + ' ' + r.direction.toUpperCase() + ' opened! Order: ' + (d.orderId || '--').slice(0, 12), 'success', 4000);
+  refreshBtPositions();
 }
 
 function showAutoTradeConfirm(r, idx, tf) {
@@ -13560,13 +13613,15 @@ function showAutoTradeConfirm(r, idx, tf) {
   div._timer = timer;
 }
 
-function confirmAutoExec(idx, confirmId) {
+async function confirmAutoExec(idx, confirmId) {
   dismissAutoConfirm(confirmId);
+  const posSize = +($('autoTradeSize')?.value || 100);
+  const r = PROBE.results?.[idx];
+  if (!r) { toast('Setup not found', 'error'); return; }
   try {
-    execFromBestTrades(idx);
+    await autoExecDirect(r, idx, posSize);
     logBestTrade(idx);
     _autoTradeOpenCount++;
-    toast('🤖 Trade executed!', 'success');
   } catch (e) {
     toast('Execution failed: ' + e.message, 'error');
   }
