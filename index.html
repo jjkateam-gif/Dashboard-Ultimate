@@ -924,7 +924,7 @@ function switchAuthView(view) {
 
 <!-- ========== PAGE TABS ========== -->
 <div id="pageTabs" role="tablist" style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid rgba(0,245,160,0.15);padding-bottom:0">
-<style>#pageTabs button{font-size:9px!important;padding:6px 12px!important}</style>
+<style>#pageTabs button{font-size:13px!important;padding:10px 18px!important}</style>
   <button onclick="switchPageTab('backtester')" id="pageTab_backtester"
     style="font-family:'Space Mono',monospace;font-size:10px;padding:8px 20px;background:rgba(0,245,160,0.12);border:1px solid rgba(0,245,160,0.4);border-bottom:none;color:#00f5a0;cursor:pointer;border-radius:8px 8px 0 0;font-weight:bold;margin-bottom:-1px">
     📊 Backtester
@@ -1194,6 +1194,7 @@ function switchAuthView(view) {
     <label>Market</label>
     <select id="marketType" onchange="onMarketTypeChange()" style="margin-bottom:6px">
       <option value="crypto" selected>🪙 Crypto (Binance)</option>
+      <option value="blofin">🔷 Crypto (BloFin)</option>
       <option value="stock">📈 Stocks (Yahoo Finance)</option>
     </select>
     <label>Symbol</label>
@@ -2343,12 +2344,50 @@ function switchAuthView(view) {
         <option value="1h">1H setups</option>
         <option value="15m">15m scalps</option>
       </select>
+      <select id="probeScanMode" style="font-size:9px;padding:6px 10px;background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:6px;font-family:'Space Mono',monospace" title="Scan mode">
+        <option value="spot">Spot</option>
+        <option value="leverage">⚡ Leverage</option>
+      </select>
       <button onclick="runProbEngine()" id="probeBtn"
         style="font-size:9px;padding:7px 16px;width:auto;margin:0;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700">
         ⚡ Scan Now
       </button>
     </div>
   </div>
+
+  <!-- Auto-Trade Settings Panel -->
+  <details id="autoTradePanel" style="margin-bottom:12px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,107,53,0.15);border-radius:8px;padding:0">
+    <summary style="padding:10px 14px;cursor:pointer;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:#ff6b35;list-style:none;display:flex;align-items:center;gap:8px">
+      <span>🤖 AUTO-TRADE SETTINGS</span>
+      <span id="autoTradeStatus" style="font-size:8px;color:#5a7a68;font-weight:400">OFF</span>
+    </summary>
+    <div style="padding:0 14px 14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+      <div style="display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="autoTradeEnabled" onchange="toggleAutoTrade()" style="accent-color:#ff6b35">
+        <label for="autoTradeEnabled" style="font-size:8px;color:#e0e0e0;font-family:'Space Mono',monospace">Enable Auto-Trade</label>
+      </div>
+      <div style="height:16px;border-left:1px solid rgba(255,255,255,0.08)"></div>
+      <div style="display:flex;align-items:center;gap:4px">
+        <label style="font-size:7px;color:#5a7a68;white-space:nowrap">Mode</label>
+        <select id="autoTradeMode" style="font-size:8px;padding:3px 6px;background:#0a1a10;border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:3px;font-family:'Space Mono',monospace">
+          <option value="confirm">Confirm First</option>
+          <option value="auto">Full Auto</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:4px">
+        <label style="font-size:7px;color:#5a7a68;white-space:nowrap">Min Prob %</label>
+        <input id="autoTradeMinProb" type="number" value="70" min="60" max="95" step="5" style="width:45px;font-size:8px;padding:3px 4px;background:#0a1a10;border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:3px;font-family:'Space Mono',monospace">
+      </div>
+      <div style="display:flex;align-items:center;gap:4px">
+        <label style="font-size:7px;color:#5a7a68;white-space:nowrap">Size $</label>
+        <input id="autoTradeSize" type="number" value="100" min="10" step="10" style="width:55px;font-size:8px;padding:3px 4px;background:#0a1a10;border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:3px;font-family:'Space Mono',monospace">
+      </div>
+      <div style="display:flex;align-items:center;gap:4px">
+        <label style="font-size:7px;color:#5a7a68;white-space:nowrap">Max Open</label>
+        <input id="autoTradeMaxOpen" type="number" value="3" min="1" max="10" style="width:35px;font-size:8px;padding:3px 4px;background:#0a1a10;border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:3px;font-family:'Space Mono',monospace">
+      </div>
+    </div>
+  </details>
 
   <!-- Market regime banner -->
   <div id="probRegimeBanner" style="display:none;padding:10px 14px;border-radius:8px;margin-bottom:14px;font-family:'Space Mono',monospace;font-size:9px"></div>
@@ -2392,6 +2431,26 @@ function switchAuthView(view) {
           <button onclick="setRecFilter('auto')" id="recFilterAuto" style="font-size:8px;padding:4px 10px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;border:none;background:transparent;color:#5a7a68;font-weight:700">🤖 Auto</button>
         </div>
         <button onclick="loadRecommendations()" style="font-family:'Space Mono',monospace;font-size:9px;padding:5px 12px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:6px;cursor:pointer;width:auto;margin:0">Refresh</button>
+      </div>
+    </div>
+    <!-- Portfolio Settings Bar -->
+    <div id="portfolioBar" style="display:flex;align-items:center;gap:12px;margin-bottom:12px;background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.15);border-radius:8px;padding:10px 14px;flex-wrap:wrap">
+      <div style="font-size:8px;font-weight:700;color:#a78bfa;font-family:'Space Mono',monospace;white-space:nowrap">💰 PORTFOLIO</div>
+      <div style="display:flex;align-items:center;gap:4px">
+        <label style="font-size:7px;color:#5a7a68;white-space:nowrap">Balance $</label>
+        <input id="pfBalance" type="number" value="1000" min="10" step="100" onchange="savePortfolioSettings();recomputePortfolio()" style="width:70px;font-size:9px;padding:4px 6px;background:#0a1a10;border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:3px;font-family:'Space Mono',monospace">
+      </div>
+      <div style="display:flex;align-items:center;gap:4px">
+        <label style="font-size:7px;color:#5a7a68;white-space:nowrap">% Per Trade</label>
+        <input id="pfPctPerTrade" type="number" value="10" min="1" max="100" step="1" onchange="savePortfolioSettings();recomputePortfolio()" style="width:50px;font-size:9px;padding:4px 6px;background:#0a1a10;border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:3px;font-family:'Space Mono',monospace">
+      </div>
+      <div style="height:20px;border-left:1px solid rgba(255,255,255,0.08)"></div>
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <div style="text-align:center"><div style="font-size:7px;color:#5a7a68;text-transform:uppercase">Running Bal</div><div id="pfRunBal" style="font-size:14px;font-weight:700;font-family:'Space Mono',monospace;color:#a78bfa">$1,000</div></div>
+        <div style="text-align:center"><div style="font-size:7px;color:#5a7a68;text-transform:uppercase">Total P&L</div><div id="pfTotalPnl" style="font-size:14px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">$0</div></div>
+        <div style="text-align:center"><div style="font-size:7px;color:#5a7a68;text-transform:uppercase">Return</div><div id="pfReturn" style="font-size:14px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">0%</div></div>
+        <div style="text-align:center"><div style="font-size:7px;color:#5a7a68;text-transform:uppercase">Per Trade</div><div id="pfPerTrade" style="font-size:14px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">$100</div></div>
+        <div style="text-align:center"><div style="font-size:7px;color:#5a7a68;text-transform:uppercase">Max Pos</div><div id="pfMaxPos" style="font-size:14px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">10</div></div>
       </div>
     </div>
     <div id="recSummaryCards" style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px">
@@ -4071,7 +4130,7 @@ startTicker();
 // ══════════════════════════════════════════════════════
 function onMarketTypeChange() {
   const mkt = $('marketType')?.value;
-  const isCrypto = mkt === 'crypto';
+  const isCrypto = mkt === 'crypto' || mkt === 'blofin';
   if ($('symbol'))      $('symbol').style.display      = isCrypto ? '' : 'none';
   if ($('stockSymbol')) $('stockSymbol').style.display = isCrypto ? 'none' : '';
   const isCustom = !isCrypto && $('stockSymbol')?.value === 'CUSTOM';
@@ -4087,6 +4146,31 @@ function onMarketTypeChange() {
   const satsEl = $('satsMode');
   if (satsEl && !isCrypto) { satsEl.checked = false; updateSatsMode(); satsEl.disabled = true; }
   else if (satsEl) satsEl.disabled = false;
+
+  // BloFin data source indicator
+  const srcLabel = $('dataSourceLabel');
+  if (srcLabel) srcLabel.textContent = mkt === 'blofin' ? '🔷 BloFin' : mkt === 'stock' ? '📈 Yahoo' : '🪙 Binance';
+}
+
+// BloFin timeframe mapping (BloFin capitalizes H/D)
+const BLOFIN_TF_MAP = { '1m':'1m','3m':'3m','5m':'5m','15m':'15m','30m':'30m','1h':'1H','2h':'2H','4h':'4H','6h':'6H','8h':'8H','12h':'12H','1d':'1D','3d':'3D','1w':'1W' };
+function blofinTF(tf) { return BLOFIN_TF_MAP[tf] || tf; }
+function blofinInstId(sym) {
+  // Convert BTCUSDT → BTC-USDT
+  const m = sym.match(/^(.+)(USDT|USD)$/);
+  return m ? m[1] + '-USDT' : sym;
+}
+
+async function fetchBlofinCandles(sym, tf, limit) {
+  const instId = blofinInstId(sym);
+  const bar = blofinTF(tf);
+  const token = localStorage.getItem('dash_token');
+  const resp = await fetch(BACKEND_URL + '/live/candles?instId=' + encodeURIComponent(instId) + '&bar=' + bar + '&limit=' + (limit || 300), {
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+  if (!resp.ok) throw new Error('BloFin candle fetch failed: ' + resp.status);
+  const data = await resp.json();
+  return data.candles || [];
 }
 
 // ── Sats mode UI ────────────────────────────────────────
@@ -4297,6 +4381,25 @@ $('loadBtn').addEventListener('click',async function(){
       data = await fetchStockKlines(sym, iv, start, end, (cursor, endTs, count) => {
         $('loadingText').textContent = `FETCHING ${sym} DATA... ${count} candles`;
       });
+    } else if (mkt === 'blofin') {
+      $('loadStatus').innerHTML='<div class="info-box warn" style="font-size:9px">⏳ Fetching from BloFin...</div>';
+      $('loadingText').textContent = `FETCHING ${sym} FROM BLOFIN...`;
+      // BloFin returns max ~1440 candles per call, paginate by endTime
+      let allCandles = [];
+      let endTs = end;
+      for (let page = 0; page < 20; page++) {
+        const batch = await fetchBlofinCandles(sym, iv, 300);
+        if (!batch.length) break;
+        allCandles = batch; // BloFin doesn't support startTime pagination well, use single large fetch
+        break;
+      }
+      // Filter to date range
+      data = allCandles.filter(c => {
+        const ts = new Date(c.t).getTime();
+        return ts >= start && ts <= end;
+      });
+      if (!data.length) throw new Error('No BloFin data for ' + sym + ' in date range');
+      $('loadingText').textContent = `FETCHED ${data.length} candles from BloFin`;
     } else {
     data = await fetchKlines(sym, iv, start, end, (cursor, endTs, count) => {
       // Update progress bar and overlay text as pages come in
@@ -11928,6 +12031,21 @@ const PROBE_ASSETS = [
   { sym: 'SOLUSDT', label: 'SOL', color: '#9945ff' },
   { sym: 'SUIUSDT', label: 'SUI', color: '#4da2ff' },
   { sym: 'BNBUSDT', label: 'BNB', color: '#f3ba2f' },
+  { sym: 'DOGEUSDT', label: 'DOGE', color: '#c2a633' },
+  { sym: 'XRPUSDT', label: 'XRP', color: '#00aae4' },
+  { sym: 'ADAUSDT', label: 'ADA', color: '#0033ad' },
+  { sym: 'AVAXUSDT', label: 'AVAX', color: '#e84142' },
+  { sym: 'LINKUSDT', label: 'LINK', color: '#2a5ada' },
+  { sym: 'DOTUSDT', label: 'DOT', color: '#e6007a' },
+  { sym: 'NEARUSDT', label: 'NEAR', color: '#00c08b' },
+  { sym: 'ARBUSDT', label: 'ARB', color: '#28a0f0' },
+  { sym: 'OPUSDT', label: 'OP', color: '#ff0420' },
+  { sym: 'APTUSDT', label: 'APT', color: '#06c3a5' },
+  { sym: 'INJUSDT', label: 'INJ', color: '#0082fa' },
+  { sym: 'PEPEUSDT', label: 'PEPE', color: '#4a9c3c' },
+  { sym: 'BONKUSDT', label: 'BONK', color: '#f9a825' },
+  { sym: 'WIFUSDT', label: 'WIF', color: '#8b5e3c' },
+  { sym: 'RENDERUSDT', label: 'RENDER', color: '#1dbfff' },
 ];
 
 // Historical win rates per indicator (from large-sample backtests)
@@ -12338,6 +12456,11 @@ async function runProbEngine() {
     if (dot && document.querySelector('#pageTab_trades')?.style?.color !== '#ff6b35') {
       dot.style.display = 'block';
     }
+  }
+
+  // Auto-trade hook
+  if ($('autoTradeEnabled')?.checked) {
+    processAutoTrades(results, tf);
   }
 }
 
@@ -12850,7 +12973,57 @@ function renderRecSummary(s) {
   }
 }
 
+// ─── Portfolio P&L with Compounding ───────────────────────────
+function loadPortfolioSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem('dash_portfolio') || '{}');
+    if (s.balance) $('pfBalance').value = s.balance;
+    if (s.pctPerTrade) $('pfPctPerTrade').value = s.pctPerTrade;
+  } catch {}
+}
+function savePortfolioSettings() {
+  const s = { balance: +$('pfBalance').value || 1000, pctPerTrade: +$('pfPctPerTrade').value || 10 };
+  localStorage.setItem('dash_portfolio', JSON.stringify(s));
+}
+let _lastRecsList = [];
+function recomputePortfolio() {
+  const startBal = +($('pfBalance')?.value) || 1000;
+  const pctPer = +($('pfPctPerTrade')?.value) || 10;
+  const maxPos = Math.floor(100 / pctPer);
+  $('pfMaxPos').textContent = maxPos;
+  $('pfPerTrade').textContent = '$' + (startBal * pctPer / 100).toLocaleString(undefined, { maximumFractionDigits: 0 });
+
+  // Walk resolved trades chronologically
+  const resolved = _lastRecsList
+    .filter(r => r.outcome === 'win' || r.outcome === 'loss')
+    .sort((a, b) => new Date(a.resolved_at || a.created_at) - new Date(b.resolved_at || b.created_at));
+
+  let bal = startBal;
+  for (const r of resolved) {
+    const posSize = bal * (pctPer / 100);
+    const pnl = r.actual_pnl_pct != null ? posSize * (r.actual_pnl_pct / 100) : 0;
+    bal += pnl;
+    r._runBal = bal;
+    r._posSize = posSize;
+    r._pnlDollar = pnl;
+  }
+
+  const totalPnl = bal - startBal;
+  const retPct = startBal > 0 ? (totalPnl / startBal * 100) : 0;
+  const pnlColor = totalPnl >= 0 ? '#00f5a0' : '#ff4d6d';
+
+  $('pfRunBal').textContent = '$' + bal.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  $('pfRunBal').style.color = totalPnl >= 0 ? '#00f5a0' : '#ff4d6d';
+  $('pfTotalPnl').textContent = (totalPnl >= 0 ? '+$' : '-$') + Math.abs(totalPnl).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  $('pfTotalPnl').style.color = pnlColor;
+  $('pfReturn').textContent = (retPct >= 0 ? '+' : '') + retPct.toFixed(1) + '%';
+  $('pfReturn').style.color = pnlColor;
+}
+// Init portfolio on page load
+try { loadPortfolioSettings(); } catch {}
+
 function renderRecHistory(recs) {
+  _lastRecsList = recs; // store for portfolio calc
   const el = document.getElementById('recHistoryList');
   if (!el) return;
   if (recs.length === 0) {
@@ -12873,6 +13046,7 @@ function renderRecHistory(recs) {
     return '<div style="display:grid;grid-template-columns:30px 80px 65px 55px 55px 60px 55px 50px 50px;gap:6px;padding:7px 10px;font-size:9px;font-family:\'Space Mono\',monospace;border-bottom:1px solid rgba(255,255,255,0.03);border-left:3px solid ' + borderColor + ';transition:background 0.15s" onmouseenter="this.style.background=\'rgba(255,255,255,0.03)\'" onmouseleave="this.style.background=\'transparent\'"><span style="font-size:10px">' + sourceIcon + '</span><span style="color:#888;font-size:8px">' + date + '</span><span style="color:#e0e0e0;font-weight:700">' + (r.symbol || '').replace(/USDT$/i,'') + '</span><span style="color:' + dirColor + '">' + dirIcon + ' ' + r.direction + '</span><span style="color:#63b3ed">' + (r.probability || 0) + '%</span><span style="color:#a78bfa">' + rrDisplay + '</span><span style="color:' + outcomeColor + ';font-size:8px">' + outcomeLabel + '</span><span style="color:' + pnlColor + ';font-weight:700">' + pnl + '</span><span style="color:#5a7a68">' + tf + '</span></div>';
   }).join('');
   el.innerHTML = header + rows;
+  recomputePortfolio();
 }
 
 async function logBestTrade(idx) {
@@ -12928,6 +13102,110 @@ async function logBestTrade(idx) {
     loadRecommendations();
   } else {
     toast('Failed to log trade', 'error');
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// 🤖 AUTO-TRADE ENGINE
+// ════════════════════════════════════════════════════════════════
+let _autoTradeOpenCount = 0;
+let _autoTradeConfirmQueue = [];
+
+function toggleAutoTrade() {
+  const on = $('autoTradeEnabled')?.checked;
+  const status = $('autoTradeStatus');
+  if (status) {
+    status.textContent = on ? 'ACTIVE' : 'OFF';
+    status.style.color = on ? '#00f5a0' : '#5a7a68';
+  }
+  if (on) {
+    toast('🤖 Auto-trade enabled — trades will ' + ($('autoTradeMode').value === 'auto' ? 'execute automatically' : 'require confirmation'), 'info', 4000);
+  }
+}
+
+function processAutoTrades(results, tf) {
+  const minProb = +($('autoTradeMinProb')?.value || 70);
+  const maxOpen = +($('autoTradeMaxOpen')?.value || 3);
+  const mode = $('autoTradeMode')?.value || 'confirm';
+  const posSize = +($('autoTradeSize')?.value || 100);
+
+  // Filter setups above threshold
+  const qualifying = results.filter(r => r.prob >= minProb);
+  if (!qualifying.length) return;
+
+  // Check open positions limit
+  if (_autoTradeOpenCount >= maxOpen) {
+    toast('🤖 Auto-trade: max open positions reached (' + maxOpen + ')', 'warn');
+    return;
+  }
+
+  const slotsAvailable = maxOpen - _autoTradeOpenCount;
+  const toTrade = qualifying.slice(0, slotsAvailable);
+
+  for (const r of toTrade) {
+    const idx = results.indexOf(r);
+    if (mode === 'auto') {
+      // Full auto — execute immediately
+      toast('🤖 Auto-executing: ' + r.asset + ' ' + r.direction.toUpperCase() + ' (' + r.prob + '% prob)', 'info', 3000);
+      try {
+        execFromBestTrades(idx);
+        logBestTrade(idx);
+        _autoTradeOpenCount++;
+      } catch (e) {
+        toast('🤖 Auto-trade failed: ' + e.message, 'error');
+      }
+    } else {
+      // Confirm mode — show notification
+      showAutoTradeConfirm(r, idx, tf);
+    }
+  }
+}
+
+function showAutoTradeConfirm(r, idx, tf) {
+  const id = 'atConfirm_' + Date.now();
+  const div = document.createElement('div');
+  div.id = id;
+  div.style.cssText = 'position:fixed;top:80px;right:20px;background:#0d1b0f;border:2px solid rgba(255,107,53,0.5);border-radius:10px;padding:14px 18px;z-index:9998;font-family:"Space Mono",monospace;box-shadow:0 8px 30px rgba(0,0,0,0.6);min-width:260px;animation:slideIn 0.3s ease';
+  div.innerHTML = `
+    <div style="font-size:9px;font-weight:700;color:#ff6b35;margin-bottom:6px">🤖 AUTO-TRADE SIGNAL</div>
+    <div style="font-size:12px;font-weight:700;color:${r.direction==='long'?'#00f5a0':'#ff4d6d'};margin-bottom:4px">${r.asset} ${r.direction.toUpperCase()} — ${r.prob}%</div>
+    <div style="font-size:8px;color:#5a7a68;margin-bottom:8px">${tf} · R/R ${r.rr}:1 · Confidence: ${r.confidence || 'Medium'}</div>
+    <div style="display:flex;gap:6px">
+      <button onclick="confirmAutoExec(${idx},'${id}')" style="flex:2;font-size:9px;padding:6px;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);color:#00f5a0;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700">⚡ Execute</button>
+      <button onclick="dismissAutoConfirm('${id}')" style="flex:1;font-size:9px;padding:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#5a7a68;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace">Skip</button>
+    </div>
+    <div id="${id}_timer" style="font-size:7px;color:#5a7a68;text-align:center;margin-top:4px">Auto-dismiss in 30s</div>
+  `;
+  document.body.appendChild(div);
+
+  // Auto-dismiss after 30 seconds
+  let remaining = 30;
+  const timer = setInterval(() => {
+    remaining--;
+    const timerEl = document.getElementById(id + '_timer');
+    if (timerEl) timerEl.textContent = 'Auto-dismiss in ' + remaining + 's';
+    if (remaining <= 0) { dismissAutoConfirm(id); clearInterval(timer); }
+  }, 1000);
+  div._timer = timer;
+}
+
+function confirmAutoExec(idx, confirmId) {
+  dismissAutoConfirm(confirmId);
+  try {
+    execFromBestTrades(idx);
+    logBestTrade(idx);
+    _autoTradeOpenCount++;
+    toast('🤖 Trade executed!', 'success');
+  } catch (e) {
+    toast('Execution failed: ' + e.message, 'error');
+  }
+}
+
+function dismissAutoConfirm(id) {
+  const el = document.getElementById(id);
+  if (el) {
+    if (el._timer) clearInterval(el._timer);
+    el.remove();
   }
 }
 
@@ -16055,6 +16333,20 @@ renderProbeResults = function(results, tf) {
       </div>
     </div>`;
   }).join('');
+
+  // Auto-set leverage mode if scan mode is "leverage"
+  if ($('probeScanMode')?.value === 'leverage') {
+    setTimeout(() => {
+      results.forEach((r, idx) => {
+        btSetMode(idx, 'perps');
+        const levSel = $('bt_lev_' + idx);
+        if (levSel) levSel.value = '5';
+        // Tighten SL for leverage trades
+        const slInput = $('bt_sl_' + idx);
+        if (slInput) slInput.value = (parseFloat(slInput.value) / 2).toFixed(1);
+      });
+    }, 50);
+  }
 };
 
 // Toggle mode on a card

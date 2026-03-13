@@ -17,6 +17,15 @@ const COINGECKO_IDS = {
   LINK: 'chainlink',
   DOT: 'polkadot',
   MATIC: 'matic-network',
+  NEAR: 'near',
+  ARB: 'arbitrum',
+  OP: 'optimism',
+  APT: 'aptos',
+  INJ: 'injective-protocol',
+  PEPE: 'pepe',
+  BONK: 'bonk',
+  WIF: 'dogwifcoin',
+  RENDER: 'render-token',
 };
 
 // Batch fetch prices from CoinGecko (single API call for all symbols)

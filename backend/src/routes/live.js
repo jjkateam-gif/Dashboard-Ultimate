@@ -333,6 +333,29 @@ router.get('/ticker', async (req, res) => {
   }
 });
 
+// GET /live/candles — BloFin candle data (public endpoint, no creds needed)
+router.get('/candles', async (req, res) => {
+  try {
+    const { instId, bar, limit } = req.query;
+    if (!instId || !bar) return res.status(400).json({ error: 'instId and bar required' });
+    const raw = await blofinClient.getCandles(instId, bar, limit || '300', false);
+    if (!raw || !Array.isArray(raw)) return res.json({ candles: [] });
+    // Convert BloFin format [ts, o, h, l, c, vol, volCurrency] to standard
+    const candles = raw.map(c => ({
+      t: new Date(parseInt(c[0])).toISOString(),
+      o: parseFloat(c[1]),
+      h: parseFloat(c[2]),
+      l: parseFloat(c[3]),
+      c: parseFloat(c[4]),
+      v: parseFloat(c[5]),
+    })).reverse(); // BloFin returns newest first, we want oldest first
+    res.json({ candles });
+  } catch (err) {
+    console.error('[candles] error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch candles' });
+  }
+});
+
 /* ======================================================
    SSE STREAM (real-time updates from BloFin WebSocket)
    ====================================================== */
