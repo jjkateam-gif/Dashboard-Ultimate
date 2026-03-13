@@ -200,7 +200,7 @@ async function getPositions(creds, demo) {
 async function setLeverage(creds, instId, lever, marginMode, demo) {
   return privatePost('/api/v1/account/set-leverage', {
     instId,
-    lever: String(lever),
+    leverage: String(lever),     // BloFin expects 'leverage' not 'lever'
     marginMode: marginMode || 'cross',
   }, creds, false, demo);
 }
@@ -232,8 +232,9 @@ async function openPosition({ creds, instId, direction, size, leverage, orderTyp
   // Set leverage first
   try {
     await setLeverage(creds, instId, leverage, mode, demo);
+    console.log(`[BloFin] Leverage set to ${leverage}x for ${instId}`);
   } catch (e) {
-    // Leverage may already be set — non-fatal
+    // Log but continue — leverage may already be at the desired level
     console.warn(`[BloFin] setLeverage warning: ${e.message}`);
   }
 
