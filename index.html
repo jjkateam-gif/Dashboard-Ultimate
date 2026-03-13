@@ -2980,7 +2980,7 @@ function switchAuthView(view) {
     <div id="blofinExecStatus" style="font-size:12px;font-family:'Space Mono',monospace;color:#5a7a68;min-height:18px;margin-bottom:12px"></div>
 
     <div style="display:flex;gap:8px">
-      <button id="blofinConfirmBtn" onclick="document.getElementById('blofinConfirmBtn').style.display='none';document.getElementById('bfFinalConfirm').style.display='flex'"
+      <button id="blofinConfirmBtn" onclick="confirmBlofinExec()"
         style="flex:2;padding:16px;margin:0;background:linear-gradient(135deg,rgba(0,245,160,0.3),rgba(0,245,160,0.15));border:2px solid rgba(0,245,160,0.6);color:#00f5a0;border-radius:8px;cursor:pointer;font-family:'Space Mono',monospace;font-size:15px;font-weight:700;box-shadow:0 4px 15px rgba(0,245,160,0.2)">
         ⚡ Confirm Execute
       </button>
@@ -13566,15 +13566,22 @@ async function checkBlofinConnection() {
   }
 }
 
-function processAutoTrades(results, tf) {
+async function processAutoTrades(results, tf) {
   const minProb = +($('autoTradeMinProb')?.value || 70);
   const maxOpen = +($('autoTradeMaxOpen')?.value || 3);
   const mode = $('autoTradeMode')?.value || 'confirm';
-  const posSize = +($('autoTradeSize')?.value || 100);
+  const maxSize = +($('policyMaxSize')?.value || 500);
+  const posSize = Math.min(+($('autoTradeSize')?.value || 100), maxSize);
 
   // Filter setups above threshold
   const qualifying = results.filter(r => r.prob >= minProb);
   if (!qualifying.length) return;
+
+  // Sync open count with real positions from BloFin
+  try {
+    const posR = await fetch(LIVE_API + '/positions', { headers: liveHeaders() });
+    if (posR.ok) { const posD = await posR.json(); _autoTradeOpenCount = (posD.positions || []).length; }
+  } catch {}
 
   // Check open positions limit
   if (_autoTradeOpenCount >= maxOpen) {
@@ -13804,7 +13811,7 @@ function renderNewsItem(a) {
   const timeAgo = formatNewsTimeAgo(a.publishedAt);
   const cats = (a.categories || []).slice(0, 3).map(c => '<span style="font-size:7px;padding:2px 6px;background:rgba(255,255,255,0.05);border-radius:3px;color:#888">' + c + '</span>').join(' ');
   const coin = extractCoinFromTitle(a.title);
-  const tradeBtn = coin ? ' <button onclick="openBlofinModal({sym:\'' + coin + '-USDT\',dir:\'LONG\',sz:100})" style="font-size:7px;padding:2px 8px;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:3px;cursor:pointer;font-family:\'Space Mono\',monospace">⚡ ' + coin + '</button>' : '';
+  const tradeBtn = coin ? ' <button onclick="openBlofinModal({sym:\'' + coin + 'USDT\',direction:\'long\',sizingUsd:100})" style="font-size:7px;padding:2px 8px;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:3px;cursor:pointer;font-family:\'Space Mono\',monospace">⚡ ' + coin + '</button>' : '';
   return '<div class="news-item ' + sentClass + '" data-url="' + (a.url || '') + '">' +
     '<div style="display:flex;justify-content:space-between;align-items:center">' +
       '<div style="display:flex;gap:8px;align-items:center">' +
@@ -16666,8 +16673,8 @@ function updateBlofinCollateral() {
   const dir = blofinPending.setup.direction;
   blofinPending.slPrice = dir === 'long' ? lp * (1 - slPct/100) : lp * (1 + slPct/100);
   blofinPending.tpPrice = dir === 'long' ? lp * (1 + tpPct/100) : lp * (1 - tpPct/100);
-  if (el('bfSl')) el('bfSl').innerHTML = '$' + blofinPending.slPrice.toFixed(4) + ' <span style="color:#ff4d6d">(-' + slPct.toFixed(1) + '%)</span>';
-  if (el('bfTp')) el('bfTp').innerHTML = '$' + blofinPending.tpPrice.toFixed(4) + ' <span style="color:#00f5a0">(+' + tpPct.toFixed(1) + '%)</span>';
+  if (el('bfSL')) el('bfSL').innerHTML = '$' + blofinPending.slPrice.toFixed(4) + ' <span style="color:#ff4d6d">(-' + slPct.toFixed(1) + '%)</span>';
+  if (el('bfTP')) el('bfTP').innerHTML = '$' + blofinPending.tpPrice.toFixed(4) + ' <span style="color:#00f5a0">(+' + tpPct.toFixed(1) + '%)</span>';
 }
 
 async function confirmBlofinExec() {
