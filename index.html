@@ -2438,6 +2438,10 @@ function switchAuthView(view) {
               <input id="atBfPassphrase" type="password" placeholder="Your BloFin Passphrase" style="width:100%;font-size:12px;padding:10px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:6px;font-family:'Space Mono',monospace;box-sizing:border-box">
             </div>
             <div>
+              <label style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px">Broker ID <span style="color:#5a7a68">(optional — only for Broker API Keys)</span></label>
+              <input id="atBfBrokerId" type="text" placeholder="Leave blank for Transaction API Keys" style="width:100%;font-size:12px;padding:10px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:6px;font-family:'Space Mono',monospace;box-sizing:border-box">
+            </div>
+            <div>
               <label style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px">Encryption Password <span style="color:#ff4d6d">(min 8 chars — remember this!)</span></label>
               <input id="atBfEncPwd" type="password" placeholder="Create an encryption password" style="width:100%;font-size:12px;padding:10px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:6px;font-family:'Space Mono',monospace;box-sizing:border-box">
             </div>
@@ -13379,6 +13383,7 @@ async function submitBlofinConnect() {
   const apiKey = $('atBfApiKey')?.value?.trim();
   const secretKey = $('atBfSecretKey')?.value?.trim();
   const passphrase = $('atBfPassphrase')?.value?.trim();
+  const brokerId = $('atBfBrokerId')?.value?.trim() || '';
   const encPwd = $('atBfEncPwd')?.value?.trim();
   const demo = $('atBfDemo')?.checked || false;
   const statusEl = $('atBfStatus');
@@ -13402,7 +13407,9 @@ async function submitBlofinConnect() {
   if (btn) { btn.disabled = true; btn.textContent = '⟳ Connecting...'; }
 
   try {
-    const credsJson = JSON.stringify({ apiKey, secretKey, passphrase });
+    const creds = { apiKey, secretKey, passphrase };
+    if (brokerId) creds.brokerId = brokerId;
+    const credsJson = JSON.stringify(creds);
     const credsBytes = new TextEncoder().encode(credsJson);
     const encrypted = await encryptBytes(credsBytes, encPwd);
 

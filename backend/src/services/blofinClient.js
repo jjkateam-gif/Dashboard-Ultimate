@@ -4,6 +4,9 @@ const crypto = require('crypto');
 const DEMO_BASE = 'https://demo-trading-openapi.blofin.com';
 const LIVE_BASE = 'https://openapi.blofin.com';
 
+// BloFin broker ID — only needed for Broker API Keys (not Transaction API Keys)
+const BROKER_ID = process.env.BLOFIN_BROKER_ID || '';
+
 function getBaseUrl(demo) {
   return demo ? DEMO_BASE : LIVE_BASE;
 }
@@ -230,6 +233,8 @@ async function openPosition({ creds, instId, direction, size, leverage, orderTyp
     size: String(size),     // Number of contracts
     positionSide: direction, // 'long' or 'short' for hedge mode
   };
+  const bid = creds.brokerId || BROKER_ID;
+  if (bid) body.brokerId = bid;
   if (orderType === 'limit' && price) {
     body.price = String(price);
   }
@@ -278,6 +283,8 @@ async function closePosition({ creds, instId, direction, marginMode, demo }) {
     size: closeSize,
     positionSide: direction,
   };
+  const bid2 = creds.brokerId || BROKER_ID;
+  if (bid2) body.brokerId = bid2;
 
   const data = await privatePost('/api/v1/trade/order', body, creds, true, demo);
   const orderId = data && data[0] ? data[0].orderId : (data?.orderId || null);
@@ -286,7 +293,10 @@ async function closePosition({ creds, instId, direction, marginMode, demo }) {
 }
 
 async function cancelOrder(creds, instId, orderId, demo) {
-  return privatePost('/api/v1/trade/cancel-order', { instId, orderId }, creds, true, demo);
+  const body = { instId, orderId };
+  const bid3 = creds.brokerId || BROKER_ID;
+  if (bid3) body.brokerId = bid3;
+  return privatePost('/api/v1/trade/cancel-order', body, creds, true, demo);
 }
 
 async function getActiveOrders(creds, instId, demo) {
