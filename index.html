@@ -2917,7 +2917,7 @@ function switchAuthView(view) {
 
 <!-- ========== BLOFIN EXECUTE MODAL ========== -->
 <div id="blofinModal" role="dialog" aria-modal="true" onclick="if(event.target===this)closeBlofinModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;align-items:center;justify-content:center">
-  <div style="background:#0a1a10;border:1px solid rgba(0,245,160,0.3);border-radius:14px;padding:28px;width:560px;max-width:96vw">
+  <div style="background:#0a1a10;border:1px solid rgba(0,245,160,0.3);border-radius:14px;padding:28px;width:560px;max-width:96vw;max-height:90vh;overflow-y:auto">
 
     <!-- Header -->
     <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:14px">
@@ -2981,11 +2981,11 @@ function switchAuthView(view) {
 
     <div style="display:flex;gap:8px">
       <button id="blofinConfirmBtn" onclick="document.getElementById('blofinConfirmBtn').style.display='none';document.getElementById('bfFinalConfirm').style.display='flex'"
-        style="flex:1;padding:12px;margin:0;background:rgba(0,245,160,0.2);border:1px solid rgba(0,245,160,0.5);color:#00f5a0;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-size:13px;font-weight:700">
+        style="flex:2;padding:16px;margin:0;background:linear-gradient(135deg,rgba(0,245,160,0.3),rgba(0,245,160,0.15));border:2px solid rgba(0,245,160,0.6);color:#00f5a0;border-radius:8px;cursor:pointer;font-family:'Space Mono',monospace;font-size:15px;font-weight:700;box-shadow:0 4px 15px rgba(0,245,160,0.2)">
         ⚡ Confirm Execute
       </button>
       <button onclick="closeBlofinModal()"
-        style="flex:1;padding:12px;margin:0;background:transparent;border:1px solid rgba(255,255,255,0.1);color:#666;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-size:13px">
+        style="flex:1;padding:16px;margin:0;background:transparent;border:1px solid rgba(255,255,255,0.15);color:#888;border-radius:8px;cursor:pointer;font-family:'Space Mono',monospace;font-size:13px">
         Cancel
       </button>
     </div>
