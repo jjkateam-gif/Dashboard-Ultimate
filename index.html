@@ -17039,9 +17039,11 @@ async function liveRefreshBalance() {
   try {
     const r = await fetch(LIVE_API + '/balance', { headers: liveHeaders() });
     if (!r.ok) {
-      const errText = await r.text().catch(() => r.status);
-      console.error('Balance API error:', r.status, errText);
-      if (usdtEl) usdtEl.textContent = 'Error ' + r.status;
+      let errMsg = 'Error ' + r.status;
+      try { const ej = await r.json(); errMsg = ej.error || errMsg; } catch {}
+      console.error('Balance API error:', r.status, errMsg);
+      if (usdtEl) usdtEl.textContent = errMsg;
+      if (availEl) availEl.textContent = '';
       return;
     }
     const d = await r.json();

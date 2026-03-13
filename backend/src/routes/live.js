@@ -474,8 +474,8 @@ router.get('/balance', async (req, res) => {
     const balance = await blofinClient.getBalance(creds, demo);
     res.json({ balance: { ...balance, locked: false } });
   } catch (err) {
-    console.error('Balance fetch error:', err);
-    res.status(500).json({ error: 'Server error' });
+    console.error('Balance fetch error:', err.message, err.stack?.split('\n')[1]);
+    res.status(500).json({ error: err.message || 'Server error' });
   }
 });
 

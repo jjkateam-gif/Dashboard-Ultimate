@@ -31,8 +31,8 @@ function sign(method, requestPath, body, timestamp, nonce, secretKey) {
 }
 
 function authHeaders(method, requestPath, body, creds) {
-  const timestamp = String(Math.floor(Date.now() / 1000));
-  const nonce = crypto.randomUUID().replace(/-/g, '').slice(0, 32);
+  const timestamp = String(Date.now());  // BloFin expects milliseconds
+  const nonce = crypto.randomUUID();     // BloFin expects UUID format
   const signature = sign(method, requestPath, body, timestamp, nonce, creds.secretKey);
   return {
     'ACCESS-KEY': creds.apiKey,
