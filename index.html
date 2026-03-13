@@ -12226,7 +12226,7 @@ function computeLiveSignals(d) {
 }
 
 // ── Score confluence → probability ───────────────────────────
-function scoreConfluence(signals, direction, regime, fundingRate) {
+function scoreConfluence(signals, direction, regime, fundingRate, tf) {
   const dir = direction === 'long' ? 'bull' : 'bear';
   const opp = direction === 'long' ? 'bear' : 'bull';
 
@@ -12234,15 +12234,39 @@ function scoreConfluence(signals, direction, regime, fundingRate) {
   let maxScore = 0;
   const hits = [], misses = [];
 
-  // Weight each indicator
-  const WEIGHTS = {
-    EMA: 20,        // trend — highest weight
-    Ichimoku: 15,   // trend confirmation
-    MACD: 15,       // momentum
-    RSI: 12,        // mean reversion
-    StochRSI: 12,   // mean reversion
-    BB: 10,         // range position
-    Volume: 10,     // conviction
+  // Timeframe-aware indicator weights
+  // Short TFs (1m-15m): RSI, StochRSI, BB, Volume dominate (react fast)
+  // Medium TFs (30m-4h): balanced weights
+  // Long TFs (6h-1w): EMA, Ichimoku, MACD dominate (need time to be meaningful)
+  const shortTFs = ['1m', '3m', '5m', '15m'];
+  const longTFs  = ['6h', '8h', '12h', '1d', '3d', '1w'];
+  const isShortTF = shortTFs.includes(tf);
+  const isLongTF  = longTFs.includes(tf);
+
+  const WEIGHTS = isShortTF ? {
+    EMA: 8,         // less reliable on short TF
+    Ichimoku: 5,    // needs many candles, noisy on 15m
+    MACD: 10,       // somewhat useful for momentum
+    RSI: 22,        // excellent for overbought/oversold scalps
+    StochRSI: 22,   // fast-reacting, great for scalps
+    BB: 18,         // good for range/squeeze plays
+    Volume: 15,     // volume spikes = strong signal on short TF
+  } : isLongTF ? {
+    EMA: 25,        // trend is king on daily/weekly
+    Ichimoku: 22,   // very reliable on higher TFs
+    MACD: 18,       // solid momentum on daily
+    RSI: 10,        // less useful for swing trades
+    StochRSI: 8,    // too noisy for long TF
+    BB: 7,          // less relevant on wide ranges
+    Volume: 10,     // confirmation role
+  } : {
+    EMA: 20,        // balanced for 30m-4h
+    Ichimoku: 15,
+    MACD: 15,
+    RSI: 12,
+    StochRSI: 12,
+    BB: 10,
+    Volume: 10,
   };
 
   for (const [ind, w] of Object.entries(WEIGHTS)) {
@@ -12416,8 +12440,8 @@ async function runProbEngine() {
       const fundingRate = fundingHistory[asset.sym]?.slice(-1)[0]?.rate ?? null;
 
       // Score both directions, keep the better one
-      const longScore  = scoreConfluence(signals, 'long',  regimeData.regime, fundingRate);
-      const shortScore = scoreConfluence(signals, 'short', regimeData.regime, fundingRate);
+      const longScore  = scoreConfluence(signals, 'long',  regimeData.regime, fundingRate, tf);
+      const shortScore = scoreConfluence(signals, 'short', regimeData.regime, fundingRate, tf);
 
       const best = longScore.prob >= shortScore.prob ? { ...longScore, direction: 'long' } : { ...shortScore, direction: 'short' };
 
@@ -14164,8 +14188,8 @@ async function runAlertPoll() {
       const { signals, atr: atrVal, price } = computeLiveSignals(d);
       const regimeData = detectCurrentRegime(d);
       const fundingRate = fundingHistory[a.symbol]?.slice(-1)[0]?.rate ?? null;
-      const longScore   = scoreConfluence(signals, 'long',  regimeData.regime, fundingRate);
-      const shortScore  = scoreConfluence(signals, 'short', regimeData.regime, fundingRate);
+      const longScore   = scoreConfluence(signals, 'long',  regimeData.regime, fundingRate, a.tf || '4h');
+      const shortScore  = scoreConfluence(signals, 'short', regimeData.regime, fundingRate, a.tf || '4h');
       const best  = longScore.prob >= shortScore.prob ? {...longScore, direction:'long'} : {...shortScore, direction:'short'};
       const threshold = parseInt(a.probThreshold) || 70;
       if (best.prob >= threshold) {
