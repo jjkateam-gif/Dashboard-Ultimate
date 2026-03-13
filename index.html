@@ -16962,18 +16962,27 @@ async function liveRefreshCredentials() {
 }
 
 async function liveRefreshBalance() {
+  const usdtEl = document.getElementById('liveBalanceUSDT');
+  const availEl = document.getElementById('liveBalanceAvail');
   try {
     const r = await fetch(LIVE_API + '/balance', { headers: liveHeaders() });
-    if (!r.ok) return;
+    if (!r.ok) {
+      const errText = await r.text().catch(() => r.status);
+      console.error('Balance API error:', r.status, errText);
+      if (usdtEl) usdtEl.textContent = 'Error ' + r.status;
+      return;
+    }
     const d = await r.json();
-    if (!d.balance) return;
-    const usdtEl = document.getElementById('liveBalanceUSDT');
-    const availEl = document.getElementById('liveBalanceAvail');
+    console.log('Balance response:', JSON.stringify(d));
+    if (!d.balance) { if (usdtEl) usdtEl.textContent = 'No data'; return; }
     const usdt = parseFloat(d.balance.usdt);
     const avail = parseFloat(d.balance.availableBalance);
-    if (usdtEl) usdtEl.textContent = !isNaN(usdt) ? '$' + usdt.toFixed(2) : '--';
-    if (availEl) availEl.textContent = !isNaN(avail) ? '$' + avail.toFixed(2) : '--';
-  } catch (e) { console.error('liveRefreshBalance error:', e); }
+    if (usdtEl) usdtEl.textContent = !isNaN(usdt) && usdt > 0 ? '$' + usdt.toFixed(2) : (usdt === 0 ? '$0.00' : '--');
+    if (availEl) availEl.textContent = !isNaN(avail) && avail >= 0 ? '$' + avail.toFixed(2) : '--';
+  } catch (e) {
+    console.error('liveRefreshBalance error:', e);
+    if (usdtEl) usdtEl.textContent = 'Fetch error';
+  }
 }
 
 async function liveStoreCredentials() {
