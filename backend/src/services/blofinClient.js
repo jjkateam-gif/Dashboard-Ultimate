@@ -137,15 +137,29 @@ async function getMarkPrice(instId, demo) {
 
 async function getBalance(creds, demo) {
   const data = await privateGet('/api/v1/account/balance', null, creds, demo);
-  // BloFin returns array of account details
-  if (!data || data.length === 0) return { usdt: 0, locked: false };
-  const acct = data[0];
-  const usdtDetail = (acct.details || []).find(d => d.currency === 'USDT');
+  console.log('[BloFin] Raw balance response:', JSON.stringify(data).slice(0, 500));
+
+  // BloFin may return array or single object
+  if (!data) return { usdt: 0, locked: false };
+
+  // Handle both array and single object responses
+  const acct = Array.isArray(data) ? data[0] : data;
+  if (!acct) return { usdt: 0, locked: false };
+
+  const usdtDetail = (acct.details || []).find(d => d.currency === 'USDT' || d.ccy === 'USDT');
+
+  // Try multiple possible field names from BloFin API
+  const totalEq = parseFloat(acct.totalEquity || acct.totalEq || 0) || 0;
+  const availBal = parseFloat(usdtDetail?.availableBalance || usdtDetail?.availBal || usdtDetail?.cashBal || acct.availableBalance || acct.totalEquity || 0) || 0;
+  const usdtBal = parseFloat(usdtDetail?.balance || usdtDetail?.eq || usdtDetail?.cashBal || acct.totalEquity || 0) || 0;
+
+  console.log('[BloFin] Parsed balance — totalEq:', totalEq, 'availBal:', availBal, 'usdt:', usdtBal);
+
   return {
-    totalEquity: parseFloat(acct.totalEquity) || 0,
-    availableBalance: parseFloat(usdtDetail?.availableBalance || acct.totalEquity) || 0,
-    usdt: parseFloat(usdtDetail?.balance || acct.totalEquity) || 0,
-    frozenBalance: parseFloat(usdtDetail?.frozenBalance || 0),
+    totalEquity: totalEq,
+    availableBalance: availBal,
+    usdt: usdtBal,
+    frozenBalance: parseFloat(usdtDetail?.frozenBalance || usdtDetail?.frozenBal || 0),
     locked: false,
   };
 }
