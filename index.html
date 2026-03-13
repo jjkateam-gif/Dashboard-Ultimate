@@ -2370,9 +2370,50 @@ function switchAuthView(view) {
         <div id="atBlofinDot" style="width:10px;height:10px;border-radius:50%;background:#ff4d6d;flex-shrink:0"></div>
         <div style="flex:1">
           <div id="atBlofinLabel" style="font-size:11px;font-weight:700;color:#ff4d6d;font-family:'Space Mono',monospace">BloFin: Not Connected</div>
-          <div id="atBlofinDetail" style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px">Go to Live Trading tab to set up API credentials</div>
+          <div id="atBlofinDetail" style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px">Set up API credentials to enable auto-trading</div>
         </div>
-        <button onclick="switchPageTab('live')" style="font-size:9px;padding:6px 12px;background:rgba(255,107,53,0.12);border:1px solid rgba(255,107,53,0.35);color:#ff6b35;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;white-space:nowrap">⚡ Connect</button>
+        <button id="atConnectBtn" onclick="openBlofinConnectPopup()" style="font-size:9px;padding:6px 12px;background:rgba(255,107,53,0.12);border:1px solid rgba(255,107,53,0.35);color:#ff6b35;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;white-space:nowrap">⚡ Connect</button>
+      </div>
+
+      <!-- BloFin Connect Popup (hidden by default) -->
+      <div id="blofinConnectPopup" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:none;align-items:center;justify-content:center">
+        <div style="background:#0d1f14;border:1px solid rgba(255,107,53,0.3);border-radius:12px;padding:24px;max-width:480px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.5)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+            <div style="font-size:16px;font-weight:800;color:#ff6b35;font-family:'Space Mono',monospace">🔗 Connect BloFin</div>
+            <button onclick="closeBlofinConnectPopup()" style="font-size:18px;background:none;border:none;color:#5a7a68;cursor:pointer;padding:4px 8px">✕</button>
+          </div>
+          <div style="font-size:10px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:16px;line-height:1.5">
+            Enter your BloFin API credentials below. Create API keys at <span style="color:#ff6b35">blofin.com → API Management</span>.
+            <br>Credentials are encrypted client-side before storage.
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+            <div>
+              <label style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px">API Key</label>
+              <input id="atBfApiKey" type="text" placeholder="Your BloFin API Key" style="width:100%;font-size:12px;padding:10px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:6px;font-family:'Space Mono',monospace;box-sizing:border-box">
+            </div>
+            <div>
+              <label style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px">Secret Key</label>
+              <input id="atBfSecretKey" type="password" placeholder="Your BloFin Secret Key" style="width:100%;font-size:12px;padding:10px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:6px;font-family:'Space Mono',monospace;box-sizing:border-box">
+            </div>
+            <div>
+              <label style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px">Passphrase</label>
+              <input id="atBfPassphrase" type="password" placeholder="Your BloFin Passphrase" style="width:100%;font-size:12px;padding:10px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:6px;font-family:'Space Mono',monospace;box-sizing:border-box">
+            </div>
+            <div>
+              <label style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px">Encryption Password <span style="color:#ff4d6d">(min 8 chars — remember this!)</span></label>
+              <input id="atBfEncPwd" type="password" placeholder="Create an encryption password" style="width:100%;font-size:12px;padding:10px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:6px;font-family:'Space Mono',monospace;box-sizing:border-box">
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="checkbox" id="atBfDemo" style="accent-color:#ff6b35">
+              <label for="atBfDemo" style="font-size:10px;color:#5a7a68;font-family:'Space Mono',monospace">Demo mode (testnet)</label>
+            </div>
+          </div>
+          <div id="atBfStatus" style="display:none;font-size:10px;font-family:'Space Mono',monospace;padding:8px 10px;border-radius:5px;margin-bottom:12px"></div>
+          <div style="display:flex;gap:10px">
+            <button onclick="submitBlofinConnect()" id="atBfSubmitBtn" style="flex:1;font-size:12px;padding:12px;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);color:#00f5a0;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700">🔐 Store & Connect</button>
+            <button onclick="closeBlofinConnectPopup()" style="font-size:12px;padding:12px 20px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#5a7a68;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace">Cancel</button>
+          </div>
+        </div>
       </div>
 
       <!-- Settings Row 1: Enable + Mode -->
@@ -13256,12 +13297,107 @@ function loadAutoTradeSettings() {
   } catch (e) {}
 }
 
+// ── BloFin Connect Popup ──────────────────────────────────────
+function openBlofinConnectPopup() {
+  const popup = $('blofinConnectPopup');
+  if (popup) popup.style.display = 'flex';
+}
+
+function closeBlofinConnectPopup() {
+  const popup = $('blofinConnectPopup');
+  if (popup) popup.style.display = 'none';
+  // Clear inputs
+  ['atBfApiKey','atBfSecretKey','atBfPassphrase','atBfEncPwd'].forEach(id => {
+    const el = $(id); if (el) el.value = '';
+  });
+  const demo = $('atBfDemo'); if (demo) demo.checked = false;
+  const status = $('atBfStatus'); if (status) status.style.display = 'none';
+}
+
+async function submitBlofinConnect() {
+  const apiKey = $('atBfApiKey')?.value?.trim();
+  const secretKey = $('atBfSecretKey')?.value?.trim();
+  const passphrase = $('atBfPassphrase')?.value?.trim();
+  const encPwd = $('atBfEncPwd')?.value?.trim();
+  const demo = $('atBfDemo')?.checked || false;
+  const statusEl = $('atBfStatus');
+  const btn = $('atBfSubmitBtn');
+
+  if (!apiKey || !secretKey || !passphrase) {
+    statusEl.style.display = 'block';
+    statusEl.style.background = 'rgba(255,77,109,0.1)';
+    statusEl.style.color = '#ff4d6d';
+    statusEl.textContent = 'All three API fields are required';
+    return;
+  }
+  if (!encPwd || encPwd.length < 8) {
+    statusEl.style.display = 'block';
+    statusEl.style.background = 'rgba(255,77,109,0.1)';
+    statusEl.style.color = '#ff4d6d';
+    statusEl.textContent = 'Encryption password must be at least 8 characters';
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = '⟳ Connecting...'; }
+
+  try {
+    const credsJson = JSON.stringify({ apiKey, secretKey, passphrase });
+    const credsBytes = new TextEncoder().encode(credsJson);
+    const encrypted = await encryptBytes(credsBytes, encPwd);
+
+    const r = await fetch(LIVE_API + '/credentials', {
+      method: 'POST',
+      headers: liveHeaders(),
+      body: JSON.stringify({ encryptedData: encrypted, demo }),
+    });
+    const d = await r.json();
+
+    if (d.success) {
+      statusEl.style.display = 'block';
+      statusEl.style.background = 'rgba(0,245,160,0.1)';
+      statusEl.style.color = '#00f5a0';
+      statusEl.textContent = '✅ Connected! Now unlocking...';
+
+      // Auto-unlock with the same password
+      try {
+        const r2 = await fetch(LIVE_API + '/credentials/unlock', {
+          method: 'POST',
+          headers: liveHeaders(),
+          body: JSON.stringify({ password: encPwd }),
+        });
+        const d2 = await r2.json();
+        if (d2.success) {
+          statusEl.textContent = '✅ Connected & Unlocked! Ready to trade.';
+        }
+      } catch (e2) {}
+
+      // Refresh connection status
+      await checkBlofinConnection();
+      toast('🔗 BloFin connected successfully!', 'success');
+      setTimeout(closeBlofinConnectPopup, 1500);
+    } else {
+      statusEl.style.display = 'block';
+      statusEl.style.background = 'rgba(255,77,109,0.1)';
+      statusEl.style.color = '#ff4d6d';
+      statusEl.textContent = 'Failed: ' + (d.error || 'Unknown error');
+    }
+  } catch (e) {
+    statusEl.style.display = 'block';
+    statusEl.style.background = 'rgba(255,77,109,0.1)';
+    statusEl.style.color = '#ff4d6d';
+    statusEl.textContent = 'Error: ' + e.message;
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = '🔐 Store & Connect'; }
+}
+
 // Check BloFin connection status for auto-trade panel
 async function checkBlofinConnection() {
   const dot = $('atBlofinDot');
   const label = $('atBlofinLabel');
   const detail = $('atBlofinDetail');
   const statusBox = $('atBlofinStatus');
+  const connectBtn = $('atConnectBtn');
   if (!dot || !label) return;
 
   try {
@@ -13276,13 +13412,15 @@ async function checkBlofinConnection() {
       detail.textContent = 'Ready to execute trades';
       statusBox.style.background = 'rgba(0,245,160,0.06)';
       statusBox.style.borderColor = 'rgba(0,245,160,0.2)';
+      if (connectBtn) { connectBtn.textContent = '✅ Connected'; connectBtn.style.color = '#00f5a0'; connectBtn.style.borderColor = 'rgba(0,245,160,0.35)'; connectBtn.style.background = 'rgba(0,245,160,0.08)'; }
     } else if (d.hasCredentials || d.engineRunning) {
       dot.style.background = '#f5c400';
       label.textContent = 'BloFin: Credentials Locked';
       label.style.color = '#f5c400';
-      detail.textContent = 'Go to Live Trading to unlock';
+      detail.textContent = 'Click to unlock credentials';
       statusBox.style.background = 'rgba(245,196,0,0.06)';
       statusBox.style.borderColor = 'rgba(245,196,0,0.2)';
+      if (connectBtn) { connectBtn.textContent = '🔓 Unlock'; connectBtn.onclick = function() { switchPageTab('live'); }; }
     } else {
       throw new Error('no creds');
     }
