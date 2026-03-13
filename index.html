@@ -2344,9 +2344,12 @@ function switchAuthView(view) {
         <option value="1h">1H setups</option>
         <option value="15m">15m scalps</option>
       </select>
-      <select id="probeScanMode" style="font-size:9px;padding:6px 10px;background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:6px;font-family:'Space Mono',monospace" title="Scan mode">
-        <option value="spot">Spot</option>
-        <option value="leverage">⚡ Leverage</option>
+      <select id="probeLeverage" style="font-size:9px;padding:6px 10px;background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:6px;font-family:'Space Mono',monospace" title="Leverage level — adjusts SL/TP and probability">
+        <option value="1">1× Spot</option>
+        <option value="2">2× Lev</option>
+        <option value="3">3× Lev</option>
+        <option value="5">5× Lev</option>
+        <option value="10">10× Lev</option>
       </select>
       <button onclick="runProbEngine()" id="probeBtn"
         style="font-size:9px;padding:7px 16px;width:auto;margin:0;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700">
@@ -12311,21 +12314,45 @@ function scoreConfluence(signals, direction, regime, fundingRate) {
   return { prob, confluence, confidence, confColor, hits, misses };
 }
 
-// ── Estimate R/R from ATR ────────────────────────────────────
-function estimateRR(price, atr, direction, prob) {
-  // Target = 2× ATR, Stop = 1× ATR → baseline 2:1
-  // Scale target with probability — higher prob = tighter, safer setup
-  const stopMult   = 1.0;
-  const targetMult = prob >= 70 ? 2.5 : prob >= 60 ? 2.0 : 1.5;
+// ── Estimate R/R from ATR (leverage-aware) ───────────────────
+function estimateRR(price, atr, direction, prob, leverage = 1) {
+  let stopMult, targetMult;
+
+  if (leverage <= 1) {
+    // Spot: standard ATR-based stops
+    stopMult   = 1.0;
+    targetMult = prob >= 70 ? 2.5 : prob >= 60 ? 2.0 : 1.5;
+  } else {
+    // Leverage: wider stops for breathing room, tighter targets (leverage amplifies)
+    stopMult   = 1.5;  // 50% wider stop in price terms — survive wicks
+    targetMult = prob >= 70 ? 1.8 : prob >= 60 ? 1.5 : 1.2;
+  }
 
   const stop   = atr * stopMult;
   const target = atr * targetMult;
 
   const stopPrice   = direction === 'long' ? price - stop   : price + stop;
   const targetPrice = direction === 'long' ? price + target : price - target;
-  const rr          = parseFloat((target / stop).toFixed(1));
 
-  return { stop: stopPrice, target: targetPrice, rr, stopPct: (stop / price * 100).toFixed(1), targetPct: (target / price * 100).toFixed(1) };
+  // Raw price-level percentages
+  const stopPct   = stop / price * 100;
+  const targetPct = target / price * 100;
+
+  // Leveraged P&L percentages (what the trader actually gains/loses)
+  const levStopPct   = stopPct * leverage;
+  const levTargetPct = targetPct * leverage;
+
+  // R/R based on leveraged P&L (or raw if spot)
+  const rr = parseFloat((levTargetPct / levStopPct).toFixed(1));
+
+  return {
+    stop: stopPrice, target: targetPrice, rr,
+    stopPct:   stopPct.toFixed(1),
+    targetPct: targetPct.toFixed(1),
+    levStopPct:   levStopPct.toFixed(1),
+    levTargetPct: levTargetPct.toFixed(1),
+    leverage,
+  };
 }
 
 // ── Detect market regime from 200 bars ───────────────────────
@@ -12369,11 +12396,12 @@ async function runProbEngine() {
   if (btn) { btn.disabled = true; btn.textContent = '⟳ Scanning...'; }
 
   const tf = $('probeTimeframe')?.value || '4h';
+  const leverage = parseInt($('probeLeverage')?.value || 1);
   const setupsEl = $('probeSetups');
   if (setupsEl) setupsEl.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace">
     <div style="font-size:24px;margin-bottom:8px;animation:livePulse 1s infinite">⚡</div>
-    Fetching live data for BTC, ETH, SOL, SUI, BNB on ${tf}...<br>
-    <span style="font-size:8px;opacity:0.6">Running 7 indicators per asset, computing confluence...</span>
+    Fetching live data for ${PROBE_ASSETS.length} assets on ${tf}${leverage > 1 ? ' · ' + leverage + '× leverage' : ''}...<br>
+    <span style="font-size:8px;opacity:0.6">Running 7 indicators per asset, computing ${leverage > 1 ? 'leverage-adjusted ' : ''}confluence...</span>
   </div>`;
 
   const results = [];
@@ -12393,7 +12421,16 @@ async function runProbEngine() {
 
       const best = longScore.prob >= shortScore.prob ? { ...longScore, direction: 'long' } : { ...shortScore, direction: 'short' };
 
-      const rrData = estimateRR(price, atrVal, best.direction, best.prob);
+      // Leverage penalty — higher leverage = more sensitive to wicks, slippage, liquidation risk
+      if (leverage > 1) {
+        const levPenalty = (leverage - 1) * 2;  // 2% per lev level above 1×
+        best.prob = Math.max(30, best.prob - levPenalty);
+        // Also adjust long/short probs for display
+        longScore.prob  = Math.max(30, longScore.prob  - levPenalty);
+        shortScore.prob = Math.max(30, shortScore.prob - levPenalty);
+      }
+
+      const rrData = estimateRR(price, atrVal, best.direction, best.prob, leverage);
 
       results.push({
         asset:      asset.label,
@@ -12415,6 +12452,7 @@ async function runProbEngine() {
         longProb:   longScore.prob,
         shortProb:  shortScore.prob,
         tf,
+        leverage,
       });
     } catch (e) {
       console.warn(`[Probe] ${asset.label} failed:`, e.message);
@@ -12440,7 +12478,9 @@ async function runProbEngine() {
       rrRatio: r.rr,
       source: 'auto',
       timeframe: tf,
-      confidence: r.confidence || null
+      confidence: r.confidence || null,
+      leverage: leverage,
+      mode: leverage > 1 ? 'perps' : 'spot'
     })
   );
   await Promise.all(savePromises);
@@ -16220,6 +16260,10 @@ renderProbeResults = function(results, tf) {
     const rankLabel = idx === 0 ? '🥇 TOP SETUP' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx+1}`;
     const slPct     = parseFloat(r.rrData?.stopPct   || 2).toFixed(1);
     const tpPct     = parseFloat(r.rrData?.targetPct || 4).toFixed(1);
+    const lev       = r.leverage || 1;
+    const levSlPct  = r.rrData?.levStopPct   || slPct;
+    const levTpPct  = r.rrData?.levTargetPct || tpPct;
+    const levBadge  = lev > 1 ? `<span style="font-size:8px;padding:2px 6px;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.35);color:#a78bfa;border-radius:4px;font-family:'Space Mono',monospace;font-weight:700">${lev}×</span>` : '';
     const fundStr   = r.fundingRate != null ? `Funding ${r.fundingRate>0?'+':''}${r.fundingRate.toFixed(3)}%` : '';
     const arc       = buildProbArc(r.prob, probColor);
     const hitBars   = r.hits.slice(0,5).map(h =>
@@ -16248,7 +16292,7 @@ renderProbeResults = function(results, tf) {
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
         <div style="width:36px;height:36px;border-radius:50%;background:${r.color}22;border:2px solid ${r.color}55;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:${r.color};font-family:'Space Mono',monospace">${r.asset}</div>
         <div>
-          <div style="font-size:14px;font-weight:800;color:#fff;font-family:'Space Mono',monospace">${r.asset} <span style="color:${dirColor}">${dirLabel}</span></div>
+          <div style="font-size:14px;font-weight:800;color:#fff;font-family:'Space Mono',monospace">${r.asset} <span style="color:${dirColor}">${dirLabel}</span> ${levBadge}</div>
           <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace">$${r.price.toLocaleString(undefined,{maximumFractionDigits:4})} · ${tf}${fundStr?' · '+fundStr:''}</div>
         </div>
       </div>
@@ -16269,12 +16313,12 @@ renderProbeResults = function(results, tf) {
       <!-- SL / TP -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
         <div>
-          <div style="font-size:7px;color:#ff4d6d;font-family:'Space Mono',monospace;margin-bottom:3px;text-transform:uppercase;letter-spacing:1px">Stop Loss %</div>
+          <div style="font-size:7px;color:#ff4d6d;font-family:'Space Mono',monospace;margin-bottom:3px;text-transform:uppercase;letter-spacing:1px">Stop Loss %${lev > 1 ? ` <span style="color:#a78bfa">(×${lev} = -${levSlPct}%)</span>` : ''}</div>
           <input type="number" id="bt_sl_${idx}" value="${slPct}" step="0.1" min="0.1" max="50"
             style="width:100%;font-size:9px;padding:5px 6px;background:rgba(255,77,109,0.07);border:1px solid rgba(255,77,109,0.22);color:#ff4d6d;border-radius:4px;font-family:'Space Mono',monospace;box-sizing:border-box">
         </div>
         <div>
-          <div style="font-size:7px;color:#00f5a0;font-family:'Space Mono',monospace;margin-bottom:3px;text-transform:uppercase;letter-spacing:1px">Take Profit %</div>
+          <div style="font-size:7px;color:#00f5a0;font-family:'Space Mono',monospace;margin-bottom:3px;text-transform:uppercase;letter-spacing:1px">Take Profit %${lev > 1 ? ` <span style="color:#a78bfa">(×${lev} = +${levTpPct}%)</span>` : ''}</div>
           <input type="number" id="bt_tp_${idx}" value="${tpPct}" step="0.1" min="0.1" max="1000"
             style="width:100%;font-size:9px;padding:5px 6px;background:rgba(0,245,160,0.07);border:1px solid rgba(0,245,160,0.22);color:#00f5a0;border-radius:4px;font-family:'Space Mono',monospace;box-sizing:border-box">
         </div>
@@ -16297,6 +16341,7 @@ renderProbeResults = function(results, tf) {
             style="font-size:8px;padding:3px 5px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);color:#a78bfa;border-radius:4px;font-family:'Space Mono',monospace">
             <option value="1">1×</option>
             <option value="2">2×</option>
+            <option value="3">3×</option>
             <option value="5">5×</option>
             <option value="10">10×</option>
             <option value="20">20×</option>
@@ -16334,16 +16379,14 @@ renderProbeResults = function(results, tf) {
     </div>`;
   }).join('');
 
-  // Auto-set leverage mode if scan mode is "leverage"
-  if ($('probeScanMode')?.value === 'leverage') {
+  // Auto-set cards to PERPS + selected leverage when leverage > 1
+  const scanLev = parseInt($('probeLeverage')?.value || 1);
+  if (scanLev > 1) {
     setTimeout(() => {
       results.forEach((r, idx) => {
         btSetMode(idx, 'perps');
         const levSel = $('bt_lev_' + idx);
-        if (levSel) levSel.value = '5';
-        // Tighten SL for leverage trades
-        const slInput = $('bt_sl_' + idx);
-        if (slInput) slInput.value = (parseFloat(slInput.value) / 2).toFixed(1);
+        if (levSel) levSel.value = String(scanLev);
       });
     }, 50);
   }
