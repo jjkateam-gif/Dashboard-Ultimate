@@ -16969,8 +16969,10 @@ async function liveRefreshBalance() {
     if (!d.balance) return;
     const usdtEl = document.getElementById('liveBalanceUSDT');
     const availEl = document.getElementById('liveBalanceAvail');
-    if (usdtEl) usdtEl.textContent = d.balance.usdt !== null ? '$' + parseFloat(d.balance.usdt).toFixed(2) : '--';
-    if (availEl) availEl.textContent = d.balance.availableBalance !== null ? '$' + parseFloat(d.balance.availableBalance).toFixed(2) : '--';
+    const usdt = parseFloat(d.balance.usdt);
+    const avail = parseFloat(d.balance.availableBalance);
+    if (usdtEl) usdtEl.textContent = !isNaN(usdt) ? '$' + usdt.toFixed(2) : '--';
+    if (availEl) availEl.textContent = !isNaN(avail) ? '$' + avail.toFixed(2) : '--';
   } catch (e) { console.error('liveRefreshBalance error:', e); }
 }
 

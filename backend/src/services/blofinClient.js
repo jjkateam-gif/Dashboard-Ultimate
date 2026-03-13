@@ -148,18 +148,27 @@ async function getBalance(creds, demo) {
 
   const usdtDetail = (acct.details || []).find(d => d.currency === 'USDT' || d.ccy === 'USDT');
 
-  // Try multiple possible field names from BloFin API
-  const totalEq = parseFloat(acct.totalEquity || acct.totalEq || 0) || 0;
-  const availBal = parseFloat(usdtDetail?.availableBalance || usdtDetail?.availBal || usdtDetail?.cashBal || acct.availableBalance || acct.totalEquity || 0) || 0;
-  const usdtBal = parseFloat(usdtDetail?.balance || usdtDetail?.eq || usdtDetail?.cashBal || acct.totalEquity || 0) || 0;
+  console.log('[BloFin] USDT detail:', JSON.stringify(usdtDetail).slice(0, 400));
 
-  console.log('[BloFin] Parsed balance — totalEq:', totalEq, 'availBal:', availBal, 'usdt:', usdtBal);
+  // BloFin actual field names: available, balance, equity, frozen
+  const totalEq = parseFloat(acct.totalEquity) || 0;
+  const availBal = parseFloat(
+    usdtDetail?.available || usdtDetail?.availableEquity || usdtDetail?.availableBalance ||
+    usdtDetail?.availBal || acct.totalEquity || 0
+  ) || 0;
+  const usdtBal = parseFloat(
+    usdtDetail?.balance || usdtDetail?.equity || usdtDetail?.eq ||
+    acct.totalEquity || 0
+  ) || 0;
+  const frozen = parseFloat(usdtDetail?.frozen || usdtDetail?.frozenBalance || 0) || 0;
+
+  console.log('[BloFin] Parsed — totalEq:', totalEq, 'availBal:', availBal, 'usdt:', usdtBal);
 
   return {
     totalEquity: totalEq,
     availableBalance: availBal,
     usdt: usdtBal,
-    frozenBalance: parseFloat(usdtDetail?.frozenBalance || usdtDetail?.frozenBal || 0),
+    frozenBalance: frozen,
     locked: false,
   };
 }
