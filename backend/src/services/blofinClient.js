@@ -4,8 +4,8 @@ const crypto = require('crypto');
 const DEMO_BASE = 'https://demo-trading-openapi.blofin.com';
 const LIVE_BASE = 'https://openapi.blofin.com';
 
-// BloFin broker ID — only needed for Broker API Keys (not Transaction API Keys)
-const BROKER_ID = process.env.BLOFIN_BROKER_ID || '';
+// BloFin broker ID — CCXT's registered broker ID (required for CCXT-bound API keys)
+const BROKER_ID = process.env.BLOFIN_BROKER_ID || 'ec6dd3a7dd982d0b';
 
 function getBaseUrl(demo) {
   return demo ? DEMO_BASE : LIVE_BASE;
