@@ -334,8 +334,15 @@ class LiveEngine {
           }
 
           // Calculate contract size from collateral
-          // BloFin size is in contracts — we approximate using mark price
-          const contractSize = (sizeUsd / price).toFixed(4);
+          // BloFin size = number of contracts. Each contract has a contractValue.
+          // e.g. BTC-USDT contract might be 0.001 BTC, so 1 contract = 0.001 * price USD
+          let contractValue = 0.001; // safe default
+          try {
+            const markets = await blofinClient.getMarkets(demo);
+            const mkt = markets.find(m => m.name === instId);
+            if (mkt && mkt.contractValue) contractValue = parseFloat(mkt.contractValue);
+          } catch (e) { console.warn('[LiveEngine] Could not fetch contractValue, using default:', e.message); }
+          const contractSize = Math.max(1, Math.floor(sizeUsd / (price * contractValue)));
 
           try {
             const openResult = await blofinClient.openPosition({

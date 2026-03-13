@@ -159,17 +159,22 @@ async function initDB() {
       console.error('Recommendation tracker init error (core routes still working):', recErr.message);
     }
 
+    // Error handler — MUST be registered after all routes
+    app.use((err, req, res, next) => {
+      console.error('Unhandled error:', err);
+      res.status(500).json({ error: 'Internal server error' });
+    });
+
     console.log('Server fully ready.');
   } catch (err) {
     console.error('DB init error (server still running):', err.message);
+    // Still register error handler even if init fails
+    app.use((errInner, req, res, next) => {
+      console.error('Unhandled error:', errInner);
+      res.status(500).json({ error: 'Internal server error' });
+    });
   }
 }
-
-// Error handler
-app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({ error: 'Internal server error' });
-});
 
 initDB();
 

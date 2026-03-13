@@ -276,16 +276,31 @@ router.post('/order', async (req, res) => {
 
     const direction = side === 'buy' ? 'long' : 'short';
     const lev = leverage || 1;
-    const sizeUsd = parseFloat(size) * (await blofinClient.getMarkPrice(instId, demo) || 0);
+    const markPrice = await blofinClient.getMarkPrice(instId, demo) || 0;
+
+    // Convert size (in base asset units from frontend) to BloFin contracts
+    let contractSize = parseFloat(size);
+    try {
+      const markets = await blofinClient.getMarkets(demo);
+      const mkt = markets.find(m => m.name === instId);
+      if (mkt && mkt.contractValue) {
+        const cv = parseFloat(mkt.contractValue);
+        contractSize = Math.max(1, Math.round(parseFloat(size) / cv));
+        console.log(`[Order] ${instId}: size=${size} base units / contractValue=${cv} = ${contractSize} contracts`);
+      }
+    } catch (e) { console.warn('[Order] Could not fetch contractValue:', e.message); }
+
+    const sizeUsd = contractSize * (markPrice || 0) * parseFloat(size > 0 ? 1 : 0);
 
     // Safety check
-    await safetyGuard.canOpenPosition(req.user.id, sizeUsd / lev, lev);
+    const collateral = parseFloat(size) * markPrice / lev;
+    await safetyGuard.canOpenPosition(req.user.id, collateral, lev);
 
     const result = await blofinClient.openPosition({
       creds,
       instId,
       direction,
-      size,
+      size: String(contractSize),
       leverage: lev,
       orderType: orderType || 'market',
       price,

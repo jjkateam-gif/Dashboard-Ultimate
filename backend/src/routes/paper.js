@@ -65,6 +65,13 @@ router.get('/strategies/:id/state', async (req, res) => {
 router.put('/strategies/:id/state', async (req, res) => {
   try {
     const { state } = req.body;
+    // Verify ownership before updating
+    const ownerCheck = await pool.query(
+      'SELECT id FROM paper_strategies WHERE id=$1 AND user_id=$2',
+      [req.params.id, req.user.id]
+    );
+    if (ownerCheck.rows.length === 0) return res.status(403).json({ error: 'Not authorized' });
+
     await pool.query(
       'INSERT INTO paper_state (strategy_id, state) VALUES ($1, $2) ON CONFLICT (strategy_id) DO UPDATE SET state=$2, updated_at=NOW()',
       [req.params.id, JSON.stringify(state)]

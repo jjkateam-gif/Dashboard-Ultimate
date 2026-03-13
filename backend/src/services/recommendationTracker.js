@@ -122,7 +122,7 @@ async function resolveRecommendations() {
           pnlPct = ((entry - target) / entry * 100);
         } else if (currentPrice >= stop) {
           outcome = 'loss';
-          pnlPct = ((entry - stop) / entry * 100) * -1;
+          pnlPct = ((entry - stop) / entry * 100); // negative since stop > entry for shorts
         }
       }
 

@@ -259,16 +259,24 @@ async function openPosition({ creds, instId, direction, size, leverage, orderTyp
   return { orderId, protocol: 'blofin' };
 }
 
-async function closePosition({ creds, instId, direction, demo }) {
+async function closePosition({ creds, instId, direction, marginMode, demo }) {
   const side = direction === 'long' ? 'sell' : 'buy';
+
+  // Get actual position size to close
+  let closeSize = '0';
+  try {
+    const positions = await getPositions(creds, demo);
+    const pos = positions.find(p => p.instId === instId && p.direction === direction);
+    if (pos && pos.size > 0) closeSize = String(pos.size);
+  } catch (e) { console.warn('[BloFin] Could not fetch position size for close:', e.message); }
+
   const body = {
     instId,
-    marginMode: 'cross',  // BloFin requires 'marginMode'
+    marginMode: marginMode || 'cross',
     side,
     orderType: 'market',
-    size: '0',            // 0 = close all
+    size: closeSize,
     positionSide: direction,
-    reduceOnly: true,
   };
 
   const data = await privatePost('/api/v1/trade/order', body, creds, true, demo);
