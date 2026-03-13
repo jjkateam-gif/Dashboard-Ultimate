@@ -212,8 +212,22 @@ async function setMarginMode(creds, instId, marginMode, demo) {
   }, creds, false, demo);
 }
 
+async function setPositionMode(creds, positionMode, demo) {
+  return privatePost('/api/v1/account/set-position-mode', {
+    positionMode, // 'long_short_mode' (hedge) or 'net_mode' (one-way)
+  }, creds, false, demo);
+}
+
 async function openPosition({ creds, instId, direction, size, leverage, orderType, price, tpPrice, slPrice, marginMode, demo }) {
   const mode = marginMode || 'cross';
+
+  // Ensure hedge mode is enabled (required for positionSide: long/short)
+  try {
+    await setPositionMode(creds, 'long_short_mode', demo);
+  } catch (e) {
+    // May already be set — non-fatal
+    console.warn(`[BloFin] setPositionMode warning: ${e.message}`);
+  }
 
   // Set leverage first
   try {
@@ -323,6 +337,7 @@ module.exports = {
   getPositions,
   setLeverage,
   setMarginMode,
+  setPositionMode,
   openPosition,
   closePosition,
   cancelOrder,
