@@ -2402,6 +2402,11 @@ function switchAuthView(view) {
       <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Avg P&amp;L</div><div id="recAvgPnl" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">&mdash;</div></div>
       <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Streak</div><div id="recStreak" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">&mdash;</div></div>
     </div>
+    <!-- Best Timeframe Analysis -->
+    <div id="recTfAnalysis" style="display:none;margin-bottom:12px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:12px">
+      <div style="font-size:9px;font-weight:700;color:#a855f7;font-family:'Space Mono',monospace;margin-bottom:8px">🏆 TIMEFRAME PERFORMANCE</div>
+      <div id="recTfBars" style="display:flex;flex-direction:column;gap:5px"></div>
+    </div>
     <div id="recHistoryList" style="max-height:500px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 transparent">
       <div style="text-align:center;padding:20px;color:#5a7a68;font-family:'Space Mono',monospace;font-size:10px">Run the Probability Engine to start tracking recommendations</div>
     </div>
@@ -12813,6 +12818,36 @@ function renderRecSummary(s) {
   const streak = s.streak || '—';
   const streakColor = s.streak ? (s.streak.includes('W') ? '#00f5a0' : '#ff4d6d') : '#5a7a68';
   el('recStreak', streak, streakColor);
+
+  // Timeframe performance bars
+  const tfPanel = document.getElementById('recTfAnalysis');
+  const tfBars = document.getElementById('recTfBars');
+  if (tfPanel && tfBars && s.timeframes && s.timeframes.length > 0) {
+    const resolved = s.timeframes.filter(t => t.resolved > 0);
+    if (resolved.length > 0) {
+      tfPanel.style.display = 'block';
+      const maxWR = Math.max(...resolved.map(t => t.winRate || 0));
+      tfBars.innerHTML = resolved.map((t, i) => {
+        const barW = maxWR > 0 ? ((t.winRate || 0) / maxWR * 100).toFixed(0) : 0;
+        const wrColor = t.winRate >= 60 ? '#00f5a0' : t.winRate >= 45 ? '#ffd60a' : '#ff4d6d';
+        const pnlStr = t.avgPnl != null ? (t.avgPnl > 0 ? '+' : '') + t.avgPnl.toFixed(2) + '%' : '';
+        const pnlColor = t.avgPnl > 0 ? '#00f5a0' : t.avgPnl < 0 ? '#ff4d6d' : '#5a7a68';
+        const best = i === 0 ? ' 🏆' : '';
+        return `<div style="display:grid;grid-template-columns:50px 1fr 80px 70px;gap:8px;align-items:center;font-family:'Space Mono',monospace;font-size:9px">
+          <span style="color:#a78bfa;font-weight:700">${t.tf}${best}</span>
+          <div style="background:rgba(255,255,255,0.05);border-radius:3px;height:16px;overflow:hidden">
+            <div style="height:100%;width:${barW}%;background:${wrColor};border-radius:3px;opacity:0.7;transition:width 0.3s"></div>
+          </div>
+          <span style="color:${wrColor};text-align:right">${(t.winRate||0).toFixed(0)}% WR <span style="color:#5a7a68;font-size:7px">(${t.resolved})</span></span>
+          <span style="color:${pnlColor};text-align:right">${pnlStr}</span>
+        </div>`;
+      }).join('');
+    } else {
+      tfPanel.style.display = 'none';
+    }
+  } else if (tfPanel) {
+    tfPanel.style.display = 'none';
+  }
 }
 
 function renderRecHistory(recs) {

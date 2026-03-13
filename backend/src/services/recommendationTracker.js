@@ -213,6 +213,22 @@ async function getSummary(userId, source = null) {
     }
   }
 
+  // Timeframe breakdown — win rate + avg P&L per timeframe
+  let tfQuery = `SELECT timeframe,
+       COUNT(*) FILTER (WHERE outcome IN ('win','loss'))::int AS resolved,
+       COUNT(*) FILTER (WHERE outcome = 'win')::int AS wins,
+       ROUND(AVG(actual_pnl_pct) FILTER (WHERE outcome IN ('win','loss')), 2) AS "avgPnl",
+       ROUND(
+         CASE WHEN COUNT(*) FILTER (WHERE outcome IN ('win','loss')) > 0
+              THEN COUNT(*) FILTER (WHERE outcome = 'win')::numeric / COUNT(*) FILTER (WHERE outcome IN ('win','loss')) * 100
+              ELSE NULL END, 1
+       ) AS "winRate"
+     FROM trade_recommendations
+     ${whereClause} AND timeframe IS NOT NULL
+     GROUP BY timeframe
+     ORDER BY "winRate" DESC NULLS LAST`;
+  const { rows: tfRows } = await pool.query(tfQuery, params);
+
   return {
     total: summary.total || 0,
     wins: summary.wins || 0,
@@ -222,6 +238,13 @@ async function getSummary(userId, source = null) {
     avgPnl: summary.avgPnl != null ? parseFloat(summary.avgPnl) : null,
     winRate: summary.winRate != null ? parseFloat(summary.winRate) : null,
     streak: streakType ? `${streak}${streakType === 'win' ? 'W' : 'L'}` : null,
+    timeframes: tfRows.map(t => ({
+      tf: t.timeframe,
+      resolved: t.resolved,
+      wins: t.wins,
+      avgPnl: t.avgPnl != null ? parseFloat(t.avgPnl) : null,
+      winRate: t.winRate != null ? parseFloat(t.winRate) : null,
+    })),
   };
 }
 
