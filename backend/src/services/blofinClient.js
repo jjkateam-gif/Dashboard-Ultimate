@@ -260,7 +260,16 @@ async function openPosition({ creds, instId, direction, size, leverage, orderTyp
   // Set TP/SL if provided
   if ((tpPrice || slPrice) && orderId) {
     try {
-      const tpslBody = { instId, positionSide: direction };
+      const closeSide = direction === 'long' ? 'sell' : 'buy';
+      const tpslBody = {
+        instId,
+        marginMode: mode,
+        positionSide: direction,
+        side: closeSide,
+        size: String(size),       // same size as the order
+      };
+      const tpslBid = creds.brokerId || BROKER_ID;
+      if (tpslBid) tpslBody.brokerId = tpslBid;
       if (tpPrice) {
         tpslBody.tpTriggerPrice = String(tpPrice);
         tpslBody.tpOrderPrice = '-1'; // market price
@@ -269,7 +278,8 @@ async function openPosition({ creds, instId, direction, size, leverage, orderTyp
         tpslBody.slTriggerPrice = String(slPrice);
         tpslBody.slOrderPrice = '-1'; // market price
       }
-      await privatePost('/api/v1/trade/order-tpsl', tpslBody, creds, true, demo);
+      const tpslResult = await privatePost('/api/v1/trade/order-tpsl', tpslBody, creds, true, demo);
+      console.log(`[BloFin] TP/SL set for ${instId}:`, JSON.stringify(tpslResult));
     } catch (e) {
       console.warn(`[BloFin] TP/SL setting warning: ${e.message}`);
     }
