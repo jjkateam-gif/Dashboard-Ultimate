@@ -1618,10 +1618,71 @@ function switchAuthView(view) {
       style="font-size:9px;padding:7px;margin:0;margin-top:5px;background:rgba(0,190,255,0.1);border:1px solid rgba(0,190,255,0.3);color:#00bfff;border-radius:4px;cursor:pointer;width:100%;font-family:'Space Mono',monospace;font-weight:700">
       🔔 Save as Live Alert
     </button>
-    <button onclick="startPaperTrading()"
+    <button onclick="showPaperTradePopup()"
       style="font-size:9px;padding:7px;margin:0;margin-top:5px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:4px;cursor:pointer;width:100%;font-family:'Space Mono',monospace;font-weight:700">
       📄 Start Paper Trading
     </button>
+  </div>
+</div>
+
+<!-- ===== PAPER TRADE CONFIG POPUP ===== -->
+<div id="ptPopupOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)">
+  <div style="background:#0d1b0f;border:1px solid rgba(167,139,250,0.4);border-radius:10px;padding:20px 24px;max-width:420px;width:90%;font-family:'Space Mono',monospace;box-shadow:0 8px 40px rgba(0,0,0,0.6)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <span style="font-size:13px;font-weight:700;color:#a78bfa">📄 Paper Trade Setup</span>
+      <button onclick="closePtPopup()" style="background:none;border:none;color:var(--text-muted);font-size:16px;cursor:pointer">&times;</button>
+    </div>
+    <div id="ptPopupStrategy" style="font-size:9px;color:var(--primary);margin-bottom:12px;padding:6px 8px;background:rgba(0,245,160,0.05);border:1px solid rgba(0,245,160,0.15);border-radius:4px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <label style="font-size:8px;color:var(--text-muted);display:block;margin-bottom:3px">STOP LOSS %</label>
+        <input id="ptPopSL" type="number" value="5" min="0.1" max="50" step="0.5" style="width:100%;font-size:10px;padding:6px 8px;background:#0a1a10;border:1px solid rgba(239,68,68,0.3);color:#ef4444;border-radius:4px;font-family:'Space Mono',monospace">
+      </div>
+      <div>
+        <label style="font-size:8px;color:var(--text-muted);display:block;margin-bottom:3px">TAKE PROFIT %</label>
+        <input id="ptPopTP" type="number" value="0" min="0" max="500" step="1" placeholder="0 = signal exit" style="width:100%;font-size:10px;padding:6px 8px;background:#0a1a10;border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:4px;font-family:'Space Mono',monospace">
+      </div>
+      <div>
+        <label style="font-size:8px;color:var(--text-muted);display:block;margin-bottom:3px">CAPITAL ($)</label>
+        <input id="ptPopCapital" type="number" value="10000" min="100" style="width:100%;font-size:10px;padding:6px 8px;background:#0a1a10;border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:4px;font-family:'Space Mono',monospace">
+      </div>
+      <div>
+        <label style="font-size:8px;color:var(--text-muted);display:block;margin-bottom:3px">LOOKBACK (DAYS)</label>
+        <select id="ptPopLookback" style="width:100%;font-size:10px;padding:6px 8px;background:#0a1a10;border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:4px;font-family:'Space Mono',monospace">
+          <option value="7">7 days</option>
+          <option value="14">14 days</option>
+          <option value="30" selected>30 days</option>
+          <option value="60">60 days</option>
+          <option value="90">90 days</option>
+        </select>
+      </div>
+    </div>
+    <!-- Kill Switch Section -->
+    <div style="border-top:1px solid rgba(239,68,68,0.2);padding-top:12px;margin-bottom:14px">
+      <div style="font-size:9px;font-weight:700;color:#ef4444;margin-bottom:8px">🛑 KILL SWITCH</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <input type="checkbox" id="ptPopKillLoss" checked style="accent-color:#ef4444">
+        <label for="ptPopKillLoss" style="font-size:8px;color:var(--text-muted);flex:1">Max Loss — auto-stop if total P&L drops below</label>
+        <input id="ptPopKillLossPct" type="number" value="15" min="1" max="100" step="1" style="width:55px;font-size:9px;padding:4px 6px;background:#0a1a10;border:1px solid rgba(239,68,68,0.3);color:#ef4444;border-radius:3px;font-family:'Space Mono',monospace;text-align:right">
+        <span style="font-size:8px;color:var(--text-muted)">%</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <input type="checkbox" id="ptPopKillDD" style="accent-color:#ef4444">
+        <label for="ptPopKillDD" style="font-size:8px;color:var(--text-muted);flex:1">Max Drawdown — auto-stop if equity drops from peak</label>
+        <input id="ptPopKillDDPct" type="number" value="20" min="1" max="100" step="1" style="width:55px;font-size:9px;padding:4px 6px;background:#0a1a10;border:1px solid rgba(239,68,68,0.3);color:#ef4444;border-radius:3px;font-family:'Space Mono',monospace;text-align:right">
+        <span style="font-size:8px;color:var(--text-muted)">%</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="ptPopKillStreak" style="accent-color:#ef4444">
+        <label for="ptPopKillStreak" style="font-size:8px;color:var(--text-muted);flex:1">Losing Streak — auto-stop after consecutive losses</label>
+        <input id="ptPopKillStreakN" type="number" value="5" min="2" max="20" step="1" style="width:55px;font-size:9px;padding:4px 6px;background:#0a1a10;border:1px solid rgba(239,68,68,0.3);color:#ef4444;border-radius:3px;font-family:'Space Mono',monospace;text-align:right">
+        <span style="font-size:8px;color:var(--text-muted)">×</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="closePtPopup()" style="flex:1;font-size:9px;padding:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace">Cancel</button>
+      <button onclick="confirmPaperTrade()" style="flex:2;font-size:10px;padding:8px;background:rgba(167,139,250,0.2);border:1px solid rgba(167,139,250,0.5);color:#a78bfa;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700">🚀 Start Paper Trading</button>
+    </div>
   </div>
 </div>
 
@@ -5085,7 +5146,7 @@ function renderOptTable(results){
 
     tr.innerHTML = `
       <td><strong>${i+1}</strong></td>
-      <td style="font-size:9px">${medal}${indStr} <span style="color:var(--text-muted);font-size:8px">[${r.logic}]</span></td>
+      <td style="font-size:9px">${medal}${indStr} ${r.isSolo ? '' : `<button onclick="toggleLogic(${globalRank})" style="font-size:7px;padding:1px 5px;margin-left:4px;background:${r.logic==='or'?'rgba(168,85,247,0.2)':'rgba(0,191,255,0.2)'};border:1px solid ${r.logic==='or'?'rgba(168,85,247,0.5)':'rgba(0,191,255,0.5)'};color:${r.logic==='or'?'#a855f7':'#00bfff'};border-radius:3px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700" title="Click to see ${r.logic==='or'?'AND':'OR'} variant">${r.logic.toUpperCase()}</button>`}</td>
       <td>${typeBadge}</td>
       <td class="text-right">${r.sharpe.toFixed(2)}</td>
       <td class="text-right text-success">+${r.ret.toFixed(1)}%</td>
@@ -5104,6 +5165,41 @@ function renderOptTable(results){
     tbody.appendChild(tr);
   });
 }
+
+// ============================================================
+// ===== TOGGLE AND/OR LOGIC ON OPTIMIZER RESULTS =====
+// ============================================================
+window.toggleLogic = function(idx) {
+  const r = window.optimResults[idx];
+  if (!r || r.isSolo) return;
+  const otherLogic = r.logic === 'or' ? 'and' : 'or';
+  // Look for existing result with same indicators but opposite logic
+  const indKey = r.indicators.join('|');
+  const alt = window.optimResults.find(x => !x.isSolo && x.indicators.join('|') === indKey && x.logic === otherLogic);
+  if (alt) {
+    // Show comparison tooltip/toast with both variants
+    const better = alt.ret > r.ret ? otherLogic : r.logic;
+    toast(`${r.logic.toUpperCase()}: +${r.ret.toFixed(1)}% (${r.wr.toFixed(0)}% WR, ${r.trades} trades)  vs  ${otherLogic.toUpperCase()}: +${alt.ret.toFixed(1)}% (${alt.wr.toFixed(0)}% WR, ${alt.trades} trades) — ${better.toUpperCase()} wins`, 'info', 6000);
+    // Scroll to the alt row if visible
+    const altIdx = window.optimResults.indexOf(alt);
+    const rows = $('optimTable')?.querySelectorAll('tbody tr');
+    if (rows) {
+      rows.forEach(row => row.style.outline = '');
+      rows.forEach(row => {
+        const btn = row.querySelector('button[onclick*="applyCombo"]');
+        if (btn) {
+          const match = btn.getAttribute('onclick').match(/applyCombo\((\d+)\)/);
+          if (match && (parseInt(match[1]) === idx || parseInt(match[1]) === altIdx)) {
+            row.style.outline = '1px solid rgba(168,85,247,0.6)';
+            row.style.outlineOffset = '-1px';
+          }
+        }
+      });
+    }
+  } else {
+    toast(`No ${otherLogic.toUpperCase()} variant found in results — optimizer only found the ${r.logic.toUpperCase()} version`, 'warn', 4000);
+  }
+};
 
 // ============================================================
 // ===== APPLY COMBO — now sets per-indicator TF =====
@@ -14402,6 +14498,75 @@ function ptStateDefault() {
 }
 
 // ════════════════════════════════════════════════════════════════
+// PAPER TRADE POPUP
+// ════════════════════════════════════════════════════════════════
+
+function showPaperTradePopup() {
+  // Pre-fill from current backtest settings
+  const sl = $('stopLoss')?.value || '5';
+  const tp = $('takeProfit')?.value || '0';
+  const cap = $('capital')?.value || '10000';
+  const lb = $('ptLookbackDays')?.value || '30';
+
+  $('ptPopSL').value = sl;
+  $('ptPopTP').value = tp;
+  $('ptPopCapital').value = cap;
+  // Set lookback dropdown
+  const lbSel = $('ptPopLookback');
+  if (lbSel) { lbSel.value = lb; if (lbSel.value !== lb) lbSel.value = '30'; }
+
+  // Show strategy name
+  const stratEl = $('ptPopupStrategy');
+  if (stratEl) {
+    const sym = $('symbol')?.value || 'BTCUSDT';
+    const tf = $('interval')?.value || '4h';
+    if (lastParts?.length) {
+      stratEl.textContent = lastParts.map(p => `${p.name}(${p.resolvedTF||p.tf||tf})`).join(' + ') + ` on ${sym}`;
+    } else if (PT.selected) {
+      const src = ptRegGet(PT.selected);
+      stratEl.textContent = src ? `${src.label} on ${src.symbol}` : 'Selected strategy';
+    } else {
+      stratEl.textContent = '⚠️ Run a backtest first to load a strategy';
+    }
+  }
+
+  const overlay = $('ptPopupOverlay');
+  overlay.style.display = 'flex';
+  // Close on backdrop click
+  overlay.onclick = (e) => { if (e.target === overlay) closePtPopup(); };
+}
+
+function closePtPopup() {
+  $('ptPopupOverlay').style.display = 'none';
+}
+
+function confirmPaperTrade() {
+  // Apply popup values back to main inputs so startPaperTrading() picks them up
+  const sl = $('ptPopSL').value;
+  const tp = $('ptPopTP').value;
+  const cap = $('ptPopCapital').value;
+  const lb = $('ptPopLookback').value;
+
+  if ($('stopLoss')) $('stopLoss').value = sl;
+  if ($('takeProfit')) $('takeProfit').value = tp;
+  if ($('capital')) $('capital').value = cap;
+  if ($('ptLookbackDays')) $('ptLookbackDays').value = lb;
+
+  // Gather kill switch settings
+  const killSwitch = {
+    maxLoss:   $('ptPopKillLoss').checked ? +$('ptPopKillLossPct').value : 0,
+    maxDD:     $('ptPopKillDD').checked ? +$('ptPopKillDDPct').value : 0,
+    loseStreak: $('ptPopKillStreak').checked ? +$('ptPopKillStreakN').value : 0,
+  };
+
+  closePtPopup();
+
+  // Store kill switch so startPaperTrading can attach it
+  window._ptKillSwitch = killSwitch;
+  startPaperTrading();
+}
+
+// ════════════════════════════════════════════════════════════════
 // ADD / REMOVE STRATEGIES
 // ════════════════════════════════════════════════════════════════
 
@@ -14416,8 +14581,10 @@ function startPaperTrading() {
         const id = 'pt_' + Date.now();
         // Append lookback to label so multiple windows can run side-by-side
         const newLabel = src.label + ` [${lookbackDays}d]`;
+        const killSwitch = window._ptKillSwitch || { maxLoss: 0, maxDD: 0, loseStreak: 0 };
+        window._ptKillSwitch = null;
         const def = { ...src, id, label: newLabel, lookbackDays, active: true, pausedReason: null,
-                      startedAt: new Date().toISOString(), addedAt: new Date().toISOString() };
+                      killSwitch, startedAt: new Date().toISOString(), addedAt: new Date().toISOString() };
         const reg = ptRegLoad();
         // Only block exact duplicates (same label+symbol+lookback already active)
         if (reg.find(s => s.label === newLabel && s.symbol === def.symbol && s.active)) {
@@ -14477,10 +14644,12 @@ function startPaperTrading() {
   const retEl = $('metricReturn');
   const backtestReturn = retEl ? parseFloat(retEl.textContent) || null : null;
 
+  const killSwitch = window._ptKillSwitch || { maxLoss: 0, maxDD: 0, loseStreak: 0 };
+  window._ptKillSwitch = null;
   const def = {
     id, label, symbol: sym, primaryTF: tf, parts, opts,
     uniqueTFs, isCrossTF, backtestReturn, capital, lookbackDays,
-    active: true, pausedReason: null,
+    killSwitch, active: true, pausedReason: null,
     startedAt: new Date().toISOString(), addedAt: new Date().toISOString(),
   };
 
@@ -14742,16 +14911,40 @@ async function pollOneStrategy(id) {
       }
       state.positions = state.positions.filter(p => !toClose.includes(p.id));
 
-      // Kill switch
+      // Kill switch — per-strategy settings from popup, fallback to global
+      const ks = def.killSwitch || {};
       const killEnabled = $('policyKillSwitchEnabled')?.checked !== false;
-      if (killEnabled && (state.consecLosses||0) >= maxConsec) {
+      // 1) Losing streak kill
+      const streakLimit = ks.loseStreak || (killEnabled ? maxConsec : 0);
+      if (streakLimit > 0 && (state.consecLosses||0) >= streakLimit) {
         ptStateSave(id, state);
         stopOnePaperStrategy(id);
-        ptRegUpdate(id, { active:false, pausedReason:`Kill switch: ${maxConsec} consecutive losses` });
-        toast(`⛔ [${label}] Kill switch — ${maxConsec} consecutive losses`, 'error');
-        renderPaperDashboard();
-        killed = true;
-        break;
+        ptRegUpdate(id, { active:false, pausedReason:`Kill switch: ${streakLimit} consecutive losses` });
+        toast(`⛔ [${label}] Kill switch — ${streakLimit} consecutive losses`, 'error');
+        renderPaperDashboard(); killed = true; break;
+      }
+      // 2) Max loss kill (total P&L dropped below -X% of starting capital)
+      if (ks.maxLoss > 0) {
+        const totalPnlPct = ((state.equity - (def.capital||10000)) / (def.capital||10000)) * 100;
+        if (totalPnlPct <= -ks.maxLoss) {
+          ptStateSave(id, state);
+          stopOnePaperStrategy(id);
+          ptRegUpdate(id, { active:false, pausedReason:`Kill switch: max loss -${ks.maxLoss}% hit (${totalPnlPct.toFixed(1)}%)` });
+          toast(`⛔ [${label}] Kill switch — max loss -${ks.maxLoss}% hit`, 'error');
+          renderPaperDashboard(); killed = true; break;
+        }
+      }
+      // 3) Max drawdown kill (equity dropped X% from peak)
+      if (ks.maxDD > 0) {
+        const peak = Math.max(...state.equityCurve.map(e => e.v));
+        const ddPct = peak > 0 ? ((peak - state.equity) / peak) * 100 : 0;
+        if (ddPct >= ks.maxDD) {
+          ptStateSave(id, state);
+          stopOnePaperStrategy(id);
+          ptRegUpdate(id, { active:false, pausedReason:`Kill switch: drawdown -${ddPct.toFixed(1)}% exceeded ${ks.maxDD}% limit` });
+          toast(`⛔ [${label}] Kill switch — drawdown exceeded ${ks.maxDD}%`, 'error');
+          renderPaperDashboard(); killed = true; break;
+        }
       }
     }
 
