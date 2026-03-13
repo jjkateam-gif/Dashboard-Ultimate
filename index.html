@@ -27,22 +27,23 @@
 #predTradeLog > div span { font-size: 13px !important; }
 
 /* === GLOBAL TEXT SIZE BOOST === */
-body { font-size: 13px !important; }
-#pageTabs button { font-size: 11px !important; padding: 8px 14px !important; }
-.card-title, .intel-section-title { font-size: 13px !important; }
-.intel-sub-tab { font-size: 11px !important; padding: 8px 18px !important; }
-input, select, textarea { font-size: 12px !important; }
-button { font-size: 11px !important; }
-table { font-size: 12px !important; }
-th, td { font-size: 12px !important; padding: 6px 8px !important; }
-label { font-size: 11px !important; }
-.news-item a { font-size: 13px !important; }
-.news-filter-btn { font-size: 11px !important; }
+body { font-size: 14px !important; }
+#pageTabs button { font-size: 14px !important; padding: 12px 20px !important; transition: all 0.2s ease; }
+#pageTabs button:hover { background: rgba(0,245,160,0.08) !important; color: #00f5a0 !important; }
+.card-title, .intel-section-title { font-size: 14px !important; }
+.intel-sub-tab { font-size: 12px !important; padding: 10px 20px !important; }
+input, select, textarea { font-size: 13px !important; }
+button { font-size: 12px !important; }
+table { font-size: 13px !important; }
+th, td { font-size: 13px !important; padding: 8px 10px !important; }
+label { font-size: 12px !important; }
+.news-item a { font-size: 14px !important; }
+.news-filter-btn { font-size: 12px !important; }
 
-/* Boost all inline font-size declarations */
-[style*="font-size:7px"] { font-size: 10px !important; }
-[style*="font-size:8px"] { font-size: 11px !important; }
-[style*="font-size:9px"] { font-size: 12px !important; }
+/* Boost all inline font-size declarations — 12px minimum floor */
+[style*="font-size:7px"] { font-size: 12px !important; }
+[style*="font-size:8px"] { font-size: 12px !important; }
+[style*="font-size:9px"] { font-size: 13px !important; }
 [style*="font-size:10px"] { font-size: 13px !important; }
 [style*="font-size:11px"] { font-size: 14px !important; }
 /* === END GLOBAL TEXT SIZE BOOST === */
@@ -921,6 +922,43 @@ function switchAuthView(view) {
 </div><!-- end cycle container -->
 
 <div class="container">
+
+<!-- ========== ONBOARDING MODAL ========== -->
+<div id="onboardingModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:10000;align-items:center;justify-content:center;font-family:'Space Mono',monospace">
+  <div style="max-width:560px;padding:40px;background:linear-gradient(135deg,#0d1f14,#0a1520);border:2px solid rgba(0,245,160,0.3);border-radius:20px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.8)">
+    <div style="font-size:48px;margin-bottom:16px">🎯</div>
+    <h2 style="font-size:22px;color:#00f5a0;margin:0 0 8px;font-weight:700">Welcome to Your Trading Dashboard</h2>
+    <p style="font-size:13px;color:#5a7a68;margin:0 0 28px">AI-powered crypto trading signals & automation</p>
+
+    <div style="text-align:left;background:rgba(0,0,0,0.3);border-radius:12px;padding:20px 24px;margin-bottom:28px">
+      <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px">
+        <div style="min-width:28px;height:28px;border-radius:50%;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);display:flex;align-items:center;justify-content:center;font-size:13px;color:#00f5a0;font-weight:700">1</div>
+        <div><div style="font-size:13px;color:#fff;font-weight:700;margin-bottom:3px">Scan for Trades</div><div style="font-size:12px;color:#5a7a68;line-height:1.5">Choose a timeframe (4H recommended) and click <span style="color:#ff6b35;font-weight:700">Scan Now</span></div></div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px">
+        <div style="min-width:28px;height:28px;border-radius:50%;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);display:flex;align-items:center;justify-content:center;font-size:13px;color:#00f5a0;font-weight:700">2</div>
+        <div><div style="font-size:13px;color:#fff;font-weight:700;margin-bottom:3px">Review AI Signals</div><div style="font-size:12px;color:#5a7a68;line-height:1.5">See probability scores, stop loss, take profit for each setup</div></div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="min-width:28px;height:28px;border-radius:50%;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);display:flex;align-items:center;justify-content:center;font-size:13px;color:#00f5a0;font-weight:700">3</div>
+        <div><div style="font-size:13px;color:#fff;font-weight:700;margin-bottom:3px">Trade or Auto-Trade</div><div style="font-size:12px;color:#5a7a68;line-height:1.5">Execute manually, or connect BloFin to auto-trade when signals hit your threshold</div></div>
+      </div>
+    </div>
+
+    <button onclick="dismissOnboarding()" style="font-size:15px;padding:14px 40px;background:rgba(0,245,160,0.2);border:2px solid rgba(0,245,160,0.5);color:#00f5a0;border-radius:10px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;transition:all 0.2s">
+      ⚡ Get Started
+    </button>
+    <div style="font-size:11px;color:#3a5a48;margin-top:12px">You can always access all features from the tabs above</div>
+  </div>
+</div>
+
+<!-- ========== GLOBAL BLOFIN STATUS ========== -->
+<div id="globalBlofinStatus" style="display:flex;align-items:center;gap:8px;padding:8px 14px;margin-bottom:10px;font-family:'Space Mono',monospace;font-size:12px;background:rgba(0,0,0,0.2);border-radius:8px;border:1px solid rgba(255,255,255,0.05)">
+  <div id="globalBlofinDot" style="width:8px;height:8px;border-radius:50%;background:#ff4d6d"></div>
+  <span id="globalBlofinLabel" style="color:#5a7a68">BloFin: Not Connected</span>
+  <span style="flex:1"></span>
+  <span id="globalBalanceLabel" style="color:#5a7a68;font-size:11px"></span>
+</div>
 
 <!-- ========== PAGE TABS ========== -->
 <div id="pageTabs" role="tablist" style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid rgba(0,245,160,0.15);padding-bottom:0">
@@ -2352,14 +2390,14 @@ function switchAuthView(view) {
         <option value="10">10× Lev</option>
       </select>
       <button onclick="runProbEngine()" id="probeBtn"
-        style="font-size:9px;padding:7px 16px;width:auto;margin:0;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700">
-        ⚡ Scan Now
+        style="font-size:15px;padding:12px 28px;width:auto;margin:0;background:linear-gradient(135deg,rgba(255,107,53,0.25),rgba(255,107,53,0.15));border:2px solid rgba(255,107,53,0.6);color:#ff6b35;border-radius:8px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;letter-spacing:0.5px;transition:all 0.2s;box-shadow:0 4px 15px rgba(255,107,53,0.2)">
+        ⚡ Scan<br>Now
       </button>
     </div>
   </div>
 
   <!-- Auto-Trade Settings Panel -->
-  <details id="autoTradePanel" style="margin-bottom:14px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,107,53,0.2);border-radius:10px;padding:0">
+  <details id="autoTradePanel" open style="margin-bottom:14px;background:rgba(0,0,0,0.3);border:2px solid rgba(255,107,53,0.35);border-radius:10px;padding:0">
     <summary style="padding:14px 18px;cursor:pointer;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:#ff6b35;list-style:none;display:flex;align-items:center;gap:10px">
       <span>🤖 AUTO-TRADE SETTINGS</span>
       <span id="autoTradeStatus" style="font-size:10px;color:#5a7a68;font-weight:400">OFF</span>
@@ -2460,10 +2498,15 @@ function switchAuthView(view) {
 
   <!-- Top setups grid -->
   <div id="probeSetups" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:16px">
-    <div style="grid-column:1/-1;text-align:center;padding:60px;font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace">
-      <div style="font-size:32px;margin-bottom:12px">🎯</div>
-      Click <strong style="color:#ff6b35">⚡ Scan Now</strong> to find the best trade setups right now.<br>
-      <span style="font-size:8px;opacity:0.7">Fetches live data across BTC, ETH, SOL, SUI on your selected timeframe.</span>
+    <div style="grid-column:1/-1;text-align:center;padding:48px 20px;font-family:'Space Mono',monospace">
+      <div style="font-size:40px;margin-bottom:16px">🎯</div>
+      <div style="font-size:18px;font-weight:700;color:#ff6b35;margin-bottom:16px">Find Your Best Trades</div>
+      <div style="font-size:13px;color:#aaa;line-height:1.8;max-width:480px;margin:0 auto 24px">
+        <strong style="color:#fff">Step 1:</strong> Choose a timeframe above <span style="color:#00f5a0">(4H recommended for beginners)</span><br>
+        <strong style="color:#fff">Step 2:</strong> Leave leverage at 1× Spot until comfortable<br>
+        <strong style="color:#fff">Step 3:</strong> Click <strong style="color:#ff6b35">Scan Now</strong> to find high-probability setups
+      </div>
+      <div style="font-size:12px;color:#5a7a68">Scans 20 coins across multiple indicators in real-time</div>
     </div>
   </div>
 
@@ -9856,9 +9899,36 @@ function renderDegenCard(c, tier) {
     </div>`;
 }
 
+// Onboarding modal
+function dismissOnboarding() {
+  const m = $('onboardingModal');
+  if (m) m.style.display = 'none';
+  localStorage.setItem('dash_onboarded', '1');
+}
+
+// Update global BloFin status indicator
+function updateGlobalBlofinStatus(connected, balance) {
+  const dot = $('globalBlofinDot');
+  const label = $('globalBlofinLabel');
+  const balLabel = $('globalBalanceLabel');
+  if (dot) dot.style.background = connected ? '#00f5a0' : '#ff4d6d';
+  if (label) {
+    label.style.color = connected ? '#00f5a0' : '#ff4d6d';
+    label.textContent = connected ? '⚡ BloFin: Connected & Ready' : '🔌 BloFin: Not Connected';
+  }
+  if (balLabel && balance !== undefined) {
+    balLabel.textContent = balance > 0 ? 'Balance: $' + balance.toFixed(2) : '';
+  }
+}
+
 // Auto-load when page ready
 window.addEventListener('DOMContentLoaded', () => {
-  switchPageTab('backtester');
+  switchPageTab('trades');
+  // Show onboarding for first-time users
+  if (!localStorage.getItem('dash_onboarded')) {
+    const m = $('onboardingModal');
+    if (m) m.style.display = 'flex';
+  }
 });
 
 
@@ -13473,6 +13543,7 @@ async function checkBlofinConnection() {
       statusBox.style.background = 'rgba(0,245,160,0.06)';
       statusBox.style.borderColor = 'rgba(0,245,160,0.2)';
       if (connectBtn) { connectBtn.textContent = '✅ Connected'; connectBtn.style.color = '#00f5a0'; connectBtn.style.borderColor = 'rgba(0,245,160,0.35)'; connectBtn.style.background = 'rgba(0,245,160,0.08)'; }
+      updateGlobalBlofinStatus(true);
     } else if (d.hasCredentials || d.engineRunning) {
       dot.style.background = '#f5c400';
       label.textContent = 'BloFin: Credentials Locked';
@@ -13491,6 +13562,7 @@ async function checkBlofinConnection() {
     detail.textContent = 'Go to Live Trading tab to set up API credentials';
     statusBox.style.background = 'rgba(255,77,109,0.06)';
     statusBox.style.borderColor = 'rgba(255,77,109,0.2)';
+    updateGlobalBlofinStatus(false);
   }
 }
 
