@@ -2359,36 +2359,58 @@ function switchAuthView(view) {
   </div>
 
   <!-- Auto-Trade Settings Panel -->
-  <details id="autoTradePanel" style="margin-bottom:12px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,107,53,0.15);border-radius:8px;padding:0">
-    <summary style="padding:10px 14px;cursor:pointer;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:#ff6b35;list-style:none;display:flex;align-items:center;gap:8px">
+  <details id="autoTradePanel" style="margin-bottom:14px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,107,53,0.2);border-radius:10px;padding:0">
+    <summary style="padding:14px 18px;cursor:pointer;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:#ff6b35;list-style:none;display:flex;align-items:center;gap:10px">
       <span>🤖 AUTO-TRADE SETTINGS</span>
-      <span id="autoTradeStatus" style="font-size:8px;color:#5a7a68;font-weight:400">OFF</span>
+      <span id="autoTradeStatus" style="font-size:10px;color:#5a7a68;font-weight:400">OFF</span>
     </summary>
-    <div style="padding:0 14px 14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
-      <div style="display:flex;align-items:center;gap:6px">
-        <input type="checkbox" id="autoTradeEnabled" onchange="toggleAutoTrade()" style="accent-color:#ff6b35">
-        <label for="autoTradeEnabled" style="font-size:8px;color:#e0e0e0;font-family:'Space Mono',monospace">Enable Auto-Trade</label>
+    <div style="padding:0 18px 18px">
+      <!-- BloFin Connection Status -->
+      <div id="atBlofinStatus" style="display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:14px;background:rgba(255,77,109,0.06);border:1px solid rgba(255,77,109,0.2);border-radius:8px">
+        <div id="atBlofinDot" style="width:10px;height:10px;border-radius:50%;background:#ff4d6d;flex-shrink:0"></div>
+        <div style="flex:1">
+          <div id="atBlofinLabel" style="font-size:11px;font-weight:700;color:#ff4d6d;font-family:'Space Mono',monospace">BloFin: Not Connected</div>
+          <div id="atBlofinDetail" style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px">Go to Live Trading tab to set up API credentials</div>
+        </div>
+        <button onclick="showPage('live')" style="font-size:9px;padding:6px 12px;background:rgba(255,107,53,0.12);border:1px solid rgba(255,107,53,0.35);color:#ff6b35;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;white-space:nowrap">⚡ Connect</button>
       </div>
-      <div style="height:16px;border-left:1px solid rgba(255,255,255,0.08)"></div>
-      <div style="display:flex;align-items:center;gap:4px">
-        <label style="font-size:7px;color:#5a7a68;white-space:nowrap">Mode</label>
-        <select id="autoTradeMode" style="font-size:8px;padding:3px 6px;background:#0a1a10;border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:3px;font-family:'Space Mono',monospace">
-          <option value="confirm">Confirm First</option>
-          <option value="auto">Full Auto</option>
-        </select>
+
+      <!-- Settings Row 1: Enable + Mode -->
+      <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="autoTradeEnabled" style="accent-color:#ff6b35;width:18px;height:18px;cursor:pointer">
+          <label for="autoTradeEnabled" style="font-size:12px;color:#e0e0e0;font-family:'Space Mono',monospace;font-weight:700;cursor:pointer">Enable Auto-Trade</label>
+        </div>
+        <div style="height:24px;border-left:1px solid rgba(255,255,255,0.1)"></div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <label style="font-size:10px;color:#5a7a68;font-family:'Space Mono',monospace;white-space:nowrap">MODE</label>
+          <select id="autoTradeMode" style="font-size:11px;padding:6px 10px;background:#0a1a10;border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:5px;font-family:'Space Mono',monospace">
+            <option value="confirm">Confirm First</option>
+            <option value="auto">Full Auto</option>
+          </select>
+        </div>
       </div>
-      <div style="display:flex;align-items:center;gap:4px">
-        <label style="font-size:7px;color:#5a7a68;white-space:nowrap">Min Prob %</label>
-        <input id="autoTradeMinProb" type="number" value="70" min="60" max="95" step="5" style="width:45px;font-size:8px;padding:3px 4px;background:#0a1a10;border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:3px;font-family:'Space Mono',monospace">
+
+      <!-- Settings Row 2: Parameters -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px">
+        <div>
+          <label style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Min Probability %</label>
+          <input id="autoTradeMinProb" type="number" value="70" min="60" max="95" step="5" style="width:100%;font-size:13px;padding:8px 10px;background:#0a1a10;border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:5px;font-family:'Space Mono',monospace;box-sizing:border-box;font-weight:700">
+        </div>
+        <div>
+          <label style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Position Size $</label>
+          <input id="autoTradeSize" type="number" value="100" min="10" step="10" style="width:100%;font-size:13px;padding:8px 10px;background:#0a1a10;border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:5px;font-family:'Space Mono',monospace;box-sizing:border-box;font-weight:700">
+        </div>
+        <div>
+          <label style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Max Open Positions</label>
+          <input id="autoTradeMaxOpen" type="number" value="3" min="1" max="10" style="width:100%;font-size:13px;padding:8px 10px;background:#0a1a10;border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:5px;font-family:'Space Mono',monospace;box-sizing:border-box;font-weight:700">
+        </div>
       </div>
-      <div style="display:flex;align-items:center;gap:4px">
-        <label style="font-size:7px;color:#5a7a68;white-space:nowrap">Size $</label>
-        <input id="autoTradeSize" type="number" value="100" min="10" step="10" style="width:55px;font-size:8px;padding:3px 4px;background:#0a1a10;border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:3px;font-family:'Space Mono',monospace">
-      </div>
-      <div style="display:flex;align-items:center;gap:4px">
-        <label style="font-size:7px;color:#5a7a68;white-space:nowrap">Max Open</label>
-        <input id="autoTradeMaxOpen" type="number" value="3" min="1" max="10" style="width:35px;font-size:8px;padding:3px 4px;background:#0a1a10;border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:3px;font-family:'Space Mono',monospace">
-      </div>
+
+      <!-- Confirm Button -->
+      <button id="autoTradeConfirmBtn" onclick="confirmAutoTradeSettings()" style="width:100%;font-size:12px;padding:10px 20px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;transition:all 0.2s" onmouseenter="this.style.background='rgba(255,107,53,0.25)'" onmouseleave="this.style.background='rgba(255,107,53,0.15)'">
+        ✅ Save & Apply Settings
+      </button>
     </div>
   </details>
 
@@ -8632,6 +8654,8 @@ function switchPageTab(tab) {
     if (dot) dot.style.display = 'none';
     if (!PROBE.lastRun) runProbEngine();
     loadRecommendations();
+    loadAutoTradeSettings();
+    checkBlofinConnection();
   } else if (tab === 'alerts') {
     renderAlertList();
     loadTgCredentialsIntoForm();
@@ -13182,8 +13206,93 @@ function toggleAutoTrade() {
     status.textContent = on ? 'ACTIVE' : 'OFF';
     status.style.color = on ? '#00f5a0' : '#5a7a68';
   }
+}
+
+// Confirm & save auto-trade settings
+function confirmAutoTradeSettings() {
+  const on = $('autoTradeEnabled')?.checked;
+  const mode = $('autoTradeMode')?.value || 'confirm';
+  const minProb = $('autoTradeMinProb')?.value || 70;
+  const size = $('autoTradeSize')?.value || 100;
+  const maxOpen = $('autoTradeMaxOpen')?.value || 3;
+
+  // Save to localStorage
+  localStorage.setItem('dash_autoTrade', JSON.stringify({ on, mode, minProb, size, maxOpen }));
+
+  // Apply toggle state
+  toggleAutoTrade();
+
+  const btn = $('autoTradeConfirmBtn');
+  if (btn) {
+    btn.textContent = '✅ Settings Saved!';
+    btn.style.background = 'rgba(0,245,160,0.15)';
+    btn.style.borderColor = 'rgba(0,245,160,0.4)';
+    btn.style.color = '#00f5a0';
+    setTimeout(() => {
+      btn.textContent = '✅ Save & Apply Settings';
+      btn.style.background = 'rgba(255,107,53,0.15)';
+      btn.style.borderColor = 'rgba(255,107,53,0.4)';
+      btn.style.color = '#ff6b35';
+    }, 2000);
+  }
+
   if (on) {
-    toast('🤖 Auto-trade enabled — trades will ' + ($('autoTradeMode').value === 'auto' ? 'execute automatically' : 'require confirmation'), 'info', 4000);
+    toast('🤖 Auto-trade saved — ' + (mode === 'auto' ? 'Full Auto' : 'Confirm First') + ' · Min ' + minProb + '% · $' + size + '/trade · Max ' + maxOpen + ' open', 'success', 4000);
+  } else {
+    toast('Auto-trade settings saved (disabled)', 'info');
+  }
+}
+
+// Load saved auto-trade settings on startup
+function loadAutoTradeSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('dash_autoTrade') || '{}');
+    if (saved.on != null && $('autoTradeEnabled')) $('autoTradeEnabled').checked = saved.on;
+    if (saved.mode && $('autoTradeMode')) $('autoTradeMode').value = saved.mode;
+    if (saved.minProb && $('autoTradeMinProb')) $('autoTradeMinProb').value = saved.minProb;
+    if (saved.size && $('autoTradeSize')) $('autoTradeSize').value = saved.size;
+    if (saved.maxOpen && $('autoTradeMaxOpen')) $('autoTradeMaxOpen').value = saved.maxOpen;
+    toggleAutoTrade();
+  } catch (e) {}
+}
+
+// Check BloFin connection status for auto-trade panel
+async function checkBlofinConnection() {
+  const dot = $('atBlofinDot');
+  const label = $('atBlofinLabel');
+  const detail = $('atBlofinDetail');
+  const statusBox = $('atBlofinStatus');
+  if (!dot || !label) return;
+
+  try {
+    const r = await fetch(LIVE_API + '/status', { headers: liveHeaders() });
+    if (!r.ok) throw new Error('not connected');
+    const d = await r.json();
+
+    if (d.credentialsUnlocked) {
+      dot.style.background = '#00f5a0';
+      label.textContent = 'BloFin: Connected & Unlocked';
+      label.style.color = '#00f5a0';
+      detail.textContent = 'Ready to execute trades';
+      statusBox.style.background = 'rgba(0,245,160,0.06)';
+      statusBox.style.borderColor = 'rgba(0,245,160,0.2)';
+    } else if (d.hasCredentials || d.engineRunning) {
+      dot.style.background = '#f5c400';
+      label.textContent = 'BloFin: Credentials Locked';
+      label.style.color = '#f5c400';
+      detail.textContent = 'Go to Live Trading to unlock';
+      statusBox.style.background = 'rgba(245,196,0,0.06)';
+      statusBox.style.borderColor = 'rgba(245,196,0,0.2)';
+    } else {
+      throw new Error('no creds');
+    }
+  } catch (e) {
+    dot.style.background = '#ff4d6d';
+    label.textContent = 'BloFin: Not Connected';
+    label.style.color = '#ff4d6d';
+    detail.textContent = 'Go to Live Trading tab to set up API credentials';
+    statusBox.style.background = 'rgba(255,77,109,0.06)';
+    statusBox.style.borderColor = 'rgba(255,77,109,0.2)';
   }
 }
 
