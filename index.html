@@ -1968,22 +1968,6 @@ function switchAuthView(view) {
       style="font-family:'Space Mono',monospace;font-size:9px;padding:6px 14px;width:auto;margin:0;background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.5);color:#ff6b35;border-radius:20px;cursor:pointer;white-space:nowrap">
       🏆 By Return Tier
     </button>
-    <button onclick="switchDegenTab('2h')" id="degenTab_2h"
-      style="font-family:'Space Mono',monospace;font-size:9px;padding:6px 14px;width:auto;margin:0;background:transparent;border:1px solid var(--border);color:#aaa;border-radius:20px;cursor:pointer;white-space:nowrap">
-      ⚡ Last 2 Hours
-    </button>
-    <button onclick="switchDegenTab('24h')" id="degenTab_24h"
-      style="font-family:'Space Mono',monospace;font-size:9px;padding:6px 14px;width:auto;margin:0;background:transparent;border:1px solid var(--border);color:#aaa;border-radius:20px;cursor:pointer;white-space:nowrap">
-      📅 Last 24 Hours
-    </button>
-    <button onclick="switchDegenTab('7d')" id="degenTab_7d"
-      style="font-family:'Space Mono',monospace;font-size:9px;padding:6px 14px;width:auto;margin:0;background:transparent;border:1px solid var(--border);color:#aaa;border-radius:20px;cursor:pointer;white-space:nowrap">
-      📆 Last 7 Days
-    </button>
-    <button onclick="switchDegenTab('30d')" id="degenTab_30d"
-      style="font-family:'Space Mono',monospace;font-size:9px;padding:6px 14px;width:auto;margin:0;background:transparent;border:1px solid var(--border);color:#aaa;border-radius:20px;cursor:pointer;white-space:nowrap">
-      🗓️ Last 30 Days
-    </button>
     <button onclick="switchDegenTab('live')" id="degenTab_live"
       style="font-family:'Space Mono',monospace;font-size:9px;padding:6px 14px;width:auto;margin:0;background:transparent;border:1px solid rgba(255,77,109,0.35);color:#ff4d6d;border-radius:20px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:5px">
       <span style="display:inline-block;width:6px;height:6px;background:#ff4d6d;border-radius:50%;animation:livePulse 1.2s ease-in-out infinite"></span> Live Feed
@@ -2012,6 +1996,69 @@ function switchAuthView(view) {
 
   <!-- Stats bar -->
   <div id="degenStatsBar" style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap"></div>
+
+  <!-- Degen Auto-Trade Panel -->
+  <details id="degenAutoTradePanel" style="margin-bottom:14px;background:rgba(0,0,0,0.3);border:2px solid rgba(167,139,250,0.35);border-radius:10px;padding:0">
+    <summary style="cursor:pointer;padding:12px 16px;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:#a78bfa;list-style:none;display:flex;align-items:center;gap:8px">
+      ⚡ MEME AUTO-TRADE
+      <span id="degenAutoTradeStatus" style="font-size:10px;color:#5a7a68;font-weight:400">OFF</span>
+      <span style="margin-left:auto;font-size:8px;color:#5a7a68">▼ Settings</span>
+    </summary>
+    <div style="padding:0 16px 16px 16px">
+      <div style="font-size:8px;color:#ff4d6d;font-family:'Space Mono',monospace;padding:8px;background:rgba(255,77,109,0.06);border:1px solid rgba(255,77,109,0.15);border-radius:6px;margin-bottom:12px;line-height:1.6">
+        ⚠️ EXTREME RISK: Meme coin auto-trading is the highest risk mode. Tokens can go to zero instantly.<br>
+        Only use funds you can afford to lose entirely. Auto-trade opens Jupiter swap links — you confirm each trade.
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <input type="checkbox" id="degenAutoTradeEnabled" style="accent-color:#a78bfa;width:18px;height:18px;cursor:pointer">
+            <label for="degenAutoTradeEnabled" style="font-size:12px;color:#e0e0e0;font-family:'Space Mono',monospace;font-weight:700;cursor:pointer">Enable Auto-Trade</label>
+          </div>
+          <div style="margin-bottom:8px">
+            <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:3px">Mode</div>
+            <select id="degenAutoTradeMode" style="width:100%;font-size:11px;padding:6px 10px;background:#0a1a10;border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:5px;font-family:'Space Mono',monospace;box-sizing:border-box">
+              <option value="notify">🔔 Notify Only (alerts when rules hit)</option>
+              <option value="open_jup">⚡ Open Jupiter (auto-opens swap page)</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <div style="margin-bottom:8px">
+            <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:3px">Min Degen Score</div>
+            <input id="degenAutoTradeMinScore" type="number" value="90" min="70" max="100" step="5" style="width:100%;font-size:13px;padding:8px 10px;background:#0a1a10;border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:5px;font-family:'Space Mono',monospace;box-sizing:border-box;font-weight:700">
+          </div>
+          <div style="margin-bottom:8px">
+            <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:3px">Min 2× Probability %</div>
+            <input id="degenAutoTradeMinProb" type="number" value="70" min="40" max="95" step="5" style="width:100%;font-size:13px;padding:8px 10px;background:#0a1a10;border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:5px;font-family:'Space Mono',monospace;box-sizing:border-box;font-weight:700">
+          </div>
+          <div style="margin-bottom:8px">
+            <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:3px">Max Mcap ($)</div>
+            <input id="degenAutoTradeMaxMcap" type="number" value="500000" min="50000" step="50000" style="width:100%;font-size:13px;padding:8px 10px;background:#0a1a10;border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:5px;font-family:'Space Mono',monospace;box-sizing:border-box;font-weight:700">
+          </div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+        <div>
+          <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:3px">Min Buy Ratio %</div>
+          <input id="degenAutoTradeMinBuy" type="number" value="65" min="50" max="85" step="5" style="width:100%;font-size:11px;padding:6px;background:#0a1a10;border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:5px;font-family:'Space Mono',monospace;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:3px">Min Vol/Mcap</div>
+          <input id="degenAutoTradeMinVMR" type="number" value="3" min="1" max="20" step="0.5" style="width:100%;font-size:11px;padding:6px;background:#0a1a10;border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:5px;font-family:'Space Mono',monospace;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:3px">Max Open Trades</div>
+          <input id="degenAutoTradeMaxOpen" type="number" value="3" min="1" max="10" style="width:100%;font-size:11px;padding:6px;background:#0a1a10;border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:5px;font-family:'Space Mono',monospace;box-sizing:border-box">
+        </div>
+      </div>
+      <button onclick="saveDegenAutoTradeSettings()" style="width:100%;font-size:12px;padding:10px 20px;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.4);color:#a78bfa;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;transition:all 0.2s" onmouseenter="this.style.background='rgba(167,139,250,0.25)'" onmouseleave="this.style.background='rgba(167,139,250,0.15)'">
+        💾 Save Settings
+      </button>
+      <!-- Auto-trade log -->
+      <div id="degenAutoTradeLog" style="margin-top:10px;max-height:120px;overflow-y:auto;font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace"></div>
+    </div>
+  </details>
 
   <!-- Main results area -->
   <div id="degenResults" style="min-height:400px">
@@ -9547,6 +9594,10 @@ async function runClientDegenScan() {
     checkSellAlerts(tokens);
     // Auto-capture any perfect-100 tokens into the permanent log
     autoCaptureP100(tokens);
+    // Refresh prices for ALL P100 tokens (not just current score=100)
+    refreshP100Prices().catch(e => console.warn('[P100 refresh]', e.message));
+    // Check degen auto-trade rules
+    checkDegenAutoTrade(tokens);
     // Fire any degen_score + perfect100 alert rules
     checkScanBasedAlerts(tokens);
     // Check all P100 + watchlist tokens for 100x club promotion
@@ -9932,6 +9983,57 @@ function renderWindowView(data, window, el) {
   el.innerHTML = html;
 }
 
+// ── Probability weighting for meme coin cards ─────────────────
+// Uses degen score + learned success rates from P100/watchlist history
+function calcMemeProbability(c) {
+  // Base probability from degen score (sigmoid curve)
+  const s = c.degenScore || 0;
+  // Sigmoid: maps 0-100 score to probability range
+  const base2x  = 1 / (1 + Math.exp(-0.08 * (s - 55)));  // 50% at score 55
+  const base5x  = 1 / (1 + Math.exp(-0.08 * (s - 70)));  // 50% at score 70
+  const base10x = 1 / (1 + Math.exp(-0.08 * (s - 82)));  // 50% at score 82
+
+  // Adjust based on learned rates from P100 history
+  const p100 = Object.values(p100Load());
+  const wl = Object.values(wlLoad());
+  const all = [...p100, ...wl].filter(t => Object.keys(t.milestones||{}).length > 0 || (Date.now()-new Date(t.capturedAt||t.addedAt||0).getTime())/3600000 > 24);
+
+  let adj2x = 0, adj5x = 0, adj10x = 0;
+  if (all.length >= 5) {
+    // Historical success rates from tracked tokens
+    const hit2x  = all.filter(t => t.milestones?.['2x']).length;
+    const hit5x  = all.filter(t => t.milestones?.['5x']).length;
+    const hit10x = all.filter(t => t.milestones?.['10x']).length;
+    const rate2x  = hit2x  / all.length;
+    const rate5x  = hit5x  / all.length;
+    const rate10x = hit10x / all.length;
+
+    // Blend learned rates with base (50/50 when enough data, more weight to learned with more data)
+    const w = Math.min(0.5, all.length / 40); // max 50% weight to learned data
+    adj2x  = (rate2x  - base2x)  * w;
+    adj5x  = (rate5x  - base5x)  * w;
+    adj10x = (rate10x - base10x) * w;
+  }
+
+  // Feature-specific boosts based on what winners had in common
+  let boost = 0;
+  if (c.volMcapRatio >= 8)  boost += 0.06;  // high vol/mcap strongly correlated
+  if (c.buyPct >= 73)       boost += 0.05;  // dominant buying
+  if (c.ageHours >= 4 && c.ageHours <= 12) boost += 0.04; // sweet spot entry
+  if (c.liquidity >= 50000 && c.liquidity <= 500000) boost += 0.03;
+  if (c.mcap > 0 && c.mcap < 100000) boost += 0.05; // micro-cap
+  // Penalties
+  if (c.buyPct != null && c.buyPct < 50) boost -= 0.08;
+  if (c.volMcapRatio < 0.5) boost -= 0.06;
+  if (c.ageHours > 168)     boost -= 0.04;
+
+  return {
+    p2x:  Math.max(2, Math.min(95, Math.round((base2x  + adj2x  + boost) * 100))),
+    p5x:  Math.max(1, Math.min(85, Math.round((base5x  + adj5x  + boost * 0.7) * 100))),
+    p10x: Math.max(1, Math.min(70, Math.round((base10x + adj10x + boost * 0.5) * 100))),
+  };
+}
+
 function renderDegenCard(c, tier) {
   const tierColors = { '1000x':'#ff0080', '100x':'#ff6b35', '20x':'#f5c400', '10x':'#00f5a0' };
   const color = tierColors[tier] || '#ff6b35';
@@ -10029,6 +10131,25 @@ function renderDegenCard(c, tier) {
         </div>
       </div>
 
+      <!-- Probability gauge -->
+      ${(() => {
+        const prob = calcMemeProbability(c);
+        const pb = (label, pct, thHi, thMid) => {
+          const col = pct>=thHi?'#00f5a0':pct>=thMid?'#f5c400':'#ff4d6d';
+          return `<div style="flex:1;text-align:center">
+            <div style="font-size:7px;color:#5a7a68;margin-bottom:1px">${label}</div>
+            <div style="font-size:8px;font-weight:700;color:${col};font-family:'Space Mono',monospace">${pct}%</div>
+            <div style="height:4px;background:rgba(255,255,255,0.05);border-radius:2px;overflow:hidden;margin-top:2px">
+              <div style="height:100%;width:${pct}%;background:${col};border-radius:2px;transition:width 0.5s"></div>
+            </div>
+          </div>`;
+        };
+        return `<div style="margin-bottom:8px;padding:6px 8px;background:rgba(167,139,250,0.04);border:1px solid rgba(167,139,250,0.12);border-radius:6px">
+          <div style="font-size:7px;color:#a78bfa;font-family:'Space Mono',monospace;margin-bottom:4px">PROBABILITY</div>
+          <div style="display:flex;gap:8px">${pb('2×',prob.p2x,60,35)}${pb('5×',prob.p5x,40,20)}${pb('10×',prob.p10x,25,10)}</div>
+        </div>`;
+      })()}
+
       <!-- Flags -->
       <div style="margin-bottom:6px;min-height:16px">
         ${(c.greenFlags||[]).map(f=>`<div class="flag-green">${f}</div>`).join('')}
@@ -10044,7 +10165,8 @@ function renderDegenCard(c, tier) {
       <div style="display:flex;gap:5px;margin-top:10px;flex-wrap:wrap">
         ${isLocked
           ? `<button onclick="showUpgradeModal()" style="flex:1;font-size:8px;padding:5px;margin:0;background:rgba(245,196,0,0.1);border:1px solid rgba(245,196,0,0.3);color:#f5c400;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace">🔒 Subscribe for links</button>`
-          : `<a href="${c.dexUrl}" target="_blank" style="font-size:8px;padding:4px 8px;background:rgba(255,107,53,0.12);border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:5px;font-family:'Space Mono',monospace;text-decoration:none">📊 DEX</a>
+          : `<a href="https://jup.ag/swap/SOL-${c.address}" target="_blank" style="font-size:8px;padding:4px 8px;background:rgba(0,245,160,0.12);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:5px;font-family:'Space Mono',monospace;text-decoration:none;font-weight:700">⚡ Buy</a>
+             <a href="${c.dexUrl}" target="_blank" style="font-size:8px;padding:4px 8px;background:rgba(255,107,53,0.12);border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:5px;font-family:'Space Mono',monospace;text-decoration:none">📊 DEX</a>
              <a href="${c.rugUrl}" target="_blank" style="font-size:8px;padding:4px 8px;background:rgba(0,0,0,0.2);border:1px solid var(--border);color:#aaa;border-radius:5px;font-family:'Space Mono',monospace;text-decoration:none">🛡️ Rug</a>
              ${c.pumpUrl ? `<a href="${c.pumpUrl}" target="_blank" style="font-size:8px;padding:4px 8px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:5px;font-family:'Space Mono',monospace;text-decoration:none">🎓 Pump</a>` : ''}
              <button
@@ -11644,13 +11766,16 @@ const MILESTONES = [
 
 // Called on every price update — stamps milestones permanently
 function checkMilestones(entry, currentMcap) {
-  if (!entry.entryMcap || !currentMcap) return;
-  const mult = currentMcap / entry.entryMcap;
+  // Support both watchlist (entryMcap) and P100 (captureMcap) entries
+  const baseMcap = entry.entryMcap || entry.captureMcap || 0;
+  if (!baseMcap || !currentMcap) return;
+  const mult = currentMcap / baseMcap;
   if (!entry.milestones) entry.milestones = {};
 
   for (const m of MILESTONES) {
     if (mult >= m.mult && !entry.milestones[m.key]) {
-      const hoursToHit = (Date.now() - new Date(entry.addedAt).getTime()) / 3600000;
+      const baseTime = entry.addedAt || entry.capturedAt || 0;
+      const hoursToHit = baseTime ? (Date.now() - new Date(baseTime).getTime()) / 3600000 : 0;
       entry.milestones[m.key] = {
         hitAt:    new Date().toISOString(),
         mcapAtHit: currentMcap,
@@ -11915,6 +12040,7 @@ function removeFromWatchlist(address) {
 // Init watchlist count on load
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(updateWatchlistCount, 500);
+  setTimeout(loadDegenAutoTradeSettings, 600);
 });
 
 // ============================================================
@@ -14243,6 +14369,124 @@ function p100Save(d)  { try { localStorage.setItem(P100_KEY,  JSON.stringify(d))
 function hallLoad()   { try { return JSON.parse(localStorage.getItem(HALL_KEY)   || '{}'); } catch { return {}; } }
 function hallSave(d)  { try { localStorage.setItem(HALL_KEY,  JSON.stringify(d)); } catch {} }
 
+// ════════════════════════════════════════════════════════════════
+// ⚡ DEGEN AUTO-TRADE ENGINE
+// ════════════════════════════════════════════════════════════════
+const DEGEN_AT_KEY = 'degenAutoTrade_v1';
+const DEGEN_AT_LOG_KEY = 'degenAutoTradeLog_v1';
+let _degenAutoTradeOpen = 0;
+
+function degenATLoad() { try { return JSON.parse(localStorage.getItem(DEGEN_AT_KEY) || '{}'); } catch { return {}; } }
+function degenATSave(d) { try { localStorage.setItem(DEGEN_AT_KEY, JSON.stringify(d)); } catch {} }
+function degenATLogLoad() { try { return JSON.parse(localStorage.getItem(DEGEN_AT_LOG_KEY) || '[]'); } catch { return []; } }
+function degenATLogSave(d) { try { localStorage.setItem(DEGEN_AT_LOG_KEY, JSON.stringify(d)); } catch {} }
+
+function saveDegenAutoTradeSettings() {
+  const settings = {
+    enabled:  $('degenAutoTradeEnabled')?.checked || false,
+    mode:     $('degenAutoTradeMode')?.value || 'notify',
+    minScore: parseInt($('degenAutoTradeMinScore')?.value) || 90,
+    minProb:  parseInt($('degenAutoTradeMinProb')?.value) || 70,
+    maxMcap:  parseInt($('degenAutoTradeMaxMcap')?.value) || 500000,
+    minBuy:   parseInt($('degenAutoTradeMinBuy')?.value) || 65,
+    minVMR:   parseFloat($('degenAutoTradeMinVMR')?.value) || 3,
+    maxOpen:  parseInt($('degenAutoTradeMaxOpen')?.value) || 3,
+  };
+  degenATSave(settings);
+  updateDegenAutoTradeStatus();
+  toast('Meme auto-trade settings saved', 'success');
+}
+
+function loadDegenAutoTradeSettings() {
+  const s = degenATLoad();
+  if ($('degenAutoTradeEnabled')) $('degenAutoTradeEnabled').checked = s.enabled || false;
+  if ($('degenAutoTradeMode'))     $('degenAutoTradeMode').value     = s.mode || 'notify';
+  if ($('degenAutoTradeMinScore')) $('degenAutoTradeMinScore').value = s.minScore || 90;
+  if ($('degenAutoTradeMinProb'))  $('degenAutoTradeMinProb').value  = s.minProb  || 70;
+  if ($('degenAutoTradeMaxMcap'))  $('degenAutoTradeMaxMcap').value  = s.maxMcap  || 500000;
+  if ($('degenAutoTradeMinBuy'))   $('degenAutoTradeMinBuy').value   = s.minBuy   || 65;
+  if ($('degenAutoTradeMinVMR'))   $('degenAutoTradeMinVMR').value   = s.minVMR   || 3;
+  if ($('degenAutoTradeMaxOpen'))  $('degenAutoTradeMaxOpen').value  = s.maxOpen  || 3;
+  updateDegenAutoTradeStatus();
+}
+
+function updateDegenAutoTradeStatus() {
+  const s = degenATLoad();
+  const el = $('degenAutoTradeStatus');
+  if (el) {
+    if (s.enabled) {
+      el.textContent = `ON — Score≥${s.minScore} · Prob≥${s.minProb}% · ${s.mode === 'open_jup' ? 'Auto-open Jupiter' : 'Notify only'}`;
+      el.style.color = '#00f5a0';
+    } else {
+      el.textContent = 'OFF';
+      el.style.color = '#5a7a68';
+    }
+  }
+  // Render log
+  const logEl = $('degenAutoTradeLog');
+  if (logEl) {
+    const logs = degenATLogLoad().slice(-20);
+    logEl.innerHTML = logs.length ? logs.map(l =>
+      `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.03)">
+        <span style="color:#3a5a48">${new Date(l.ts).toLocaleTimeString()}</span>
+        <span style="color:${l.action==='triggered'?'#00f5a0':'#f5c400'}">${l.action}</span>
+        <span style="color:#a78bfa">${l.symbol}</span>
+        Score:${l.score} P2x:${l.prob2x}% Mcap:$${Math.round((l.mcap||0)/1000)}K
+      </div>`
+    ).join('') : '<div style="color:#3a5a48">No auto-trade activity yet</div>';
+  }
+}
+
+// Called after each scan — checks tokens against auto-trade rules
+function checkDegenAutoTrade(tokens) {
+  const s = degenATLoad();
+  if (!s.enabled) return;
+
+  const bought = Object.keys(blLoad());
+  const alreadyTriggered = new Set(degenATLogLoad().filter(l => l.action === 'triggered').map(l => l.address));
+
+  for (const t of tokens) {
+    if (!t.address || t.address.includes('🔒')) continue;
+    if (bought.includes(t.address)) continue;  // already bought
+    if (alreadyTriggered.has(t.address)) continue; // already triggered
+
+    const score = t.degenScore || 0;
+    if (score < s.minScore) continue;
+
+    const prob = calcMemeProbability(t);
+    if (prob.p2x < s.minProb) continue;
+
+    if (t.mcap && t.mcap > s.maxMcap) continue;
+    if (t.buyPct != null && t.buyPct < s.minBuy) continue;
+    if (t.volMcapRatio != null && t.volMcapRatio < s.minVMR) continue;
+
+    if (_degenAutoTradeOpen >= s.maxOpen) continue;
+
+    // 🎯 Token passes all filters — trigger!
+    _degenAutoTradeOpen++;
+    const logEntry = {
+      ts: Date.now(), action: 'triggered', address: t.address,
+      symbol: t.symbol || '???', score, prob2x: prob.p2x,
+      mcap: t.mcap, mode: s.mode,
+    };
+    const logs = [...degenATLogLoad(), logEntry].slice(-50);
+    degenATLogSave(logs);
+
+    toast(`⚡ Auto-Trade: ${t.symbol} (Score ${score}, P2x ${prob.p2x}%)`, 'success');
+
+    if (Notification?.permission === 'granted') {
+      new Notification(`⚡ Meme Auto-Trade: ${t.symbol}`, {
+        body: `Score: ${score}/100 | P(2x): ${prob.p2x}% | Mcap: $${Math.round((t.mcap||0)/1000)}K`
+      });
+    }
+
+    if (s.mode === 'open_jup') {
+      window.open(`https://jup.ag/swap/SOL-${t.address}`, '_blank');
+    }
+  }
+  updateDegenAutoTradeStatus();
+}
+
 // ── Called every scan — captures new perfect-100 tokens ──────
 function autoCaptureP100(tokens) {
   const log = p100Load();
@@ -14312,6 +14556,48 @@ function autoCaptureP100(tokens) {
   return newCount;
 }
 
+// ── Background price refresh for ALL P100 tokens (not just score=100) ──
+// This fixes the bug where gains weren't tracked after score dropped below 100
+async function refreshP100Prices() {
+  const log = p100Load();
+  const addresses = Object.keys(log);
+  if (!addresses.length) return log;
+
+  try {
+    for (let i = 0; i < addresses.length; i += 29) {
+      const chunk = addresses.slice(i, i + 29);
+      const res = await dexFetch(`/latest/dex/tokens/${chunk.join(',')}`);
+      if (res?.pairs) {
+        const byToken = {};
+        for (const pair of res.pairs.filter(p => p.chainId === 'solana')) {
+          const addr = pair.baseToken?.address;
+          if (!addr) continue;
+          if (!byToken[addr] || (pair.liquidity?.usd||0) > (byToken[addr].liquidity?.usd||0))
+            byToken[addr] = pair;
+        }
+        for (const [addr, pair] of Object.entries(byToken)) {
+          if (!log[addr]) continue;
+          const currentMcap = pair.marketCap || pair.fdv || 0;
+          log[addr].lastSeenMcap = currentMcap;
+          log[addr].lastChecked  = new Date().toISOString();
+          if (currentMcap > (log[addr].peakMcap || 0)) {
+            log[addr].peakMcap = currentMcap;
+          }
+          // Check milestones with updated prices
+          checkMilestones(log[addr], currentMcap);
+          // Snapshot (keep last 96)
+          log[addr].priceHistory = [...(log[addr].priceHistory || []),
+            { ts: Date.now(), mcap: currentMcap }].slice(-96);
+        }
+      }
+    }
+    p100Save(log);
+    // Also check if any should be promoted to 100x Club
+    checkHall100xPromotion();
+  } catch(e) { console.warn('[P100] Price refresh failed:', e.message); }
+  return log;
+}
+
 // ── Promote any token to 100x Club when it hits 100x ────────
 function checkHall100xPromotion() {
   const sources = [p100Load(), wlLoad(), blLoad()];
@@ -14374,10 +14660,12 @@ function updateHall100xCount() {
 }
 
 // ── Render Perfect 100 tab ────────────────────────────────────
-function renderPerfect100() {
+async function renderPerfect100() {
   const el = $('degenResults');
   if (!el) return;
 
+  // Refresh prices from DexScreener before rendering
+  await refreshP100Prices();
   const log   = p100Load();
   const items = Object.values(log).sort((a, b) => new Date(b.capturedAt) - new Date(a.capturedAt));
 
