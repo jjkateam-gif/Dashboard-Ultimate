@@ -1407,47 +1407,7 @@ function switchAuthView(view) {
     <div id="loadStatus" class="info-box success" style="font-size:9px">Ready — Select dates &amp; load</div>
   </div>
 
-  <!-- TELEGRAM ALERTS -->
-  <div class="panel" style="border-color:rgba(0,190,255,0.3);background:rgba(0,190,255,0.04)">
-    <div class="section-title" style="color:#00bfff">📲 Live Trade Alerts</div>
-    <div style="font-size:9px;color:#aaa;margin-bottom:8px;line-height:1.6">
-      Monitors Binance in real-time and sends a Telegram message when your strategy fires a signal. Tab must stay open.
-    </div>
-
-    <label style="font-size:8px;color:#00bfff;text-transform:uppercase;letter-spacing:1px">Telegram Bot Token</label>
-    <input id="tgBotToken" type="password" placeholder="123456789:ABC-..." 
-      style="width:100%;font-size:9px;padding:4px 6px;background:rgba(0,0,0,0.3);border:1px solid rgba(0,190,255,0.3);border-radius:4px;color:#ddd;font-family:'Space Mono',monospace;box-sizing:border-box;margin-bottom:6px">
-    
-    <label style="font-size:8px;color:#00bfff;text-transform:uppercase;letter-spacing:1px">Chat ID</label>
-    <input id="tgChatId" type="text" placeholder="Your chat ID (message @userinfobot)"
-      style="width:100%;font-size:9px;padding:4px 6px;background:rgba(0,0,0,0.3);border:1px solid rgba(0,190,255,0.3);border-radius:4px;color:#ddd;font-family:'Space Mono',monospace;box-sizing:border-box;margin-bottom:6px">
-
-    <label style="font-size:8px;color:#aaa;text-transform:uppercase;letter-spacing:1px">Check interval</label>
-    <select id="tgInterval" style="font-size:9px;padding:4px;background:rgba(0,0,0,0.4);border:1px solid rgba(0,190,255,0.25);border-radius:4px;color:#ddd;width:100%;margin-bottom:8px">
-      <option value="60000">Every 1 minute</option>
-      <option value="300000" selected>Every 5 minutes</option>
-      <option value="900000">Every 15 minutes</option>
-    </select>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
-      <button id="tgStartBtn" onclick="startTelegramAlerts()" 
-        style="font-size:9px;padding:6px;margin:0;background:rgba(0,190,255,0.15);border:1px solid rgba(0,190,255,0.4);color:#00bfff;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace">
-        ▶ Start
-      </button>
-      <button id="tgStopBtn" onclick="stopTelegramAlerts()" disabled
-        style="font-size:9px;padding:6px;margin:0;background:rgba(0,0,0,0.2);border:1px solid var(--border);color:#555;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace">
-        ◼ Stop
-      </button>
-    </div>
-    <div id="tgStatus" style="font-size:9px;color:var(--text-muted);margin-top:6px;padding:5px;background:rgba(0,0,0,0.2);border-radius:4px;font-family:'Space Mono',monospace">
-      Idle — run a backtest first, then start alerts
-    </div>
-    <div style="font-size:8px;color:#5a7a68;margin-top:6px;line-height:1.5">
-      ① Create bot: message <strong style="color:#aaa">@BotFather</strong> → /newbot<br>
-      ② Get chat ID: message <strong style="color:#aaa">@userinfobot</strong><br>
-      ③ Run backtest, then click Start
-    </div>
-  </div>
+  <!-- TELEGRAM ALERTS removed — auto-trading now handles live signals via Best Trades tab -->
 
   <!-- RISK & POSITION SIZING -->
   <div class="panel">
@@ -6287,112 +6247,118 @@ function makeSubCanvas(container, title, legendItems, height) {
 }
 
 // Generic signal-timeline panel for price-overlay indicators (Ichimoku, VWAP, TD, Supertrend)
-// Two rows: BUY row (top half, green) and SELL row (bottom half, red)
+// Clean density-aware heatmap + clear triangle markers for trades
 function renderCanvas_Generic(container, d, dates, sig, title, tradeSig) {
   const legend = tradeSig
     ? [{ c:'#00f5a0', t:'▲ indicator signal' }, { c:'#ff4d6d', t:'▼ indicator signal' },
-       { c:'#00ffaa', t:'◆ trade entry' },       { c:'#ff2255', t:'◆ trade exit' }]
+       { c:'#00ffaa', t:'▲ trade entry' },       { c:'#ff2255', t:'▼ trade exit' }]
     : [{ c:'#00f5a0', t:'▲ BUY triggered' },     { c:'#ff4d6d', t:'▼ SELL triggered' }];
-  const { ctx, W, H } = makeSubCanvas(container, title, legend, tradeSig ? 120 : 90);
+  const { ctx, W, H } = makeSubCanvas(container, title, legend, tradeSig ? 140 : 100);
 
   const n   = sig.buy ? sig.buy.length : d.length;
-  const pad = { l: 8, r: 8, t: 14, b: 16 };
+  const pad = { l: 8, r: 8, t: 16, b: 18 };
   const midY = pad.t + (H - pad.t - pad.b) / 2;
+  const plotW = W - pad.l - pad.r;
+  const xOf = i => pad.l + i * plotW / (n - 1);
 
-  // Background bands
-  ctx.fillStyle = 'rgba(0,245,160,0.04)';
-  ctx.fillRect(pad.l, pad.t, W - pad.l - pad.r, midY - pad.t);
-  ctx.fillStyle = 'rgba(255,77,109,0.04)';
-  ctx.fillRect(pad.l, midY, W - pad.l - pad.r, H - pad.b - midY);
+  // Background bands with subtle gradient
+  ctx.fillStyle = 'rgba(0,245,160,0.03)';
+  ctx.fillRect(pad.l, pad.t, plotW, midY - pad.t);
+  ctx.fillStyle = 'rgba(255,77,109,0.03)';
+  ctx.fillRect(pad.l, midY, plotW, H - pad.b - midY);
 
-  // Divider
+  // Divider line
   ctx.save();
-  ctx.strokeStyle = 'rgba(90,122,104,0.4)'; ctx.lineWidth = 1; ctx.setLineDash([3,3]);
+  ctx.strokeStyle = 'rgba(90,122,104,0.3)'; ctx.lineWidth = 1; ctx.setLineDash([4,4]);
   ctx.beginPath(); ctx.moveTo(pad.l, midY); ctx.lineTo(W - pad.r, midY); ctx.stroke();
   ctx.setLineDash([]);
   ctx.restore();
 
   // Row labels
   ctx.save();
-  ctx.font = 'bold 8px Space Mono';
-  ctx.fillStyle = 'rgba(0,245,160,0.5)';
-  ctx.textAlign = 'left';
-  ctx.fillText('BUY', pad.l + 2, pad.t + 11);
-  ctx.fillStyle = 'rgba(255,77,109,0.5)';
-  ctx.fillText('SELL', pad.l + 2, midY + 11);
+  ctx.font = 'bold 8px Space Mono'; ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(0,245,160,0.4)'; ctx.fillText('BUY', pad.l + 2, pad.t + 10);
+  ctx.fillStyle = 'rgba(255,77,109,0.4)'; ctx.fillText('SELL', pad.l + 2, midY + 10);
   ctx.restore();
 
-  const xOf = i => pad.l + i * (W - pad.l - pad.r) / (n - 1);
+  // Build density map — group signals into buckets to avoid overlap
+  const bucketCount = Math.min(n, Math.floor(plotW / 3));
+  const bucketSize = n / bucketCount;
 
+  // Draw signals as clean density bars (not scattered dots)
   ctx.save();
-  // BUY signals — filled bars dropping from midY upward
-  if (sig.buy) sig.buy.forEach((b, i) => {
-    if (!b) return;
-    const x = xOf(i);
-    const barH = midY - pad.t - 4;
-    ctx.fillStyle = 'rgba(0,245,160,0.25)';
-    ctx.fillRect(x - 1.5, pad.t + 4, 3, barH);
-    ctx.fillStyle = '#00f5a0';
-    ctx.shadowColor = '#00f5a0'; ctx.shadowBlur = 5;
-    ctx.beginPath();
-    ctx.moveTo(x, pad.t + 4);
-    ctx.lineTo(x - 5, pad.t + 14);
-    ctx.lineTo(x + 5, pad.t + 14);
-    ctx.closePath(); ctx.fill();
-    ctx.shadowBlur = 0;
-  });
-  // SELL signals — filled bars dropping from midY downward
-  if (sig.sell) sig.sell.forEach((s, i) => {
-    if (!s) return;
-    const x = xOf(i);
-    const barH = H - pad.b - midY - 4;
-    ctx.fillStyle = 'rgba(255,77,109,0.25)';
-    ctx.fillRect(x - 1.5, midY, 3, barH);
-    ctx.fillStyle = '#ff4d6d';
-    ctx.shadowColor = '#ff4d6d'; ctx.shadowBlur = 5;
-    ctx.beginPath();
-    ctx.moveTo(x, H - pad.b - 4);
-    ctx.lineTo(x - 5, H - pad.b - 14);
-    ctx.lineTo(x + 5, H - pad.b - 14);
-    ctx.closePath(); ctx.fill();
-    ctx.shadowBlur = 0;
-  });
+  if (sig.buy) {
+    const buyBuckets = new Float32Array(bucketCount);
+    sig.buy.forEach((b, i) => { if (b) buyBuckets[Math.min(Math.floor(i / bucketSize), bucketCount - 1)]++; });
+    const maxBuy = Math.max(1, ...buyBuckets);
+    const barW = Math.max(2, plotW / bucketCount - 0.5);
+    const maxBarH = midY - pad.t - 6;
+    buyBuckets.forEach((count, bi) => {
+      if (!count) return;
+      const x = pad.l + (bi + 0.5) * plotW / bucketCount;
+      const intensity = count / maxBuy;
+      const barH = Math.max(2, maxBarH * intensity);
+      // Gradient bar from midY upward
+      const grad = ctx.createLinearGradient(0, midY - barH, 0, midY);
+      grad.addColorStop(0, `rgba(0,245,160,${0.4 + 0.5 * intensity})`);
+      grad.addColorStop(1, 'rgba(0,245,160,0.05)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(x - barW/2, midY - barH, barW, barH);
+    });
+  }
+  if (sig.sell) {
+    const sellBuckets = new Float32Array(bucketCount);
+    sig.sell.forEach((s, i) => { if (s) sellBuckets[Math.min(Math.floor(i / bucketSize), bucketCount - 1)]++; });
+    const maxSell = Math.max(1, ...sellBuckets);
+    const barW = Math.max(2, plotW / bucketCount - 0.5);
+    const maxBarH = H - pad.b - midY - 6;
+    sellBuckets.forEach((count, bi) => {
+      if (!count) return;
+      const x = pad.l + (bi + 0.5) * plotW / bucketCount;
+      const intensity = count / maxSell;
+      const barH = Math.max(2, maxBarH * intensity);
+      const grad = ctx.createLinearGradient(0, midY, 0, midY + barH);
+      grad.addColorStop(0, 'rgba(255,77,109,0.05)');
+      grad.addColorStop(1, `rgba(255,77,109,${0.4 + 0.5 * intensity})`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(x - barW/2, midY, barW, barH);
+    });
+  }
 
-  // Trade entry/exit overlay — bright filled diamonds over the indicator's own signals
-  // Shows WHERE the combined strategy actually entered/exited (may be fewer than raw signals
-  // due to AND logic, cooldown, or the other indicator not agreeing)
+  // Trade entry/exit overlay — clean upward/downward triangles (not scattered diamonds)
   if (tradeSig) {
+    const triSize = 5;
     if (tradeSig.buy) tradeSig.buy.forEach((b, i) => {
       if (!b) return;
       const x = xOf(i);
+      const y = pad.t + 6;
       ctx.fillStyle = '#00ffaa';
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1;
-      ctx.shadowColor = '#00ffaa'; ctx.shadowBlur = 10;
+      ctx.shadowColor = '#00ffaa'; ctx.shadowBlur = 6;
       ctx.beginPath();
-      ctx.moveTo(x, pad.t + 2);
-      ctx.lineTo(x + 6, pad.t + 10);
-      ctx.lineTo(x, pad.t + 18);
-      ctx.lineTo(x - 6, pad.t + 10);
-      ctx.closePath();
-      ctx.fill(); ctx.stroke();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + triSize, y + triSize * 1.5);
+      ctx.lineTo(x - triSize, y + triSize * 1.5);
+      ctx.closePath(); ctx.fill();
       ctx.shadowBlur = 0;
+      // Vertical connector line to midY
+      ctx.strokeStyle = 'rgba(0,255,170,0.2)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, y + triSize * 1.5); ctx.lineTo(x, midY); ctx.stroke();
     });
     if (tradeSig.sell) tradeSig.sell.forEach((s, i) => {
       if (!s) return;
       const x = xOf(i);
+      const y = H - pad.b - 6;
       ctx.fillStyle = '#ff2255';
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1;
-      ctx.shadowColor = '#ff2255'; ctx.shadowBlur = 10;
+      ctx.shadowColor = '#ff2255'; ctx.shadowBlur = 6;
       ctx.beginPath();
-      ctx.moveTo(x, H - pad.b - 2);
-      ctx.lineTo(x + 6, H - pad.b - 10);
-      ctx.lineTo(x, H - pad.b - 18);
-      ctx.lineTo(x - 6, H - pad.b - 10);
-      ctx.closePath();
-      ctx.fill(); ctx.stroke();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + triSize, y - triSize * 1.5);
+      ctx.lineTo(x - triSize, y - triSize * 1.5);
+      ctx.closePath(); ctx.fill();
       ctx.shadowBlur = 0;
+      // Vertical connector line to midY
+      ctx.strokeStyle = 'rgba(255,34,85,0.2)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, y - triSize * 1.5); ctx.lineTo(x, midY); ctx.stroke();
     });
   }
 
@@ -6593,15 +6559,17 @@ function renderCanvas_MACD(container, d, dates, sig, tfLabel) {
   const { ctx, W, H } = makeSubCanvas(container, `MACD (${fast}, ${slow}, ${sigP})${tfLabel||""}`,
     [{ c:'rgba(0,245,160,0.7)', t:'Hist+' }, { c:'rgba(255,77,109,0.7)', t:'Hist−' },
      { c:'#00c9ff', t:'MACD' }, { c:'#ff8c00', t:'Signal' },
-     { c:'#00f5a0', t:'▲ Buy' }, { c:'#ff4d6d', t:'▼ Sell' }], 120);
+     { c:'#00f5a0', t:'▲ Buy' }, { c:'#ff4d6d', t:'▼ Sell' }], 150);
 
   const n   = macdLine.length;
-  const pad = { l: 36, r: 30, t: 12, b: 18 };
+  const pad = { l: 40, r: 30, t: 14, b: 20 };
   const all = histogram.filter(v => v!=null);
-  const mx  = Math.max(Math.abs(Math.min(...all)), Math.abs(Math.max(...all))) * 1.2 || 1;
-  const yFn = v => H - pad.b - (v + mx) / (2*mx) * (H - pad.t - pad.b);
+  const mx  = Math.max(Math.abs(Math.min(...all)), Math.abs(Math.max(...all))) * 1.3 || 1;
+  const plotH = H - pad.t - pad.b;
+  const yFn = v => H - pad.b - (v + mx) / (2*mx) * plotH;
 
-  canvasDrawThresh(ctx, W, H, pad, yFn, 0, 'rgba(90,122,104,0.4)', '');
+  // Zero line
+  canvasDrawThresh(ctx, W, H, pad, yFn, 0, 'rgba(90,122,104,0.3)', '');
   canvasDrawXLabels(ctx, W, H, pad, dates, n);
 
   // Y labels
@@ -6609,12 +6577,12 @@ function renderCanvas_MACD(container, d, dates, sig, tfLabel) {
   ctx.fillStyle = '#5a7a68'; ctx.font = '7px Space Mono'; ctx.textAlign = 'right';
   [-mx, 0, mx].forEach(v => {
     const y = yFn(v);
-    ctx.fillText(v.toFixed(3), pad.l - 2, y + 3);
+    ctx.fillText(v.toFixed(3), pad.l - 3, y + 3);
   });
   ctx.restore();
 
-  // Histogram bars
-  const barW = Math.max(1, (W - pad.l - pad.r) / n - 0.3);
+  // Histogram bars — gradient fill with rounded tops for cleaner look
+  const barW = Math.max(1.5, (W - pad.l - pad.r) / n * 0.7);
   const y0   = yFn(0);
   ctx.save();
   histogram.forEach((v, i) => {
@@ -6623,14 +6591,26 @@ function renderCanvas_MACD(container, d, dates, sig, tfLabel) {
     const yV = yFn(v);
     const bh = Math.abs(yV - y0);
     if (bh < 0.5) return;
-    ctx.fillStyle = v >= 0 ? 'rgba(0,245,160,0.55)' : 'rgba(255,77,109,0.55)';
+    // Gradient bars: brighter at extremes, faded near zero
+    const intensity = Math.min(1, bh / (plotH * 0.4));
+    if (v >= 0) {
+      const grad = ctx.createLinearGradient(0, yV, 0, y0);
+      grad.addColorStop(0, `rgba(0,245,160,${0.3 + 0.5 * intensity})`);
+      grad.addColorStop(1, 'rgba(0,245,160,0.08)');
+      ctx.fillStyle = grad;
+    } else {
+      const grad = ctx.createLinearGradient(0, y0, 0, yV);
+      grad.addColorStop(0, 'rgba(255,77,109,0.08)');
+      grad.addColorStop(1, `rgba(255,77,109,${0.3 + 0.5 * intensity})`);
+      ctx.fillStyle = grad;
+    }
     ctx.fillRect(x - barW/2, Math.min(yV, y0), barW, bh);
   });
   ctx.restore();
 
-  // Lines
-  canvasDrawLine(ctx, null, yFn, macdLine,   '#00c9ff', 1.5, W, H, pad);
-  canvasDrawLine(ctx, null, yFn, signalLine, '#ff8c00', 1.5, W, H, pad);
+  // MACD & Signal lines — thinner for clarity
+  canvasDrawLine(ctx, null, yFn, macdLine,   '#00c9ff', 1.2, W, H, pad);
+  canvasDrawLine(ctx, null, yFn, signalLine, '#ff8c00', 1.2, W, H, pad);
 
   // Signals
   canvasDrawSignals(ctx, W, H, pad, sig.buy||[], sig.sell||[], n);
@@ -7524,7 +7504,8 @@ async function runSlTpOptimizer() {
       await new Promise(r => setTimeout(r, 0));
       for (const tp of tpGrid) {
         const opts = { ...baseOpts, stopLossPct: sl, takeProfitPct: tp };
-        const r    = backtest(data, opts, lastSig);
+        const cap  = +(document.getElementById('capital')?.value) || 10000;
+        const r    = backtest(data, lastSig, cap, opts);
         if (!r || r.trades === 0) continue;
         const sharpe = r.sharpe ?? (r.stdDev > 0 ? r.annReturn / r.stdDev : 0);
         results.push({
