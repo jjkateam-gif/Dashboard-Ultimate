@@ -12957,24 +12957,37 @@ function computeLiveSignals(d) {
   };
 
   // Ichimoku (simplified — Tenkan/Kijun cross + cloud position)
+  // Now with neutral zone: when Tenkan ≈ Kijun (within 0.3%) or price is inside cloud
   const tenkan = sma(c.map((_, i) => d[i] ? (d[i].h + d[i].l) / 2 : 0), 9);
   const kijun  = sma(c.map((_, i) => d[i] ? (d[i].h + d[i].l) / 2 : 0), 26);
-  const ichi_bull = tenkan[last] != null && kijun[last] != null && tenkan[last] > kijun[last] && price > kijun[last];
+  const tkSpread = tenkan[last] != null && kijun[last] != null ? Math.abs(tenkan[last] - kijun[last]) / kijun[last] : 0;
+  const priceNearKijun = kijun[last] != null ? Math.abs(price - kijun[last]) / kijun[last] < 0.003 : false;
+  const tkFlat = tkSpread < 0.003; // Tenkan and Kijun within 0.3% = choppy/indecisive
+  const ichi_bull = !tkFlat && !priceNearKijun && tenkan[last] != null && kijun[last] != null && tenkan[last] > kijun[last] && price > kijun[last];
+  const ichi_bear = !tkFlat && !priceNearKijun && tenkan[last] != null && kijun[last] != null && tenkan[last] < kijun[last] && price < kijun[last];
   results.Ichimoku = {
     bull: ichi_bull,
-    bear: !ichi_bull,
-    label: ichi_bull ? 'Ichimoku — Price above cloud ▲' : 'Ichimoku — Price below cloud ▼',
+    bear: ichi_bear,
+    label: ichi_bull ? 'Ichimoku — Price above cloud ▲' : ichi_bear ? 'Ichimoku — Price below cloud ▼' : 'Ichimoku — Inside cloud / flat (neutral)',
   };
 
-  // Volume trend (20-bar SMA)
+  // Volume — confirmation multiplier, NOT directional
+  // High volume confirms the candle's direction; low volume weakens conviction
   const vols   = d.map(x => x.v);
   const volSma = sma(vols, 20);
   const volRatio = volSma[last] > 0 ? vols[last] / volSma[last] : 1;
+  const candleBull = d[last] && d[last].c > d[last].o;
+  const volConfirmsBull = volRatio > 1.3 && candleBull;
+  const volConfirmsBear = volRatio > 1.3 && !candleBull;
   results.Volume = {
     ratio: volRatio,
-    bull: volRatio > 1.5,
-    bear: volRatio < 0.5,
-    label: volRatio > 1.5 ? `Volume ${volRatio.toFixed(1)}× avg — Elevated ▲` : volRatio < 0.5 ? `Volume ${volRatio.toFixed(1)}× avg — Drying up ▼` : `Volume ${volRatio.toFixed(1)}× avg — Normal`,
+    bull: volConfirmsBull,
+    bear: volConfirmsBear,
+    drying: volRatio < 0.5,
+    label: volConfirmsBull ? `Volume ${volRatio.toFixed(1)}× avg — Confirms bullish move ▲`
+         : volConfirmsBear ? `Volume ${volRatio.toFixed(1)}× avg — Confirms bearish move ▼`
+         : volRatio < 0.5 ? `Volume ${volRatio.toFixed(1)}× avg — Drying up (weak conviction)`
+         : `Volume ${volRatio.toFixed(1)}× avg — Normal`,
   };
 
   // ATR for R/R calculation
@@ -13128,6 +13141,19 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
     Volume: 14,
   };
 
+  // Detect strong trend agreement from trend-following indicators (EMA + MACD + Ichimoku)
+  // When 2+ trend indicators agree, mean-reversion signals (RSI, StochRSI, BB) opposing
+  // the trend are discounted — in a strong downtrend, "oversold" doesn't mean "buy"
+  const trendInds = ['EMA', 'MACD', 'Ichimoku'];
+  const meanRevInds = ['RSI', 'StochRSI', 'BB'];
+  let trendBullCount = 0, trendBearCount = 0;
+  for (const ti of trendInds) {
+    if (signals[ti]?.bull) trendBullCount++;
+    if (signals[ti]?.bear) trendBearCount++;
+  }
+  const strongTrendBull = trendBullCount >= 2;
+  const strongTrendBear = trendBearCount >= 2;
+
   for (const [ind, w] of Object.entries(WEIGHTS)) {
     const sig = signals[ind];
     if (!sig) continue;
@@ -13139,15 +13165,31 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
     const crossBonus = (dir === 'bull' && (sig.crossBull || sig.cross === true && sig.bull)) ||
                        (dir === 'bear' && (sig.crossBear || sig.cross === true && sig.bear));
 
+    // Mean-reversion vs trend conflict detection:
+    // If RSI/StochRSI/BB says "bull" (oversold) but trend is strongly bearish,
+    // discount it — oversold can stay oversold in a downtrend
+    const isMeanRev = meanRevInds.includes(ind);
+    const meanRevConflict = isMeanRev && (
+      (aligned && dir === 'bull' && strongTrendBear) ||
+      (aligned && dir === 'bear' && strongTrendBull)
+    );
+
     if (aligned) {
-      const pts = crossBonus ? w * 1.3 : w;
-      score += pts;
-      hits.push({ ind, label: sig.label, pts: Math.round(pts) });
+      if (meanRevConflict) {
+        // Mean-reversion signal opposes strong trend — halve its contribution
+        const pts = w * 0.5;
+        score += pts;
+        hits.push({ ind, label: sig.label + ' (discounted — against trend)', pts: Math.round(pts) });
+      } else {
+        const pts = crossBonus ? w * 1.3 : w;
+        score += pts;
+        hits.push({ ind, label: sig.label, pts: Math.round(pts) });
+      }
     } else if (opposing) {
       score -= w * 0.4;  // mild penalty for opposing signal
       misses.push({ ind, label: sig.label });
     } else {
-      // neutral — small deduction
+      // neutral — no contribution
       misses.push({ ind, label: sig.label });
     }
   }
@@ -13157,6 +13199,12 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
     score += 8;
     hits.push({ ind: 'BB_Squeeze', label: 'BB Squeeze — breakout likely', pts: 8 });
     maxScore += 8;
+  }
+
+  // Volume drying penalty — low volume weakens any setup regardless of direction
+  if (signals.Volume?.drying) {
+    score -= 5;
+    misses.push({ ind: 'Volume_Dry', label: 'Volume drying up — weak conviction' });
   }
 
   // Raw confluence ratio (0–1)
