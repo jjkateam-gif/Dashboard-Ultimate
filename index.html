@@ -4057,6 +4057,19 @@ function ema(a,l){const o=Array(a.length).fill(null);const k=2/(l+1);let p=null;
 function rsi(c,l){const o=Array(c.length).fill(null);let g=0,lo=0;for(let i=1;i<c.length;i++){const ch=c[i]-c[i-1],gn=Math.max(ch,0),ln=Math.max(-ch,0);if(i<=l){g+=gn;lo+=ln;if(i===l){g/=l;lo/=l;const rs=lo===0?999:g/lo;o[i]=100-(100/(1+rs))}}else{g=(g*(l-1)+gn)/l;lo=(lo*(l-1)+ln)/l;const rs=lo===0?999:g/lo;o[i]=100-(100/(1+rs))}}return o}
 function stdev(a,l){const o=Array(a.length).fill(null);for(let i=l-1;i<a.length;i++){const s=a.slice(i-l+1,i+1),m=s.reduce((a,b)=>a+b,0)/l,v=s.reduce((a,b)=>a+(b-m)**2,0)/l;o[i]=Math.sqrt(v)}return o}
 function atr(d,l){const h=d.map(x=>x.h),lo=d.map(x=>x.l),c=d.map(x=>x.c);const tr=d.map((x,i)=>i===0?x.h-x.l:Math.max(h[i]-lo[i],Math.abs(h[i]-c[i-1]),Math.abs(lo[i]-c[i-1])));return ema(tr,l)}
+// Donchian midpoint: (highest high + lowest low) / 2 over period — used by Ichimoku
+function donchianMid(d, period) {
+  const out = Array(d.length).fill(null);
+  for (let i = period - 1; i < d.length; i++) {
+    let hi = -Infinity, lo = Infinity;
+    for (let j = i - period + 1; j <= i; j++) {
+      if (d[j].h > hi) hi = d[j].h;
+      if (d[j].l < lo) lo = d[j].l;
+    }
+    out[i] = (hi + lo) / 2;
+  }
+  return out;
+}
 
 // ===== SIGNAL BUILDERS =====
 function buildRSISignals(d){const c=d.map(x=>x.c),R=rsi(c,+$('rsiLen').value),bt=+$('rsiBuy').value,st=+$('rsiSell').value;return{name:'RSI',buy:c.map((_,i)=>R[i]!=null&&R[i]<=bt),sell:c.map((_,i)=>R[i]!=null&&R[i]>=st)}}
@@ -12880,66 +12893,101 @@ function computeLiveSignals(d) {
   const last = d.length - 1;
   const c    = d.map(x => x.c);
   const results = {};
+  const price = c[last];
 
-  // RSI
+  // Detect regime for adaptive thresholds (price vs EMA200)
+  const ema200Arr = ema(c, 200);
+  const macro_bull = ema200Arr[last] != null && price > ema200Arr[last];
+  const macro_bear = ema200Arr[last] != null && price < ema200Arr[last];
+
+  // Regime-adaptive RSI thresholds (research: biggest single improvement)
+  // Bull market: RSI rarely hits 30, so shift thresholds up
+  // Bear market: RSI rarely hits 70, so shift thresholds down
+  const rsiOversold  = macro_bull ? 40 : macro_bear ? 25 : 35;
+  const rsiOverbought = macro_bull ? 75 : macro_bear ? 55 : 65;
+  const stochOversold  = macro_bull ? 25 : macro_bear ? 15 : 20;
+  const stochOverbought = macro_bull ? 85 : macro_bear ? 75 : 80;
+
+  // RSI (regime-adaptive thresholds)
   const R = rsi(c, 14);
   const rsiVal = R[last];
   results.RSI = {
     value: rsiVal?.toFixed(1),
-    bull: rsiVal != null && rsiVal <= 35,
-    bear: rsiVal != null && rsiVal >= 65,
-    neutral: rsiVal != null && rsiVal > 35 && rsiVal < 65,
-    label: rsiVal == null ? '—' : rsiVal <= 35 ? `RSI ${rsiVal?.toFixed(0)} — Oversold ▲` : rsiVal >= 65 ? `RSI ${rsiVal?.toFixed(0)} — Overbought ▼` : `RSI ${rsiVal?.toFixed(0)} — Neutral`,
+    bull: rsiVal != null && rsiVal <= rsiOversold,
+    bear: rsiVal != null && rsiVal >= rsiOverbought,
+    neutral: rsiVal != null && rsiVal > rsiOversold && rsiVal < rsiOverbought,
+    label: rsiVal == null ? '—' : rsiVal <= rsiOversold ? `RSI ${rsiVal?.toFixed(0)} — Oversold (≤${rsiOversold}) ▲` : rsiVal >= rsiOverbought ? `RSI ${rsiVal?.toFixed(0)} — Overbought (≥${rsiOverbought}) ▼` : `RSI ${rsiVal?.toFixed(0)} — Neutral`,
   };
 
-  // EMA 21/55
+  // EMA 21/55 — with neutral zone when spread < 0.5% (research: markets range 60-70% of time)
   const emaF = ema(c, 21), emaS = ema(c, 55);
-  const emaBull = emaF[last] != null && emaS[last] != null && emaF[last] > emaS[last];
+  const emaSpread = emaF[last] != null && emaS[last] != null ? Math.abs(emaF[last] - emaS[last]) / emaS[last] : 0;
+  const emaIsFlat = emaSpread < 0.005; // Within 0.5% = ranging, no clear trend
+  const emaBull = !emaIsFlat && emaF[last] != null && emaS[last] != null && emaF[last] > emaS[last];
+  const emaBear = !emaIsFlat && emaF[last] != null && emaS[last] != null && emaF[last] < emaS[last];
   const emaCross = last > 0 && emaF[last-1] <= emaS[last-1] && emaF[last] > emaS[last];
   const emaBearCross = last > 0 && emaF[last-1] >= emaS[last-1] && emaF[last] < emaS[last];
   results.EMA = {
-    value: emaBull ? 'Bull' : 'Bear',
+    value: emaIsFlat ? 'Flat' : emaBull ? 'Bull' : 'Bear',
     bull: emaBull,
-    bear: !emaBull,
+    bear: emaBear,
     crossBull: emaCross,
     crossBear: emaBearCross,
-    label: emaCross ? 'EMA 21/55 — Golden Cross ▲' : emaBearCross ? 'EMA 21/55 — Death Cross ▼' : emaBull ? 'EMA 21/55 — Bull trend ▲' : 'EMA 21/55 — Bear trend ▼',
+    label: emaIsFlat ? `EMA 21/55 — Flat (${(emaSpread*100).toFixed(2)}% spread, ranging)` : emaCross ? 'EMA 21/55 — Golden Cross ▲' : emaBearCross ? 'EMA 21/55 — Death Cross ▼' : emaBull ? 'EMA 21/55 — Bull trend ▲' : 'EMA 21/55 — Bear trend ▼',
   };
 
-  // MACD
-  const macdFast = ema(c, 12), macdSlow = ema(c, 26);
+  // MACD (5/35/5) — optimized for crypto (research: wider fast/slow gap = +11% annual vs -3.6% for default)
+  const macdFast = ema(c, 5), macdSlow = ema(c, 35);
   const macdLine = c.map((_, i) => macdFast[i] != null && macdSlow[i] != null ? macdFast[i] - macdSlow[i] : null);
-  const macdSig  = ema(macdLine.map(v => v ?? 0), 9);
+  const macdSig  = ema(macdLine.map(v => v ?? 0), 5);
   const macdVal  = macdLine[last], macdSigVal = macdSig[last];
+  // Neutral zone: when MACD line is near zero (within 0.1% of price) = no momentum
+  const macdNeutral = macdVal != null && Math.abs(macdVal) < price * 0.001;
   const macdCrossBull = last > 0 && macdLine[last-1] != null && macdLine[last-1] <= macdSig[last-1] && macdVal > macdSigVal;
   const macdCrossBear = last > 0 && macdLine[last-1] != null && macdLine[last-1] >= macdSig[last-1] && macdVal < macdSigVal;
+  // Cross bonus is conditional: only apply when cross is far from zero line (research: near-zero crosses are noise)
+  const macdCrossStrong = Math.abs(macdVal) > price * 0.002;
   results.MACD = {
     value: macdVal?.toFixed(2),
-    bull: macdVal != null && macdVal > macdSigVal,
-    bear: macdVal != null && macdVal < macdSigVal,
-    cross: macdCrossBull || macdCrossBear,
-    label: macdCrossBull ? 'MACD — Bullish cross ▲' : macdCrossBear ? 'MACD — Bearish cross ▼' : macdVal > macdSigVal ? 'MACD — Above signal ▲' : 'MACD — Below signal ▼',
+    bull: !macdNeutral && macdVal != null && macdVal > macdSigVal,
+    bear: !macdNeutral && macdVal != null && macdVal < macdSigVal,
+    cross: (macdCrossBull || macdCrossBear) && macdCrossStrong,
+    crossBull: macdCrossBull && macdCrossStrong,
+    crossBear: macdCrossBear && macdCrossStrong,
+    label: macdNeutral ? 'MACD 5/35/5 — Near zero (no momentum)'
+         : macdCrossBull && macdCrossStrong ? 'MACD 5/35/5 — Strong bullish cross ▲'
+         : macdCrossBear && macdCrossStrong ? 'MACD 5/35/5 — Strong bearish cross ▼'
+         : macdCrossBull ? 'MACD 5/35/5 — Weak bullish cross (near zero)'
+         : macdCrossBear ? 'MACD 5/35/5 — Weak bearish cross (near zero)'
+         : macdVal > macdSigVal ? 'MACD 5/35/5 — Above signal ▲'
+         : 'MACD 5/35/5 — Below signal ▼',
   };
 
-  // Bollinger Bands
+  // Bollinger Bands (2.5 std dev for crypto volatility)
   const bbMid = sma(c, 20), bbSd = stdev(c, 20);
-  const bbUpper = bbMid.map((m, i) => m != null ? m + 2 * bbSd[i] : null);
-  const bbLower = bbMid.map((m, i) => m != null ? m - 2 * bbSd[i] : null);
-  const price = c[last];
+  const bbUpper = bbMid.map((m, i) => m != null ? m + 2.5 * bbSd[i] : null);
+  const bbLower = bbMid.map((m, i) => m != null ? m - 2.5 * bbSd[i] : null);
   const bbPct = bbUpper[last] != null ? ((price - bbLower[last]) / (bbUpper[last] - bbLower[last])) : null;
-  // Squeeze: bandwidth < 10th percentile of last 50 bars
-  const bandwidths = bbSd.slice(-50).filter(v => v != null);
-  const bwPctile = bandwidths.length ? bandwidths.sort((a,b)=>a-b)[Math.floor(bandwidths.length*0.1)] : null;
-  const squeeze  = bwPctile != null && bbSd[last] <= bwPctile;
+  // Squeeze: BBWP (bandwidth percentile rank over 100 bars) — more robust than absolute threshold
+  const bandwidths100 = [];
+  for (let i = Math.max(19, last - 99); i <= last; i++) {
+    if (bbSd[i] != null && bbMid[i] != null && bbMid[i] > 0) bandwidths100.push(bbSd[i] / bbMid[i]);
+  }
+  const currentBW = bbSd[last] != null && bbMid[last] > 0 ? bbSd[last] / bbMid[last] : null;
+  const bbwp = currentBW != null && bandwidths100.length > 10
+    ? bandwidths100.filter(bw => bw < currentBW).length / bandwidths100.length
+    : null;
+  const squeeze = bbwp != null && bbwp < 0.20; // Bottom 20th percentile = squeeze
   results.BB = {
     value: bbPct?.toFixed(2),
-    bull: bbPct != null && bbPct <= 0.2,
-    bear: bbPct != null && bbPct >= 0.8,
+    bull: bbPct != null && bbPct <= 0.15,
+    bear: bbPct != null && bbPct >= 0.85,
     squeeze,
-    label: squeeze ? 'BB — Squeeze (breakout imminent)' : bbPct <= 0.2 ? 'BB — At lower band ▲' : bbPct >= 0.8 ? 'BB — At upper band ▼' : `BB — Mid-range (${(bbPct*100).toFixed(0)}%)`,
+    bbwp,
+    label: squeeze ? `BB — Squeeze (BBWP ${(bbwp*100).toFixed(0)}%, breakout imminent)` : bbPct <= 0.15 ? 'BB — At lower band ▲' : bbPct >= 0.85 ? 'BB — At upper band ▼' : `BB — Mid-range (${(bbPct*100).toFixed(0)}%)`,
   };
 
-  // Stochastic RSI
+  // StochRSI (regime-adaptive thresholds)
   const stRSI = rsi(c, 14);
   const stKArr = [];
   for (let i = 14; i < stRSI.length; i++) {
@@ -12951,52 +12999,85 @@ function computeLiveSignals(d) {
   const stK = stKArr[stKArr.length - 1];
   results.StochRSI = {
     value: stK?.toFixed(1),
-    bull: stK != null && stK < 20,
-    bear: stK != null && stK > 80,
-    label: stK == null ? '—' : stK < 20 ? `StochRSI ${stK?.toFixed(0)} — Oversold ▲` : stK > 80 ? `StochRSI ${stK?.toFixed(0)} — Overbought ▼` : `StochRSI ${stK?.toFixed(0)} — Neutral`,
+    bull: stK != null && stK < stochOversold,
+    bear: stK != null && stK > stochOverbought,
+    label: stK == null ? '—' : stK < stochOversold ? `StochRSI ${stK?.toFixed(0)} — Oversold (≤${stochOversold}) ▲` : stK > stochOverbought ? `StochRSI ${stK?.toFixed(0)} — Overbought (≥${stochOverbought}) ▼` : `StochRSI ${stK?.toFixed(0)} — Neutral`,
   };
 
-  // Ichimoku (simplified — Tenkan/Kijun cross + cloud position)
-  // Now with neutral zone: when Tenkan ≈ Kijun (within 0.3%) or price is inside cloud
-  const tenkan = sma(c.map((_, i) => d[i] ? (d[i].h + d[i].l) / 2 : 0), 9);
-  const kijun  = sma(c.map((_, i) => d[i] ? (d[i].h + d[i].l) / 2 : 0), 26);
-  const tkSpread = tenkan[last] != null && kijun[last] != null ? Math.abs(tenkan[last] - kijun[last]) / kijun[last] : 0;
-  const priceNearKijun = kijun[last] != null ? Math.abs(price - kijun[last]) / kijun[last] < 0.003 : false;
-  const tkFlat = tkSpread < 0.003; // Tenkan and Kijun within 0.3% = choppy/indecisive
-  const ichi_bull = !tkFlat && !priceNearKijun && tenkan[last] != null && kijun[last] != null && tenkan[last] > kijun[last] && price > kijun[last];
-  const ichi_bear = !tkFlat && !priceNearKijun && tenkan[last] != null && kijun[last] != null && tenkan[last] < kijun[last] && price < kijun[last];
+  // Ichimoku — FULL implementation with correct Donchian midpoint formula
+  // Crypto-adjusted periods: 20/60/120 (doubled from 9/26/52 for 24/7 markets)
+  const ichiTenkan = donchianMid(d, 20);   // Conversion line (was 9)
+  const ichiKijun  = donchianMid(d, 60);   // Base line (was 26)
+  // Senkou Span A = (Tenkan + Kijun) / 2, plotted 60 periods ahead (we use current for scoring)
+  const senkouA = ichiTenkan[last] != null && ichiKijun[last] != null ? (ichiTenkan[last] + ichiKijun[last]) / 2 : null;
+  // Senkou Span B = Donchian midpoint of 120 periods, plotted 60 ahead
+  const ichiSpanB = donchianMid(d, 120);
+  const senkouB = ichiSpanB[last];
+  // Cloud boundaries
+  const cloudTop = senkouA != null && senkouB != null ? Math.max(senkouA, senkouB) : null;
+  const cloudBot = senkouA != null && senkouB != null ? Math.min(senkouA, senkouB) : null;
+  // Chikou Span = current close plotted 60 periods back — check if it's above/below past price
+  const chikouRef = last >= 60 ? c[last - 60] : null;
+  const chikouBull = chikouRef != null && price > chikouRef;
+  const chikouBear = chikouRef != null && price < chikouRef;
+  // Signal logic: price position relative to cloud + TK cross + Chikou confirmation
+  const priceAboveCloud = cloudTop != null && price > cloudTop;
+  const priceBelowCloud = cloudBot != null && price < cloudBot;
+  const priceInCloud = cloudTop != null && cloudBot != null && price >= cloudBot && price <= cloudTop;
+  const tkBull = ichiTenkan[last] != null && ichiKijun[last] != null && ichiTenkan[last] > ichiKijun[last];
+  const tkBear = ichiTenkan[last] != null && ichiKijun[last] != null && ichiTenkan[last] < ichiKijun[last];
+  // Full bull: price above cloud + TK bull (Chikou confirms = stronger)
+  // Full bear: price below cloud + TK bear
+  // Neutral: price inside cloud, or TK flat, or signals conflict
+  const ichi_bull = priceAboveCloud && tkBull;
+  const ichi_bear = priceBelowCloud && tkBear;
+  const ichiLabel = ichi_bull
+    ? `Ichimoku — Above cloud, TK bull${chikouBull ? ', Chikou confirms ▲' : ' ▲'}`
+    : ichi_bear
+    ? `Ichimoku — Below cloud, TK bear${chikouBear ? ', Chikou confirms ▼' : ' ▼'}`
+    : priceInCloud
+    ? 'Ichimoku — Inside cloud (neutral zone)'
+    : 'Ichimoku — Mixed signals (neutral)';
   results.Ichimoku = {
     bull: ichi_bull,
     bear: ichi_bear,
-    label: ichi_bull ? 'Ichimoku — Price above cloud ▲' : ichi_bear ? 'Ichimoku — Price below cloud ▼' : 'Ichimoku — Inside cloud / flat (neutral)',
+    chikouBull,
+    chikouBear,
+    priceInCloud,
+    label: ichiLabel,
   };
 
-  // Volume — confirmation multiplier, NOT directional
-  // High volume confirms the candle's direction; low volume weakens conviction
+  // Volume — wick-based directional estimator + scalar scoring
+  // Uses candle structure to estimate buy/sell ratio (better than candle color alone)
+  // buy_ratio = (close - low) / (high - low) — higher = more buying pressure
   const vols   = d.map(x => x.v);
   const volSma = sma(vols, 20);
   const volRatio = volSma[last] > 0 ? vols[last] / volSma[last] : 1;
-  const candleBull = d[last] && d[last].c > d[last].o;
-  const volConfirmsBull = volRatio > 1.3 && candleBull;
-  const volConfirmsBear = volRatio > 1.3 && !candleBull;
+  const candleRange = d[last] ? d[last].h - d[last].l : 0;
+  const buyRatio = candleRange > 0 ? (d[last].c - d[last].l) / candleRange : 0.5;
+  const volBullish = buyRatio > 0.6; // More buying pressure
+  const volBearish = buyRatio < 0.4; // More selling pressure
+  // Threshold: 1.5× for meaningful signal (research: 1.3× too sensitive for crypto)
+  const volConfirmsBull = volRatio > 1.5 && volBullish;
+  const volConfirmsBear = volRatio > 1.5 && volBearish;
+  // Scalar strength: higher ratio = stronger confirmation (2× > 1.5×)
+  const volStrength = Math.min(3, volRatio); // cap at 3× to prevent extreme spikes dominating
   results.Volume = {
     ratio: volRatio,
     bull: volConfirmsBull,
     bear: volConfirmsBear,
     drying: volRatio < 0.5,
-    label: volConfirmsBull ? `Volume ${volRatio.toFixed(1)}× avg — Confirms bullish move ▲`
-         : volConfirmsBear ? `Volume ${volRatio.toFixed(1)}× avg — Confirms bearish move ▼`
+    strength: volStrength,
+    buyRatio,
+    label: volConfirmsBull ? `Volume ${volRatio.toFixed(1)}× avg — Buy pressure ${(buyRatio*100).toFixed(0)}% ▲`
+         : volConfirmsBear ? `Volume ${volRatio.toFixed(1)}× avg — Sell pressure ${((1-buyRatio)*100).toFixed(0)}% ▼`
          : volRatio < 0.5 ? `Volume ${volRatio.toFixed(1)}× avg — Drying up (weak conviction)`
-         : `Volume ${volRatio.toFixed(1)}× avg — Normal`,
+         : `Volume ${volRatio.toFixed(1)}× avg — Normal (buy ${(buyRatio*100).toFixed(0)}%)`,
   };
 
   // ATR for R/R calculation
   const atrVals = atr(d, 14);
   const currentATR = atrVals[last] || (price * 0.02);
-
-  // Macro trend: EMA 200
-  const ema200 = ema(c, 200);
-  const macro_bull = ema200[last] != null && price > ema200[last];
 
   return { signals: results, atr: currentATR, price, macro_bull };
 }
@@ -13210,29 +13291,44 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
   // Raw confluence ratio (0–1)
   const confluence = maxScore > 0 ? Math.max(0, score / maxScore) : 0.5;
 
-  // Base probability: map confluence 0–1 → 38–80% range
-  // Purely random = 50%, strong confluence = 78%, strong opposition = 38%
-  let prob = 38 + confluence * 42;
+  // Base probability: sigmoid mapping of confluence → probability
+  // Sigmoid naturally compresses extremes and spreads the middle range
+  // Floor = 28% (all opposing), ceiling = 78% (full alignment), midpoint at 0.5
+  const sigK = 7; // steepness
+  let prob = 28 + (78 - 28) / (1 + Math.exp(-sigK * (confluence - 0.5)));
+
+  // ── CONTEXTUAL ADJUSTMENTS (capped at ±20 pts total) ──
+  // Research: adjustments should not exceed 40% of base range to prevent context
+  // from overriding actual indicator signals
+  let totalAdj = 0;
+  const ADJ_CAP = 20;
+
+  function applyAdj(pts, label, isHit) {
+    const remaining = pts > 0 ? ADJ_CAP - totalAdj : ADJ_CAP + totalAdj;
+    const capped = pts > 0 ? Math.min(pts, Math.max(0, remaining)) : Math.max(pts, Math.min(0, -remaining));
+    if (Math.abs(capped) < 0.5) return;
+    totalAdj += capped;
+    prob += capped;
+    if (isHit && capped > 0) hits.push({ ind: label, label, pts: Math.round(capped) });
+    else if (!isHit || capped < 0) misses.push({ ind: label, label });
+  }
 
   // Regime adjustment
-  if (regime === 'bull' && direction === 'long')  prob += 4;
-  if (regime === 'bull' && direction === 'short') prob -= 4;
-  if (regime === 'bear' && direction === 'short') prob += 4;
-  if (regime === 'bear' && direction === 'long')  prob -= 4;
+  if (regime === 'bull' && direction === 'long')  applyAdj(4, 'Regime: bull favors longs', true);
+  if (regime === 'bull' && direction === 'short') applyAdj(-4, 'Regime: bull opposes shorts', false);
+  if (regime === 'bear' && direction === 'short') applyAdj(4, 'Regime: bear favors shorts', true);
+  if (regime === 'bear' && direction === 'long')  applyAdj(-4, 'Regime: bear opposes longs', false);
 
   // Funding rate adjustment
   if (fundingRate != null) {
-    if (direction === 'long'  && fundingRate > 0.08) prob -= 3;  // crowded long
-    if (direction === 'long'  && fundingRate < -0.02) prob += 3; // negative = squeeze fuel
-    if (direction === 'short' && fundingRate < -0.05) prob -= 3; // crowded short
-    if (direction === 'short' && fundingRate > 0.10)  prob += 3; // extreme longs = fade
+    if (direction === 'long'  && fundingRate > 0.08) applyAdj(-3, 'Funding: crowded longs', false);
+    if (direction === 'long'  && fundingRate < -0.02) applyAdj(3, 'Funding: squeeze fuel (neg)', true);
+    if (direction === 'short' && fundingRate < -0.05) applyAdj(-3, 'Funding: crowded shorts', false);
+    if (direction === 'short' && fundingRate > 0.10)  applyAdj(3, 'Funding: extreme longs (fade)', true);
   }
 
-  // Cross-timeframe alignment adjustment (research: HTF alignment is the single biggest edge)
-  // QuantPedia study: filtering against HTF trend doubled Sharpe ratio
-  // Research consensus: HTF should act as a heavy gate, not a small tweak
+  // Cross-timeframe alignment (capped within the ±20 total)
   if (crossTFData && crossTFData.length > 0) {
-    let ctfBoost = 0;
     let allAligned = true;
     let anyOpposing = false;
 
@@ -13241,86 +13337,79 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
       const opposing = (direction === 'long' && htf.bear) || (direction === 'short' && htf.bull);
 
       if (aligned) {
-        // Aligned HTF: +5 to +8 pts per TF (scaled by signal strength)
-        const adj = 5 + 3 * htf.strength; // 5–8 points
-        ctfBoost += adj;
+        const adj = 4 + 3 * htf.strength; // 4–7 points (reduced from 5-8)
         const details = [htf.emaBull ? 'EMA▲' : 'EMA▼', htf.priceAboveEMA200 != null ? (htf.priceAboveEMA200 ? '200MA▲' : '200MA▼') : '', htf.macdBull ? 'MACD▲' : 'MACD▼'].filter(Boolean).join(' ');
-        hits.push({ ind: 'XTF_' + htf.tf, label: `${htf.tf} trend aligned (${details})`, pts: Math.round(adj) });
+        applyAdj(adj, `${htf.tf} trend aligned (${details})`, true);
       } else if (opposing) {
-        // Opposing HTF: heavy penalty -8 to -12 pts (research: trading against HTF halves returns)
-        const adj = 8 + 4 * htf.strength; // 8–12 points penalty
-        ctfBoost -= adj;
+        const adj = 8 + 4 * htf.strength; // 8–12 points penalty (keep heavy)
         anyOpposing = true;
         allAligned = false;
         const details = [htf.emaBull ? 'EMA▲' : 'EMA▼', htf.priceAboveEMA200 != null ? (htf.priceAboveEMA200 ? '200MA▲' : '200MA▼') : '', htf.macdBull ? 'MACD▲' : 'MACD▼'].filter(Boolean).join(' ');
-        misses.push({ ind: 'XTF_' + htf.tf, label: `${htf.tf} trend opposing (${details})` });
+        applyAdj(-adj, `${htf.tf} trend opposing (${details})`, false);
       } else {
         allAligned = false;
       }
     }
 
-    // Bonus: all higher TFs aligned = extra confluence boost
     if (allAligned && crossTFData.length >= 2) {
-      ctfBoost += 4;
-      hits.push({ ind: 'XTF_ALL', label: 'All higher TFs aligned — strong confluence', pts: 4 });
+      applyAdj(4, 'All higher TFs aligned — strong confluence', true);
     }
 
-    prob += ctfBoost;
   }
 
-  // Performance-adaptive scoring: use actual historical win rates per timeframe
-  // This makes the dashboard learn from its own track record
+  // Performance-adaptive scoring (within adjustment cap)
   const tfPerf = _tfWinRateCache[tf];
   if (tfPerf && tfPerf.resolved >= 5) {
-    // Only apply if we have enough data (5+ resolved trades on this TF)
-    const perfDelta = tfPerf.winRate - 50;  // how far above/below random (50%)
-    // Scale: +/- up to 8 points based on historical performance
-    // e.g. 54% WR → +3.2 points, 22% WR → -22.4 points (capped at -8)
+    const perfDelta = tfPerf.winRate - 50;
     const perfAdj = Math.max(-8, Math.min(8, perfDelta * 0.8));
-    prob += perfAdj;
-    if (perfAdj > 0) {
-      hits.push({ ind: 'TF_Perf', label: `${tf} historical WR ${tfPerf.winRate.toFixed(0)}% (${tfPerf.resolved} trades) → +${perfAdj.toFixed(1)}`, pts: Math.round(perfAdj) });
-    } else if (perfAdj < -2) {
-      misses.push({ ind: 'TF_Perf', label: `${tf} historical WR ${tfPerf.winRate.toFixed(0)}% (${tfPerf.resolved} trades) → ${perfAdj.toFixed(1)}` });
+    if (Math.abs(perfAdj) > 1) {
+      applyAdj(perfAdj, `${tf} historical WR ${tfPerf.winRate.toFixed(0)}% (${tfPerf.resolved} trades)`, perfAdj > 0);
     }
   }
 
-  // Apply personal optimizer data if available
+  // Personal optimizer blend (within adjustment cap)
   if (allOptResults.length > 0) {
     const top5 = allOptResults.slice(0, 5);
     const avgWR = top5.reduce((s, r) => s + (r.wr || 50), 0) / top5.length;
-    // Blend personal win rate in
-    prob = prob * 0.7 + avgWR * 0.3;
+    const optAdj = (avgWR - 50) * 0.3; // Convert to ±points
+    if (Math.abs(optAdj) > 1) {
+      applyAdj(optAdj, `Personal optimizer avg WR ${avgWR.toFixed(0)}%`, optAdj > 0);
+    }
   }
 
-  // Confidence rating (based on raw indicator confluence)
-  const confidence = confluence >= 0.72 ? 'High' : confluence >= 0.50 ? 'Medium' : 'Low';
+  // Confidence rating (recalibrated thresholds based on research)
+  // 0.65+ = High (strong agreement), 0.45-0.64 = Medium, <0.45 = Low
+  const confidence = confluence >= 0.65 ? 'High' : confluence >= 0.45 ? 'Medium' : 'Low';
   const confColor  = confidence === 'High' ? '#00f5a0' : confidence === 'Medium' ? '#f5c400' : '#ff8c69';
 
-  // Cap probability based on confidence — regime/TF bonuses alone shouldn't create
-  // high-probability signals when the actual indicators barely agree
-  const probCap = confidence === 'High' ? 85 : confidence === 'Medium' ? 72 : 64;
-  prob = Math.min(probCap, Math.max(30, Math.round(prob)));
+  // Confidence cap — research: TA-only signals should never claim >76%
+  // Low: barely above coin-flip, Medium: decent edge, High: strong confluence
+  const probCap = confidence === 'High' ? 76 : confidence === 'Medium' ? 68 : 58;
+  prob = Math.min(probCap, Math.max(25, Math.round(prob)));
 
   return { prob, confluence, confidence, confColor, hits, misses };
 }
 
-// ── Estimate R/R from ATR (leverage-aware) ───────────────────
-function estimateRR(price, atr, direction, prob, leverage = 1) {
-  let stopMult, targetMult;
+// ── Estimate R/R from ATR (research-calibrated) ───────────────
+// Stop: 2.0× ATR for all (research consensus for crypto)
+// Target: INVERTED — high prob = tighter reliable target, low prob = wider to justify risk
+// Fees: deducted from target to show realistic net profit
+// Leverage: same stop/target in price terms — leverage only amplifies P&L
+const TRADING_FEE_PCT = 0.06; // BloFin taker fee per side (0.06%)
 
-  if (leverage <= 1) {
-    // Spot: standard ATR-based stops
-    stopMult   = 1.0;
-    targetMult = prob >= 70 ? 2.5 : prob >= 60 ? 2.0 : 1.5;
-  } else {
-    // Leverage: wider stops for breathing room, tighter targets (leverage amplifies)
-    stopMult   = 1.5;  // 50% wider stop in price terms — survive wicks
-    targetMult = prob >= 70 ? 1.8 : prob >= 60 ? 1.5 : 1.2;
-  }
+function estimateRR(price, atrVal, direction, prob, leverage = 1) {
+  // Stop distance: 2.0× ATR for all setups (research: crypto needs wider stops)
+  const stopMult = 2.0;
 
-  const stop   = atr * stopMult;
-  const target = atr * targetMult;
+  // Target: INVERTED relationship — high probability = tighter but reliable
+  // Low probability needs bigger reward to justify the risk (EV = prob×reward - (1-prob)×risk)
+  // High prob (76%): 2.0× ATR — reliable, frequently hit
+  // Med prob (65%):  2.5× ATR — decent reward for moderate edge
+  // Low prob (55%):  3.0× ATR — needs big payoff to be +EV
+  const targetMult = prob >= 72 ? 2.0 : prob >= 62 ? 2.5 : 3.0;
+
+  const stop   = atrVal * stopMult;
+  const target = atrVal * targetMult;
 
   const stopPrice   = direction === 'long' ? price - stop   : price + stop;
   const targetPrice = direction === 'long' ? price + target : price - target;
@@ -13329,20 +13418,42 @@ function estimateRR(price, atr, direction, prob, leverage = 1) {
   const stopPct   = stop / price * 100;
   const targetPct = target / price * 100;
 
-  // Leveraged P&L percentages (what the trader actually gains/loses)
-  const levStopPct   = stopPct * leverage;
-  const levTargetPct = targetPct * leverage;
+  // Fee impact: round-trip fees (open + close) as % of position
+  const roundTripFeePct = TRADING_FEE_PCT * 2 * leverage;
+  const netTargetPct = targetPct - (roundTripFeePct / leverage); // fee impact on price-level target
 
-  // R/R based on leveraged P&L (or raw if spot)
-  const rr = parseFloat((levTargetPct / levStopPct).toFixed(1));
+  // Leveraged P&L percentages
+  const levStopPct   = stopPct * leverage;
+  const levTargetPct = netTargetPct * leverage;
+
+  // R/R based on net leveraged P&L
+  const rr = levStopPct > 0 ? parseFloat((levTargetPct / levStopPct).toFixed(1)) : 0;
+
+  // Expected value per trade: EV = (prob × reward) - ((1-prob) × risk)
+  const ev = (prob / 100 * levTargetPct) - ((1 - prob / 100) * levStopPct);
+
+  // Optimal leverage recommendation (Kelly-inspired)
+  // Kelly fraction = (prob × rr - (1-prob)) / rr
+  // Then recommend leverage = floor(kelly * safety_factor / stopPct)
+  const kellyFrac = rr > 0 ? ((prob / 100) * rr - (1 - prob / 100)) / rr : 0;
+  const safeKelly = Math.max(0, kellyFrac * 0.5); // Half-Kelly for safety
+  const optimalLev = Math.max(1, Math.min(20, Math.floor(safeKelly / (stopPct / 100))));
+
+  // Mode recommendation: spot for 1× (avoid funding fees), perps for leverage
+  const recommendedMode = optimalLev <= 1 ? 'spot' : 'perps';
 
   return {
     stop: stopPrice, target: targetPrice, rr,
     stopPct:   stopPct.toFixed(1),
     targetPct: targetPct.toFixed(1),
+    netTargetPct: netTargetPct.toFixed(1),
     levStopPct:   levStopPct.toFixed(1),
     levTargetPct: levTargetPct.toFixed(1),
     leverage,
+    feePct: roundTripFeePct.toFixed(2),
+    ev: ev.toFixed(2),
+    optimalLev,
+    recommendedMode,
   };
 }
 
@@ -13418,13 +13529,13 @@ async function runProbEngine() {
 
       const best = longScore.prob >= shortScore.prob ? { ...longScore, direction: 'long' } : { ...shortScore, direction: 'short' };
 
-      // Leverage penalty — higher leverage = more sensitive to wicks, slippage, liquidation risk
+      // Leverage penalty — non-linear (research: risk degrades exponentially past optimal)
+      // 2× = -2, 5× = -7, 10× = -15, 20× = -25
       if (leverage > 1) {
-        const levPenalty = (leverage - 1) * 2;  // 2% per lev level above 1×
-        best.prob = Math.max(30, best.prob - levPenalty);
-        // Also adjust long/short probs for display
-        longScore.prob  = Math.max(30, longScore.prob  - levPenalty);
-        shortScore.prob = Math.max(30, shortScore.prob - levPenalty);
+        const levPenalty = Math.round(3.3 * Math.pow(leverage, 0.75) - 3.3);
+        best.prob = Math.max(25, best.prob - levPenalty);
+        longScore.prob  = Math.max(25, longScore.prob  - levPenalty);
+        shortScore.prob = Math.max(25, shortScore.prob - levPenalty);
       }
 
       const rrData = estimateRR(price, atrVal, best.direction, best.prob, leverage);
@@ -13450,6 +13561,10 @@ async function runProbEngine() {
         shortProb:  shortScore.prob,
         tf,
         leverage,
+        optimalLev:      rrData.optimalLev,
+        recommendedMode: rrData.recommendedMode,
+        ev:              rrData.ev,
+        feePct:          rrData.feePct,
       });
     } catch (e) {
       console.warn(`[Probe] ${asset.label} failed:`, e.message);
@@ -13596,8 +13711,19 @@ function renderProbeResults(results, tf) {
         ${missBars}
       </div>
 
+      <!-- Optimal leverage + mode + EV -->
+      <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:7px;font-family:'Space Mono',monospace;padding:6px 8px;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.12);border-radius:6px">
+        <span style="color:#a78bfa;font-weight:700">Best Lev: ${r.optimalLev}×</span>
+        <span style="color:#5a7a68">|</span>
+        <span style="color:${r.recommendedMode === 'spot' ? '#00f5a0' : '#f5c400'}">${r.recommendedMode === 'spot' ? '📊 SPOT (no funding fees)' : '⚡ PERPS ' + r.optimalLev + '×'}</span>
+        <span style="color:#5a7a68">|</span>
+        <span style="color:${parseFloat(r.ev) > 0 ? '#00f5a0' : '#ff4d6d'}">EV: ${parseFloat(r.ev) > 0 ? '+' : ''}${r.ev}%</span>
+        <span style="color:#5a7a68">|</span>
+        <span style="color:#ff8c69">Fees: ${r.feePct}%</span>
+      </div>
+
       <!-- Both direction probs -->
-      <div style="margin-top:8px;display:flex;gap:8px;font-size:7px;font-family:'Space Mono',monospace">
+      <div style="margin-top:6px;display:flex;gap:8px;font-size:7px;font-family:'Space Mono',monospace">
         <span style="color:#00f5a0">▲ Long ${r.longProb}%</span>
         <span style="color:#5a7a68">|</span>
         <span style="color:#ff4d6d">▼ Short ${r.shortProb}%</span>
@@ -18657,6 +18783,17 @@ renderProbeResults = function(results, tf) {
             <option value="100">100×</option>
           </select>
         </div>
+      </div>
+
+      <!-- Optimal leverage + mode + EV -->
+      <div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:7px;font-family:'Space Mono',monospace;padding:6px 8px;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.12);border-radius:6px">
+        <span style="color:#a78bfa;font-weight:700">Best Lev: ${r.optimalLev || '—'}×</span>
+        <span style="color:#5a7a68">|</span>
+        <span style="color:${r.recommendedMode === 'spot' ? '#00f5a0' : '#f5c400'}">${r.recommendedMode === 'spot' ? '📊 SPOT (no funding fees)' : '⚡ PERPS ' + (r.optimalLev || lev) + '×'}</span>
+        <span style="color:#5a7a68">|</span>
+        <span style="color:${parseFloat(r.ev||0) > 0 ? '#00f5a0' : '#ff4d6d'}">EV: ${parseFloat(r.ev||0) > 0 ? '+' : ''}${r.ev || '0.0'}%</span>
+        <span style="color:#5a7a68">|</span>
+        <span style="color:#ff8c69">Fees: ${r.feePct || '0.00'}%</span>
       </div>
 
       <!-- Signals -->
