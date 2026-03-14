@@ -12356,6 +12356,20 @@ function computeLiveSignals(d) {
 }
 
 // ── Score confluence → probability ───────────────────────────
+// Global cache for timeframe win rate data (populated from recommendations summary)
+let _tfWinRateCache = {};  // { '1h': { winRate: 54, resolved: 24, avgPnl: 0.71 }, ... }
+
+function updateTfWinRateCache(timeframes) {
+  if (!timeframes || !Array.isArray(timeframes)) return;
+  _tfWinRateCache = {};
+  for (const t of timeframes) {
+    if (t.tf && t.resolved > 0) {
+      _tfWinRateCache[t.tf] = { winRate: t.winRate || 0, resolved: t.resolved || 0, avgPnl: t.avgPnl || 0 };
+    }
+  }
+  console.log('[Scoring] TF win rate cache updated:', JSON.stringify(_tfWinRateCache));
+}
+
 function scoreConfluence(signals, direction, regime, fundingRate, tf) {
   const dir = direction === 'long' ? 'bull' : 'bear';
   const opp = direction === 'long' ? 'bear' : 'bull';
@@ -12366,12 +12380,15 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf) {
 
   // Timeframe-aware indicator weights
   // Short TFs (1m-15m): RSI, StochRSI, BB, Volume dominate (react fast)
-  // Medium TFs (30m-4h): balanced weights
+  // Medium-short TFs (30m-1h): blend of momentum + trend
+  // Medium-long TFs (2h-4h): balanced with trend bias
   // Long TFs (6h-1w): EMA, Ichimoku, MACD dominate (need time to be meaningful)
-  const shortTFs = ['1m', '3m', '5m', '15m'];
-  const longTFs  = ['6h', '8h', '12h', '1d', '3d', '1w'];
-  const isShortTF = shortTFs.includes(tf);
-  const isLongTF  = longTFs.includes(tf);
+  const shortTFs     = ['1m', '3m', '5m', '15m'];
+  const medShortTFs  = ['30m', '1h'];
+  const longTFs      = ['6h', '8h', '12h', '1d', '3d', '1w'];
+  const isShortTF    = shortTFs.includes(tf);
+  const isMedShortTF = medShortTFs.includes(tf);
+  const isLongTF     = longTFs.includes(tf);
 
   const WEIGHTS = isShortTF ? {
     EMA: 8,         // less reliable on short TF
@@ -12381,6 +12398,14 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf) {
     StochRSI: 22,   // fast-reacting, great for scalps
     BB: 18,         // good for range/squeeze plays
     Volume: 15,     // volume spikes = strong signal on short TF
+  } : isMedShortTF ? {
+    EMA: 14,        // gaining reliability at 30m-1h
+    Ichimoku: 10,   // starting to be useful
+    MACD: 14,       // good momentum reads
+    RSI: 18,        // still strong for entries
+    StochRSI: 18,   // still fast enough to be useful
+    BB: 14,         // solid for range detection
+    Volume: 12,     // confirmation
   } : isLongTF ? {
     EMA: 25,        // trend is king on daily/weekly
     Ichimoku: 22,   // very reliable on higher TFs
@@ -12390,13 +12415,13 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf) {
     BB: 7,          // less relevant on wide ranges
     Volume: 10,     // confirmation role
   } : {
-    EMA: 20,        // balanced for 30m-4h
-    Ichimoku: 15,
-    MACD: 15,
+    EMA: 20,        // balanced for 2h-4h
+    Ichimoku: 16,
+    MACD: 16,
     RSI: 12,
-    StochRSI: 12,
-    BB: 10,
-    Volume: 10,
+    StochRSI: 10,
+    BB: 12,
+    Volume: 14,
   };
 
   for (const [ind, w] of Object.entries(WEIGHTS)) {
@@ -12449,6 +12474,23 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf) {
     if (direction === 'long'  && fundingRate < -0.02) prob += 3; // negative = squeeze fuel
     if (direction === 'short' && fundingRate < -0.05) prob -= 3; // crowded short
     if (direction === 'short' && fundingRate > 0.10)  prob += 3; // extreme longs = fade
+  }
+
+  // Performance-adaptive scoring: use actual historical win rates per timeframe
+  // This makes the dashboard learn from its own track record
+  const tfPerf = _tfWinRateCache[tf];
+  if (tfPerf && tfPerf.resolved >= 5) {
+    // Only apply if we have enough data (5+ resolved trades on this TF)
+    const perfDelta = tfPerf.winRate - 50;  // how far above/below random (50%)
+    // Scale: +/- up to 8 points based on historical performance
+    // e.g. 54% WR → +3.2 points, 22% WR → -22.4 points (capped at -8)
+    const perfAdj = Math.max(-8, Math.min(8, perfDelta * 0.8));
+    prob += perfAdj;
+    if (perfAdj > 0) {
+      hits.push({ ind: 'TF_Perf', label: `${tf} historical WR ${tfPerf.winRate.toFixed(0)}% (${tfPerf.resolved} trades) → +${perfAdj.toFixed(1)}`, pts: Math.round(perfAdj) });
+    } else if (perfAdj < -2) {
+      misses.push({ ind: 'TF_Perf', label: `${tf} historical WR ${tfPerf.winRate.toFixed(0)}% (${tfPerf.resolved} trades) → ${perfAdj.toFixed(1)}` });
+    }
   }
 
   // Apply personal optimizer data if available
@@ -13121,6 +13163,9 @@ async function loadRecommendations() {
 }
 
 function renderRecSummary(s) {
+  // Update TF win rate cache for performance-adaptive scoring
+  if (s.timeframes) updateTfWinRateCache(s.timeframes);
+
   const el = (id, val, color) => { const e = document.getElementById(id); if (e) { e.textContent = val; if (color) e.style.color = color; } };
   el('recTotal', s.total || 0);
   const wr = s.winRate != null ? s.winRate.toFixed(1) + '%' : '—';
