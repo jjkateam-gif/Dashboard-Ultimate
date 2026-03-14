@@ -3391,12 +3391,16 @@ function calcCycleDashboard(d){
       wscsEmotion = 'Euphoria / Complacency';
       phaseDesc = '⚠️ All 3 prior ATHs occurred Day 367–548. Peak zone active. Prior peaks: Day 367 (2012), Day 526 (2016), Day 548 (2020). Take profits.';
     } else if(daysSinceHalving < 730){
-      score = 90 - ((daysSinceHalving - 560) / 170) * 25;
+      // Post-peak: score should DROP significantly — we're past the top, heading toward bottom
+      // Day 560: score ~55 (just past peak, still elevated risk)
+      // Day 730: score ~30 (approaching bear market accumulation)
+      score = 55 - ((daysSinceHalving - 560) / 170) * 25;
       phase = 'POST-PEAK DISTRIBUTION';
       wscsEmotion = 'Anxiety / Denial';
-      phaseDesc = '🔴 Past all 3 historical ATH windows. Distribution phase. Avg -82.9% drawdown from ATH historically. Avoid catching falling knives.';
+      phaseDesc = 'Past all 3 historical ATH windows. Bear market building. Historically -82.9% drawdown from ATH. Reduce exposure, wait for capitulation.';
     } else if(daysSinceHalving < 1050){
-      score = 65 - ((daysSinceHalving - 730) / 320) * 50;
+      // Bear market: score continues dropping — approaching best accumulation zone
+      score = 30 - ((daysSinceHalving - 730) / 320) * 20;
       phase = 'BEAR MARKET / CAPITULATION';
       wscsEmotion = 'Panic / Capitulation';
       phaseDesc = '⚡ Historical bottom zone. Avg bottom: Day 863 (range 777–924). Avg drawdown -82.9% from ATH. Best long-term accumulation window.';
@@ -3658,7 +3662,7 @@ function renderCycleDashboard(d){
       <div class="ci-bar-track">
         <div class="ci-bar-fill" style="width:${ind.score}%;background:${barColor}"></div>
       </div>
-      <div class="ci-signal ${ind.signal}">${ind.signal==='bull'?'▼ BOTTOM ZONE':ind.signal==='bear'?'▲ TOP ZONE':'◆ MID RANGE'} &nbsp;·&nbsp; Score: ${ind.score}/100</div>
+      <div class="ci-signal ${ind.signal}">${ind.signal==='bull'?'▼ ACCUMULATE — Low Risk':ind.signal==='bear'?'▲ CAUTION — High Risk':'◆ NEUTRAL — Mid Cycle'} &nbsp;·&nbsp; Score: ${ind.score}/100</div>
       <div class="ci-desc">${ind.desc}</div>
     `;
     grid.appendChild(card);
