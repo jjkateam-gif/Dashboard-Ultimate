@@ -2382,6 +2382,7 @@ function switchAuthView(view) {
     <div>
       <div style="font-size:20px;font-weight:800;color:#ff6b35;letter-spacing:-0.5px">🎯 Best Trades Right Now <span style="font-size:11px;color:#aaa;font-weight:400">— AI Probability Engine</span></div>
       <div id="probeLastUpdated" style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px">Scanning markets for high-probability setups...</div>
+      <div id="autoScanStatus" style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:1px;display:none"></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       <select id="probeTimeframe" style="font-size:9px;padding:6px 10px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:6px;font-family:'Space Mono',monospace">
@@ -2416,8 +2417,11 @@ function switchAuthView(view) {
       <div style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.5px">Available</div>
       <div id="btBalanceAvail" style="font-size:16px;font-weight:800;color:#ccc;font-family:'Space Mono',monospace">--</div>
     </div>
+    <div style="height:20px;border-left:1px solid rgba(255,255,255,0.1)"></div>
+    <div id="btFundingBal" style="display:none;align-items:center;gap:8px"></div>
     <button onclick="liveRefreshBalance()" style="margin-left:auto;font-size:8px;padding:5px 10px;width:auto;margin-top:0;margin-bottom:0;background:rgba(0,245,160,0.08);border:1px solid rgba(0,245,160,0.2);color:#00f5a0;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace">↻ Refresh</button>
   </div>
+  <div id="btBalanceHint" style="display:none;padding:4px 18px;margin-top:-10px;margin-bottom:10px"></div>
 
   <!-- Auto-Trade Settings Panel -->
   <details id="autoTradePanel" open style="margin-bottom:14px;background:rgba(0,0,0,0.3);border:2px solid rgba(255,107,53,0.35);border-radius:10px;padding:0">
@@ -13047,44 +13051,222 @@ function computeLiveSignals(d) {
     label: ichiLabel,
   };
 
-  // Volume — wick-based directional estimator + scalar scoring
-  // Uses candle structure to estimate buy/sell ratio (better than candle color alone)
-  // buy_ratio = (close - low) / (high - low) — higher = more buying pressure
+  // ── Volume — 3-Layer Analysis (#3: Doji filter + OBV + body-weighted direction) ──
   const vols   = d.map(x => x.v);
   const volSma = sma(vols, 20);
   const volRatio = volSma[last] > 0 ? vols[last] / volSma[last] : 1;
   const candleRange = d[last] ? d[last].h - d[last].l : 0;
-  const buyRatio = candleRange > 0 ? (d[last].c - d[last].l) / candleRange : 0.5;
-  const volBullish = buyRatio > 0.6; // More buying pressure
-  const volBearish = buyRatio < 0.4; // More selling pressure
-  // Threshold: 1.5× for meaningful signal (research: 1.3× too sensitive for crypto)
-  const volConfirmsBull = volRatio > 1.5 && volBullish;
-  const volConfirmsBear = volRatio > 1.5 && volBearish;
-  // Scalar strength: higher ratio = stronger confirmation (2× > 1.5×)
-  const volStrength = Math.min(3, volRatio); // cap at 3× to prevent extreme spikes dominating
+  const bodySize = d[last] ? Math.abs(d[last].c - d[last].o) : 0;
+  const bodyRatio = candleRange > 0 ? bodySize / candleRange : 0;
+
+  // Layer 1: Doji filter — if body < 15% of range, candle is indecisive → neutral
+  const isDoji = bodyRatio < 0.15;
+
+  // Layer 1b: Body-weighted directional ratio (60% body direction, 40% wick position)
+  const wickBuyRatio = candleRange > 0 ? (d[last].c - d[last].l) / candleRange : 0.5;
+  const bodyDirection = d[last] && d[last].c > d[last].o ? 1 : 0;
+  const dirRatio = isDoji ? 0.5 : (0.6 * (bodyDirection * bodyRatio) + 0.4 * wickBuyRatio);
+
+  // Layer 2: OBV slope — 10-bar On-Balance Volume trend (more informative than single bar)
+  let obvSlope = 0;
+  if (d.length > 11) {
+    let obv = 0;
+    const obvArr = [0];
+    for (let oi = 1; oi < d.length; oi++) {
+      if (d[oi].c > d[oi-1].c) obv += d[oi].v;
+      else if (d[oi].c < d[oi-1].c) obv -= d[oi].v;
+      obvArr.push(obv);
+    }
+    const obvSlice = obvArr.slice(-10);
+    const n = obvSlice.length;
+    let sx=0,sy=0,sxy=0,sx2=0;
+    for (let oi=0;oi<n;oi++){sx+=oi;sy+=obvSlice[oi];sxy+=oi*obvSlice[oi];sx2+=oi*oi;}
+    const rawSlope = (n*sxy - sx*sy) / (n*sx2 - sx*sx || 1);
+    const avgVol = vols.slice(-10).reduce((s,v)=>s+v,0)/10;
+    obvSlope = avgVol > 0 ? rawSlope / avgVol : 0;
+  }
+
+  // Layer 3: Combine — doji kills signal, OBV divergence kills signal
+  let volSignal = 'neutral';
+  let volLabel = '';
+  const volStrength = Math.min(3, volRatio);
+
+  if (isDoji) {
+    // Doji = ambiguous candle, volume direction unreliable
+    volSignal = 'neutral';
+    volLabel = `Volume ${volRatio.toFixed(1)}× avg — Doji candle (ambiguous direction)`;
+  } else if (volRatio < 0.5) {
+    volSignal = 'drying';
+    volLabel = `Volume ${volRatio.toFixed(1)}× avg — Drying up (weak conviction)`;
+  } else if (volRatio > 1.5) {
+    // High volume — check direction with body-weighted ratio
+    const wickSaysBull = dirRatio > 0.55;
+    const wickSaysBear = dirRatio < 0.35;
+    // OBV divergence check: if OBV slope disagrees with candle direction, downgrade to neutral
+    const obvSaysBull = obvSlope > 0.3;
+    const obvSaysBear = obvSlope < -0.3;
+
+    if (wickSaysBull && !obvSaysBear) {
+      volSignal = 'bull';
+      volLabel = `Volume ${volRatio.toFixed(1)}× avg — Buy pressure ${(dirRatio*100).toFixed(0)}%${obvSaysBull ? ' + OBV confirms' : ''} ▲`;
+    } else if (wickSaysBear && !obvSaysBull) {
+      volSignal = 'bear';
+      volLabel = `Volume ${volRatio.toFixed(1)}× avg — Sell pressure ${((1-dirRatio)*100).toFixed(0)}%${obvSaysBear ? ' + OBV confirms' : ''} ▼`;
+    } else if ((wickSaysBull && obvSaysBear) || (wickSaysBear && obvSaysBull)) {
+      volSignal = 'neutral';
+      volLabel = `Volume ${volRatio.toFixed(1)}× avg — OBV divergence (conflicting flow)`;
+    } else {
+      volSignal = 'neutral';
+      volLabel = `Volume ${volRatio.toFixed(1)}× avg — Normal (dir ${(dirRatio*100).toFixed(0)}%)`;
+    }
+  } else {
+    volLabel = `Volume ${volRatio.toFixed(1)}× avg — Normal (dir ${(dirRatio*100).toFixed(0)}%)`;
+  }
+
   results.Volume = {
     ratio: volRatio,
-    bull: volConfirmsBull,
-    bear: volConfirmsBear,
-    drying: volRatio < 0.5,
+    bull: volSignal === 'bull',
+    bear: volSignal === 'bear',
+    drying: volSignal === 'drying',
     strength: volStrength,
-    buyRatio,
-    label: volConfirmsBull ? `Volume ${volRatio.toFixed(1)}× avg — Buy pressure ${(buyRatio*100).toFixed(0)}% ▲`
-         : volConfirmsBear ? `Volume ${volRatio.toFixed(1)}× avg — Sell pressure ${((1-buyRatio)*100).toFixed(0)}% ▼`
-         : volRatio < 0.5 ? `Volume ${volRatio.toFixed(1)}× avg — Drying up (weak conviction)`
-         : `Volume ${volRatio.toFixed(1)}× avg — Normal (buy ${(buyRatio*100).toFixed(0)}%)`,
+    buyRatio: dirRatio,
+    obvSlope,
+    isDoji,
+    label: volLabel,
   };
 
   // ATR for R/R calculation
   const atrVals = atr(d, 14);
   const currentATR = atrVals[last] || (price * 0.02);
 
-  return { signals: results, atr: currentATR, price, macro_bull };
+  // ══════════════════════════════════════════════════════════════
+  // MARKET QUALITY GRADE (#8) — Is this environment worth trading?
+  // Scores the market on tradability: A (excellent) to No-Trade (avoid)
+  // ══════════════════════════════════════════════════════════════
+  let mqScore = 0;
+
+  // ATR vs baseline (recent 20 vs prior 30) — is there enough movement?
+  const recentATRs = atrVals.slice(-20).filter(v => v != null);
+  const oldATRs = atrVals.slice(-50, -20).filter(v => v != null);
+  const avgRecentATR = recentATRs.reduce((s,v) => s+v, 0) / (recentATRs.length || 1);
+  const avgOldATR = oldATRs.reduce((s,v) => s+v, 0) / (oldATRs.length || 1);
+  const atrRatio = avgOldATR > 0 ? avgRecentATR / avgOldATR : 1;
+  if (atrRatio > 1.2) mqScore += 2;       // expanding volatility = opportunity
+  else if (atrRatio > 0.8) mqScore += 1;   // normal
+  else mqScore -= 1;                        // contracting = chop
+
+  // Volume participation
+  if (volRatio > 1.2) mqScore += 2;        // above-average volume
+  else if (volRatio > 0.7) mqScore += 1;   // normal
+  else mqScore -= 1;                        // low volume = avoid
+
+  // EMA spread (regime clarity)
+  if (emaSpread > 0.01) mqScore += 2;      // clear trend (>1% spread)
+  else if (emaSpread > 0.005) mqScore += 1; // moderate
+  else mqScore -= 1;                        // flat/ranging
+
+  // BB squeeze state
+  if (squeeze) mqScore += 1;               // breakout imminent = tradeable
+  else if (bbwp != null && bbwp > 0.50) mqScore += 1; // decent bandwidth
+
+  // Count aligned indicators (more alignment = clearer setup)
+  const alignedCount = Object.values(results).filter(s => s.bull || s.bear).length;
+  if (alignedCount >= 5) mqScore += 2;     // strong alignment
+  else if (alignedCount >= 3) mqScore += 1; // moderate
+
+  const marketQuality = mqScore >= 7 ? 'A' : mqScore >= 4 ? 'B' : mqScore >= 1 ? 'C' : 'No-Trade';
+
+  return { signals: results, atr: currentATR, price, macro_bull, marketQuality, mqScore };
+}
+
+// ══════════════════════════════════════════════════════════════
+// FUNDING RATE PERCENTILE HELPER (#9)
+// Calculates percentile-based thresholds from cached funding history
+// Adapts automatically to market regime (0.08% in bull is normal, in bear is extreme)
+// ══════════════════════════════════════════════════════════════
+function getFundingPercentiles(symbol) {
+  const hist = fundingHistory[symbol];
+  if (!hist || hist.length < 20) return null; // need at least 20 data points
+  const rates = hist.map(f => f.rate ?? f.fundingRate).filter(r => r != null);
+  if (rates.length < 20) return null;
+  const sorted = [...rates].sort((a, b) => a - b);
+  function pctile(p) {
+    const idx = (p / 100) * (sorted.length - 1);
+    const lo = Math.floor(idx), frac = idx - lo;
+    return lo + 1 >= sorted.length ? sorted[lo] : sorted[lo] + frac * (sorted[lo+1] - sorted[lo]);
+  }
+  return { p10: pctile(10), p20: pctile(20), p80: pctile(80), p90: pctile(90), p95: pctile(95), current: rates[rates.length-1] };
+}
+
+// ══════════════════════════════════════════════════════════════
+// CALIBRATION TRACKING — Start Recording (#10)
+// Records every probability prediction for later accuracy analysis
+// Uses localStorage to persist across sessions
+// ══════════════════════════════════════════════════════════════
+const CAL_PENDING_KEY = 'probCalPending_v1';
+const CAL_DATA_KEY    = 'probCalibration_v1';
+
+function recordCalibrationPrediction(asset, tf, probability, direction, entryPrice, stopPrice, targetPrice) {
+  try {
+    const pending = JSON.parse(localStorage.getItem(CAL_PENDING_KEY) || '[]');
+    pending.push({
+      id: `${Date.now()}_${asset}_${tf}`,
+      asset, tf, probability, direction,
+      entryPrice, stopPrice, targetPrice,
+      timestamp: Date.now(),
+    });
+    // Cap at 500 pending to prevent localStorage bloat
+    if (pending.length > 500) pending.splice(0, pending.length - 500);
+    localStorage.setItem(CAL_PENDING_KEY, JSON.stringify(pending));
+  } catch (e) { /* localStorage full or disabled */ }
+}
+
+function resolveCalibrationPredictions(asset, currentPrice) {
+  try {
+    const pending = JSON.parse(localStorage.getItem(CAL_PENDING_KEY) || '[]');
+    const cal = JSON.parse(localStorage.getItem(CAL_DATA_KEY) || '{"buckets":{}}');
+    const stillPending = [];
+    const maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days max
+
+    for (const pred of pending) {
+      if (pred.asset !== asset) { stillPending.push(pred); continue; }
+      if (Date.now() - pred.timestamp > maxAge) continue; // expired
+
+      let resolved = false, won = false;
+      if (pred.direction === 'long') {
+        if (currentPrice >= pred.targetPrice) { resolved = true; won = true; }
+        if (currentPrice <= pred.stopPrice) { resolved = true; won = false; }
+      } else {
+        if (currentPrice <= pred.targetPrice) { resolved = true; won = true; }
+        if (currentPrice >= pred.stopPrice) { resolved = true; won = false; }
+      }
+
+      if (resolved) {
+        const bucket = Math.floor(pred.probability / 5) * 5; // 5% buckets: 25, 30, 35, ...
+        const key = `${bucket}-${bucket+5}`;
+        if (!cal.buckets[key]) cal.buckets[key] = { predictions: 0, wins: 0 };
+        cal.buckets[key].predictions++;
+        if (won) cal.buckets[key].wins++;
+      } else {
+        stillPending.push(pred);
+      }
+    }
+
+    localStorage.setItem(CAL_PENDING_KEY, JSON.stringify(stillPending));
+    localStorage.setItem(CAL_DATA_KEY, JSON.stringify(cal));
+  } catch (e) { /* ignore */ }
+}
+
+function getCalibrationStats() {
+  try {
+    return JSON.parse(localStorage.getItem(CAL_DATA_KEY) || '{"buckets":{}}');
+  } catch (e) { return { buckets: {} }; }
 }
 
 // ── Score confluence → probability ───────────────────────────
 // Global cache for timeframe win rate data (populated from recommendations summary)
 let _tfWinRateCache = {};  // { '1h': { winRate: 54, resolved: 24, avgPnl: 0.71 }, ... }
+let _currentScoringSymbol = '';  // Set per-asset during scoring for funding percentile lookup
 
 function updateTfWinRateCache(timeframes) {
   if (!timeframes || !Array.isArray(timeframes)) return;
@@ -13176,11 +13358,9 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
   let maxScore = 0;
   const hits = [], misses = [];
 
-  // Timeframe-aware indicator weights
-  // Short TFs (1m-15m): RSI, StochRSI, BB, Volume dominate (react fast)
-  // Medium-short TFs (30m-1h): blend of momentum + trend
-  // Medium-long TFs (2h-4h): balanced with trend bias
-  // Long TFs (6h-1w): EMA, Ichimoku, MACD dominate (need time to be meaningful)
+  // ══════════════════════════════════════════════════════════════
+  // TIMEFRAME-AWARE INDICATOR WEIGHTS
+  // ══════════════════════════════════════════════════════════════
   const shortTFs     = ['1m', '3m', '5m', '15m'];
   const medShortTFs  = ['30m', '1h'];
   const longTFs      = ['6h', '8h', '12h', '1d', '3d', '1w'];
@@ -13189,42 +13369,34 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
   const isLongTF     = longTFs.includes(tf);
 
   const WEIGHTS = isShortTF ? {
-    EMA: 8,         // less reliable on short TF
-    Ichimoku: 5,    // needs many candles, noisy on 15m
-    MACD: 10,       // somewhat useful for momentum
-    RSI: 22,        // excellent for overbought/oversold scalps
-    StochRSI: 22,   // fast-reacting, great for scalps
-    BB: 18,         // good for range/squeeze plays
-    Volume: 15,     // volume spikes = strong signal on short TF
+    EMA: 8, Ichimoku: 5, MACD: 10, RSI: 22, StochRSI: 22, BB: 18, Volume: 15,
   } : isMedShortTF ? {
-    EMA: 14,        // gaining reliability at 30m-1h
-    Ichimoku: 10,   // starting to be useful
-    MACD: 14,       // good momentum reads
-    RSI: 18,        // still strong for entries
-    StochRSI: 18,   // still fast enough to be useful
-    BB: 14,         // solid for range detection
-    Volume: 12,     // confirmation
+    EMA: 14, Ichimoku: 10, MACD: 14, RSI: 18, StochRSI: 18, BB: 14, Volume: 12,
   } : isLongTF ? {
-    EMA: 25,        // trend is king on daily/weekly
-    Ichimoku: 22,   // very reliable on higher TFs
-    MACD: 18,       // solid momentum on daily
-    RSI: 10,        // less useful for swing trades
-    StochRSI: 8,    // too noisy for long TF
-    BB: 7,          // less relevant on wide ranges
-    Volume: 10,     // confirmation role
+    EMA: 25, Ichimoku: 22, MACD: 18, RSI: 10, StochRSI: 8, BB: 7, Volume: 10,
   } : {
-    EMA: 20,        // balanced for 2h-4h
-    Ichimoku: 16,
-    MACD: 16,
-    RSI: 12,
-    StochRSI: 10,
-    BB: 12,
-    Volume: 14,
+    EMA: 20, Ichimoku: 16, MACD: 16, RSI: 12, StochRSI: 10, BB: 12, Volume: 14,
   };
 
-  // Detect strong trend agreement from trend-following indicators (EMA + MACD + Ichimoku)
-  // When 2+ trend indicators agree, mean-reversion signals (RSI, StochRSI, BB) opposing
-  // the trend are discounted — in a strong downtrend, "oversold" doesn't mean "buy"
+  // ══════════════════════════════════════════════════════════════
+  // INDICATOR FAMILY GROUPING — Correlation Dampening (#1)
+  // RSI + StochRSI + BB are correlated (all mean-reversion from price)
+  // EMA + MACD + Ichimoku are correlated (all trend-following)
+  // When 2+ in same family agree, apply diminishing returns to prevent
+  // one signal counted 3 times from inflating confluence
+  // ══════════════════════════════════════════════════════════════
+  const FAMILIES = {
+    RSI: 'meanrev', StochRSI: 'meanrev', BB: 'meanrev',
+    EMA: 'trend', MACD: 'trend', Ichimoku: 'trend',
+    Volume: 'flow',
+  };
+  // Diminishing returns: 1st signal in family = 100%, 2nd = 60%, 3rd = 35%
+  const FAMILY_DECAY = [1.0, 0.60, 0.35];
+  const familyAlignedCount = { meanrev: 0, trend: 0, flow: 0 };
+
+  // ══════════════════════════════════════════════════════════════
+  // TREND VS MEAN-REVERSION CONFLICT DETECTION
+  // ══════════════════════════════════════════════════════════════
   const trendInds = ['EMA', 'MACD', 'Ichimoku'];
   const meanRevInds = ['RSI', 'StochRSI', 'BB'];
   let trendBullCount = 0, trendBearCount = 0;
@@ -13235,6 +13407,9 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
   const strongTrendBull = trendBullCount >= 2;
   const strongTrendBear = trendBearCount >= 2;
 
+  // ══════════════════════════════════════════════════════════════
+  // SCORE EACH INDICATOR (with family dampening)
+  // ══════════════════════════════════════════════════════════════
   for (const [ind, w] of Object.entries(WEIGHTS)) {
     const sig = signals[ind];
     if (!sig) continue;
@@ -13242,13 +13417,10 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
 
     const aligned  = sig[dir]  === true;
     const opposing = sig[opp]  === true;
-    // Cross bonuses
     const crossBonus = (dir === 'bull' && (sig.crossBull || sig.cross === true && sig.bull)) ||
                        (dir === 'bear' && (sig.crossBear || sig.cross === true && sig.bear));
 
-    // Mean-reversion vs trend conflict detection:
-    // If RSI/StochRSI/BB says "bull" (oversold) but trend is strongly bearish,
-    // discount it — oversold can stay oversold in a downtrend
+    // Mean-reversion vs trend conflict
     const isMeanRev = meanRevInds.includes(ind);
     const meanRevConflict = isMeanRev && (
       (aligned && dir === 'bull' && strongTrendBear) ||
@@ -13256,33 +13428,41 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
     );
 
     if (aligned) {
+      // Determine family dampening factor
+      const family = FAMILIES[ind] || 'other';
+      const famIdx = familyAlignedCount[family] || 0;
+      const dampening = FAMILY_DECAY[Math.min(famIdx, FAMILY_DECAY.length - 1)];
+      familyAlignedCount[family] = famIdx + 1;
+
       if (meanRevConflict) {
-        // Mean-reversion signal opposes strong trend — halve its contribution
-        const pts = w * 0.5;
+        // Mean-reversion opposes strong trend — halve, THEN apply family dampening
+        const pts = w * 0.5 * dampening;
         score += pts;
-        hits.push({ ind, label: sig.label + ' (discounted — against trend)', pts: Math.round(pts) });
+        const dampenNote = dampening < 1 ? ` (family dampened ${Math.round(dampening*100)}%)` : '';
+        hits.push({ ind, label: sig.label + ' (vs trend' + dampenNote + ')', pts: Math.round(pts) });
       } else {
-        const pts = crossBonus ? w * 1.3 : w;
+        const basePts = crossBonus ? w * 1.3 : w;
+        const pts = basePts * dampening;
         score += pts;
-        hits.push({ ind, label: sig.label, pts: Math.round(pts) });
+        const dampenNote = dampening < 1 ? ` (corr dampened ${Math.round(dampening*100)}%)` : '';
+        hits.push({ ind, label: sig.label + dampenNote, pts: Math.round(pts) });
       }
     } else if (opposing) {
-      score -= w * 0.4;  // mild penalty for opposing signal
+      score -= w * 0.4;
       misses.push({ ind, label: sig.label });
     } else {
-      // neutral — no contribution
       misses.push({ ind, label: sig.label });
     }
   }
 
-  // Squeeze bonus — potential energy, favors upcoming breakout
+  // Squeeze bonus
   if (signals.BB?.squeeze) {
     score += 8;
     hits.push({ ind: 'BB_Squeeze', label: 'BB Squeeze — breakout likely', pts: 8 });
     maxScore += 8;
   }
 
-  // Volume drying penalty — low volume weakens any setup regardless of direction
+  // Volume drying penalty
   if (signals.Volume?.drying) {
     score -= 5;
     misses.push({ ind: 'Volume_Dry', label: 'Volume drying up — weak conviction' });
@@ -13291,19 +13471,24 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
   // Raw confluence ratio (0–1)
   const confluence = maxScore > 0 ? Math.max(0, score / maxScore) : 0.5;
 
-  // Base probability: sigmoid mapping of confluence → probability
-  // Sigmoid naturally compresses extremes and spreads the middle range
-  // Floor = 28% (all opposing), ceiling = 78% (full alignment), midpoint at 0.5
-  const sigK = 7; // steepness
+  // Base probability: sigmoid mapping
+  const sigK = 7;
   let prob = 28 + (78 - 28) / (1 + Math.exp(-sigK * (confluence - 0.5)));
 
-  // ── CONTEXTUAL ADJUSTMENTS (capped at ±20 pts total) ──
-  // Research: adjustments should not exceed 40% of base range to prevent context
-  // from overriding actual indicator signals
+  // ══════════════════════════════════════════════════════════════
+  // CONTEXTUAL ADJUSTMENTS — Priority Waterfall (#5)
+  // Applied in order of predictive value. Each factor has a sub-cap.
+  // Global cap still ±20, but most predictive factors get first access.
+  // ══════════════════════════════════════════════════════════════
   let totalAdj = 0;
   const ADJ_CAP = 20;
 
-  function applyAdj(pts, label, isHit) {
+  function applyAdj(pts, label, isHit, subCap) {
+    // Clamp to sub-cap first
+    if (subCap != null) {
+      pts = Math.max(-subCap, Math.min(subCap, pts));
+    }
+    // Then clamp to remaining global budget
     const remaining = pts > 0 ? ADJ_CAP - totalAdj : ADJ_CAP + totalAdj;
     const capped = pts > 0 ? Math.min(pts, Math.max(0, remaining)) : Math.max(pts, Math.min(0, -remaining));
     if (Math.abs(capped) < 0.5) return;
@@ -13313,77 +13498,90 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
     else if (!isHit || capped < 0) misses.push({ ind: label, label });
   }
 
-  // Regime adjustment
-  if (regime === 'bull' && direction === 'long')  applyAdj(4, 'Regime: bull favors longs', true);
-  if (regime === 'bull' && direction === 'short') applyAdj(-4, 'Regime: bull opposes shorts', false);
-  if (regime === 'bear' && direction === 'short') applyAdj(4, 'Regime: bear favors shorts', true);
-  if (regime === 'bear' && direction === 'long')  applyAdj(-4, 'Regime: bear opposes longs', false);
-
-  // Funding rate adjustment
-  if (fundingRate != null) {
-    if (direction === 'long'  && fundingRate > 0.08) applyAdj(-3, 'Funding: crowded longs', false);
-    if (direction === 'long'  && fundingRate < -0.02) applyAdj(3, 'Funding: squeeze fuel (neg)', true);
-    if (direction === 'short' && fundingRate < -0.05) applyAdj(-3, 'Funding: crowded shorts', false);
-    if (direction === 'short' && fundingRate > 0.10)  applyAdj(3, 'Funding: extreme longs (fade)', true);
-  }
-
-  // Cross-timeframe alignment (capped within the ±20 total)
+  // ── Priority 1: Cross-timeframe alignment (sub-cap ±14) — most predictive ──
   if (crossTFData && crossTFData.length > 0) {
     let allAligned = true;
-    let anyOpposing = false;
 
     for (const htf of crossTFData) {
       const aligned = (direction === 'long' && htf.bull) || (direction === 'short' && htf.bear);
       const opposing = (direction === 'long' && htf.bear) || (direction === 'short' && htf.bull);
 
       if (aligned) {
-        const adj = 4 + 3 * htf.strength; // 4–7 points (reduced from 5-8)
+        const adj = 4 + 3 * htf.strength;
         const details = [htf.emaBull ? 'EMA▲' : 'EMA▼', htf.priceAboveEMA200 != null ? (htf.priceAboveEMA200 ? '200MA▲' : '200MA▼') : '', htf.macdBull ? 'MACD▲' : 'MACD▼'].filter(Boolean).join(' ');
-        applyAdj(adj, `${htf.tf} trend aligned (${details})`, true);
+        applyAdj(adj, `${htf.tf} trend aligned (${details})`, true, 14);
       } else if (opposing) {
-        const adj = 8 + 4 * htf.strength; // 8–12 points penalty (keep heavy)
-        anyOpposing = true;
+        const adj = 8 + 4 * htf.strength;
         allAligned = false;
         const details = [htf.emaBull ? 'EMA▲' : 'EMA▼', htf.priceAboveEMA200 != null ? (htf.priceAboveEMA200 ? '200MA▲' : '200MA▼') : '', htf.macdBull ? 'MACD▲' : 'MACD▼'].filter(Boolean).join(' ');
-        applyAdj(-adj, `${htf.tf} trend opposing (${details})`, false);
+        applyAdj(-adj, `${htf.tf} trend opposing (${details})`, false, 14);
       } else {
         allAligned = false;
       }
     }
 
     if (allAligned && crossTFData.length >= 2) {
-      applyAdj(4, 'All higher TFs aligned — strong confluence', true);
+      applyAdj(4, 'All higher TFs aligned — strong confluence', true, 14);
     }
-
   }
 
-  // Performance-adaptive scoring (within adjustment cap)
+  // ── Priority 2: Regime adjustment (sub-cap ±4) ──
+  if (regime === 'bull' && direction === 'long')  applyAdj(4, 'Regime: bull favors longs', true, 4);
+  if (regime === 'bull' && direction === 'short') applyAdj(-4, 'Regime: bull opposes shorts', false, 4);
+  if (regime === 'bear' && direction === 'short') applyAdj(4, 'Regime: bear favors shorts', true, 4);
+  if (regime === 'bear' && direction === 'long')  applyAdj(-4, 'Regime: bear opposes longs', false, 4);
+
+  // ── Priority 3: Funding rate (sub-cap ±4) — Percentile-adaptive (#9) ──
+  if (fundingRate != null) {
+    // Try percentile-based thresholds first (adapts to current market regime)
+    const _fundPct = typeof _currentScoringSymbol !== 'undefined' ? getFundingPercentiles(_currentScoringSymbol) : null;
+    if (_fundPct) {
+      // Percentile-based: adapts to what's "normal" for this asset
+      if (direction === 'long'  && fundingRate >= _fundPct.p95) applyAdj(-3, `Funding: >95th pctile (crowded longs)`, false, 4);
+      else if (direction === 'long'  && fundingRate >= _fundPct.p80) applyAdj(-2, `Funding: >80th pctile (elevated)`, false, 4);
+      else if (direction === 'long'  && fundingRate <= _fundPct.p10) applyAdj(3, `Funding: <10th pctile (squeeze fuel)`, true, 4);
+      else if (direction === 'long'  && fundingRate <= _fundPct.p20) applyAdj(1, `Funding: <20th pctile (mild tailwind)`, true, 4);
+
+      if (direction === 'short' && fundingRate <= _fundPct.p10) applyAdj(-2, `Funding: <10th pctile (shorts crowded)`, false, 4);
+      else if (direction === 'short' && fundingRate >= _fundPct.p95) applyAdj(3, `Funding: >95th pctile (fade crowd)`, true, 4);
+      else if (direction === 'short' && fundingRate >= _fundPct.p90) applyAdj(2, `Funding: >90th pctile (fade signal)`, true, 4);
+    } else {
+      // Fallback: hardcoded thresholds (still decent)
+      if (direction === 'long'  && fundingRate > 0.08) applyAdj(-3, 'Funding: crowded longs', false, 4);
+      if (direction === 'long'  && fundingRate < -0.02) applyAdj(3, 'Funding: squeeze fuel (neg)', true, 4);
+      if (direction === 'short' && fundingRate < -0.05) applyAdj(-3, 'Funding: crowded shorts', false, 4);
+      if (direction === 'short' && fundingRate > 0.10)  applyAdj(3, 'Funding: extreme longs (fade)', true, 4);
+    }
+  }
+
+  // ── Priority 4: Historical performance (sub-cap ±6) — with sample size guardrails (#6) ──
   const tfPerf = _tfWinRateCache[tf];
-  if (tfPerf && tfPerf.resolved >= 5) {
+  if (tfPerf && tfPerf.resolved >= 30) { // Minimum 30 trades (was 5 — statistically meaningless)
     const perfDelta = tfPerf.winRate - 50;
-    const perfAdj = Math.max(-8, Math.min(8, perfDelta * 0.8));
+    // Graduated strength: 30-99 trades = 40% strength, 100+ = full strength
+    const sampleStrength = tfPerf.resolved >= 100 ? 1.0 : 0.4;
+    const perfAdj = Math.max(-8, Math.min(8, perfDelta * 0.8 * sampleStrength));
     if (Math.abs(perfAdj) > 1) {
-      applyAdj(perfAdj, `${tf} historical WR ${tfPerf.winRate.toFixed(0)}% (${tfPerf.resolved} trades)`, perfAdj > 0);
+      const strengthLabel = sampleStrength < 1 ? ' (partial — low sample)' : '';
+      applyAdj(perfAdj, `${tf} historical WR ${tfPerf.winRate.toFixed(0)}% (${tfPerf.resolved} trades${strengthLabel})`, perfAdj > 0, 6);
     }
   }
 
-  // Personal optimizer blend (within adjustment cap)
+  // ── Priority 5: Personal optimizer (sub-cap ±4) ──
   if (allOptResults.length > 0) {
     const top5 = allOptResults.slice(0, 5);
     const avgWR = top5.reduce((s, r) => s + (r.wr || 50), 0) / top5.length;
-    const optAdj = (avgWR - 50) * 0.3; // Convert to ±points
+    const optAdj = (avgWR - 50) * 0.3;
     if (Math.abs(optAdj) > 1) {
-      applyAdj(optAdj, `Personal optimizer avg WR ${avgWR.toFixed(0)}%`, optAdj > 0);
+      applyAdj(optAdj, `Personal optimizer avg WR ${avgWR.toFixed(0)}%`, optAdj > 0, 4);
     }
   }
 
-  // Confidence rating (recalibrated thresholds based on research)
-  // 0.65+ = High (strong agreement), 0.45-0.64 = Medium, <0.45 = Low
+  // ══════════════════════════════════════════════════════════════
+  // CONFIDENCE RATING & PROBABILITY CAPS
+  // ══════════════════════════════════════════════════════════════
   const confidence = confluence >= 0.65 ? 'High' : confluence >= 0.45 ? 'Medium' : 'Low';
   const confColor  = confidence === 'High' ? '#00f5a0' : confidence === 'Medium' ? '#f5c400' : '#ff8c69';
-
-  // Confidence cap — research: TA-only signals should never claim >76%
-  // Low: barely above coin-flip, Medium: decent edge, High: strong confluence
   const probCap = confidence === 'High' ? 76 : confidence === 'Medium' ? 68 : 58;
   prob = Math.min(probCap, Math.max(25, Math.round(prob)));
 
@@ -13397,49 +13595,103 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
 // Leverage: same stop/target in price terms — leverage only amplifies P&L
 const TRADING_FEE_PCT = 0.06; // BloFin taker fee per side (0.06%)
 
-function estimateRR(price, atrVal, direction, prob, leverage = 1) {
-  // Stop distance: 2.0× ATR for all setups (research: crypto needs wider stops)
-  const stopMult = 2.0;
+// ── Swing point detection for structural stop snapping (#4) ──────
+function findSwingPoints(candles, leftBars = 5, rightBars = 3) {
+  const swingLows = [], swingHighs = [];
+  for (let i = leftBars; i < candles.length - rightBars; i++) {
+    let isLow = true, isHigh = true;
+    for (let j = i - leftBars; j <= i + rightBars; j++) {
+      if (j === i) continue;
+      if (candles[j].l <= candles[i].l) isLow = false;
+      if (candles[j].h >= candles[i].h) isHigh = false;
+    }
+    if (isLow) swingLows.push({ idx: i, price: candles[i].l });
+    if (isHigh) swingHighs.push({ idx: i, price: candles[i].h });
+  }
+  return { swingLows, swingHighs };
+}
 
-  // Target: INVERTED relationship — high probability = tighter but reliable
-  // Low probability needs bigger reward to justify the risk (EV = prob×reward - (1-prob)×risk)
-  // High prob (76%): 2.0× ATR — reliable, frequently hit
-  // Med prob (65%):  2.5× ATR — decent reward for moderate edge
-  // Low prob (55%):  3.0× ATR — needs big payoff to be +EV
+function estimateRR(price, atrVal, direction, prob, leverage = 1, confidence, candles) {
+  // ── Stop distance: 2.0× ATR default, then snap to structure (#4) ──
+  const defaultStopMult = 2.0;
+  let stop = atrVal * defaultStopMult;
+  let snappedToStructure = false;
+  let swingPrice = null;
+
+  // Structural stop snapping: find nearby swing high/low within ±0.5× ATR of default stop
+  if (candles && candles.length > 20) {
+    const { swingLows, swingHighs } = findSwingPoints(candles);
+    const snapWindow = 0.5 * atrVal;
+    const minStop = 1.2 * atrVal; // never tighter than 1.2× ATR
+    const maxStop = 3.0 * atrVal; // never wider than 3.0× ATR
+
+    if (direction === 'long') {
+      const defaultStopPrice = price - stop;
+      const recent = swingLows
+        .filter(s => s.idx >= candles.length - 50)
+        .filter(s => Math.abs(s.price - defaultStopPrice) <= snapWindow)
+        .sort((a, b) => b.idx - a.idx); // most recent first
+      if (recent.length > 0) {
+        const buffer = atrVal * 0.1;
+        const snapped = price - (recent[0].price - buffer);
+        const clamped = Math.max(minStop, Math.min(maxStop, snapped));
+        stop = clamped;
+        snappedToStructure = true;
+        swingPrice = recent[0].price;
+      }
+    } else {
+      const defaultStopPrice = price + stop;
+      const recent = swingHighs
+        .filter(s => s.idx >= candles.length - 50)
+        .filter(s => Math.abs(s.price - defaultStopPrice) <= snapWindow)
+        .sort((a, b) => b.idx - a.idx);
+      if (recent.length > 0) {
+        const buffer = atrVal * 0.1;
+        const snapped = (recent[0].price + buffer) - price;
+        const clamped = Math.max(minStop, Math.min(maxStop, snapped));
+        stop = clamped;
+        snappedToStructure = true;
+        swingPrice = recent[0].price;
+      }
+    }
+  }
+
+  // Target: INVERTED relationship — high prob = tighter reliable, low prob = wider
   const targetMult = prob >= 72 ? 2.0 : prob >= 62 ? 2.5 : 3.0;
-
-  const stop   = atrVal * stopMult;
   const target = atrVal * targetMult;
 
   const stopPrice   = direction === 'long' ? price - stop   : price + stop;
   const targetPrice = direction === 'long' ? price + target : price - target;
 
-  // Raw price-level percentages
   const stopPct   = stop / price * 100;
   const targetPct = target / price * 100;
+  const stopATRMult = stop / atrVal; // actual ATR multiple after snapping
 
-  // Fee impact: round-trip fees (open + close) as % of position
+  // Fee impact
   const roundTripFeePct = TRADING_FEE_PCT * 2 * leverage;
-  const netTargetPct = targetPct - (roundTripFeePct / leverage); // fee impact on price-level target
+  const netTargetPct = targetPct - (roundTripFeePct / leverage);
 
-  // Leveraged P&L percentages
+  // Leveraged P&L
   const levStopPct   = stopPct * leverage;
   const levTargetPct = netTargetPct * leverage;
 
-  // R/R based on net leveraged P&L
+  // R/R
   const rr = levStopPct > 0 ? parseFloat((levTargetPct / levStopPct).toFixed(1)) : 0;
 
-  // Expected value per trade: EV = (prob × reward) - ((1-prob) × risk)
+  // Expected value
   const ev = (prob / 100 * levTargetPct) - ((1 - prob / 100) * levStopPct);
 
-  // Optimal leverage recommendation (Kelly-inspired)
-  // Kelly fraction = (prob × rr - (1-prob)) / rr
-  // Then recommend leverage = floor(kelly * safety_factor / stopPct)
+  // Kelly-based optimal leverage
   const kellyFrac = rr > 0 ? ((prob / 100) * rr - (1 - prob / 100)) / rr : 0;
   const safeKelly = Math.max(0, kellyFrac * 0.5); // Half-Kelly for safety
-  const optimalLev = Math.max(1, Math.min(20, Math.floor(safeKelly / (stopPct / 100))));
+  let optimalLev = Math.max(1, Math.min(20, Math.floor(safeKelly / (stopPct / 100))));
 
-  // Mode recommendation: spot for 1× (avoid funding fees), perps for leverage
+  // ── Confidence-based leverage hard caps (#7) ──
+  // Prevents recommending stupid leverage even when Kelly math allows it
+  const conf = confidence || 'Low';
+  const levCap = conf === 'High' ? 10 : conf === 'Medium' ? 5 : 2;
+  optimalLev = Math.min(optimalLev, levCap);
+
   const recommendedMode = optimalLev <= 1 ? 'spot' : 'perps';
 
   return {
@@ -13454,6 +13706,9 @@ function estimateRR(price, atrVal, direction, prob, leverage = 1) {
     ev: ev.toFixed(2),
     optimalLev,
     recommendedMode,
+    snappedToStructure,
+    swingPrice,
+    stopATRMult: stopATRMult.toFixed(1),
   };
 }
 
@@ -13510,6 +13765,17 @@ async function runProbEngine() {
 
   const results = [];
 
+  // ── Blended Asset Regime (#2) ──────────────────────────────────
+  // Fetch BTC candles once for macro regime (used as 60% weight for alts)
+  // BTC IS the market — alts should blend BTC macro + their own local regime
+  let btcRegime = null;
+  try {
+    const btcData = await probeKlines('BTCUSDT', tf);
+    if (btcData && btcData.length > 200) {
+      btcRegime = detectCurrentRegime(btcData);
+    }
+  } catch (e) { console.warn('[Probe] BTC regime fetch failed:', e.message); }
+
   for (const asset of PROBE_ASSETS) {
     try {
       // Fetch base TF and higher TFs in parallel
@@ -13517,13 +13783,42 @@ async function runProbEngine() {
         probeKlines(asset.sym, tf),
         fetchCrossTFBias(asset.sym, tf)
       ]);
-      const { signals, atr: atrVal, price, macro_bull } = computeLiveSignals(d);
-      const regimeData = detectCurrentRegime(d);
+      const { signals, atr: atrVal, price, macro_bull, marketQuality, mqScore } = computeLiveSignals(d);
+      const localRegime = detectCurrentRegime(d);
+
+      // Blended regime: BTC = 100% for BTC itself, 60% BTC + 40% local for alts
+      let regimeData = localRegime;
+      if (btcRegime && asset.sym !== 'BTCUSDT') {
+        // Extract base regime (strip volatility suffix for blending)
+        const btcBase = btcRegime.regime.split('_')[0]; // 'bull', 'bear', 'sideways'
+        const localBase = localRegime.regime.split('_')[0];
+        const volSuffix = localRegime.expanding ? '_volatile' : localRegime.compressing ? '_squeeze' : '';
+
+        // Blend: if BTC and local agree → strong signal. If they disagree → cautious/sideways
+        let blendedBase;
+        if (btcBase === localBase) {
+          blendedBase = btcBase; // Both agree — strong
+        } else if (btcBase === 'sideways' || localBase === 'sideways') {
+          blendedBase = btcBase !== 'sideways' ? btcBase : localBase; // One sideways → defer to the other
+        } else {
+          // BTC says bull, local says bear (or vice versa) → cautious sideways
+          blendedBase = 'sideways';
+        }
+
+        regimeData = {
+          ...localRegime,
+          regime: blendedBase + volSuffix,
+          _btcRegime: btcBase,
+          _localRegime: localBase,
+          _blended: true,
+        };
+      }
 
       // Get live funding rate if cached from funding monitor
       const fundingRate = fundingHistory[asset.sym]?.slice(-1)[0]?.rate ?? null;
 
       // Score both directions with cross-TF data
+      _currentScoringSymbol = asset.sym; // Set for funding percentile lookup
       const longScore  = scoreConfluence(signals, 'long',  regimeData.regime, fundingRate, tf, crossTFData);
       const shortScore = scoreConfluence(signals, 'short', regimeData.regime, fundingRate, tf, crossTFData);
 
@@ -13538,7 +13833,13 @@ async function runProbEngine() {
         shortScore.prob = Math.max(25, shortScore.prob - levPenalty);
       }
 
-      const rrData = estimateRR(price, atrVal, best.direction, best.prob, leverage);
+      const rrData = estimateRR(price, atrVal, best.direction, best.prob, leverage, best.confidence, d);
+
+      // Calibration tracking (#10): record prediction + resolve any previous ones
+      if (best.prob >= 55) { // Only track meaningful signals
+        recordCalibrationPrediction(asset.sym, tf, best.prob, best.direction, price, rrData.stop, rrData.target);
+      }
+      resolveCalibrationPredictions(asset.sym, price);
 
       results.push({
         asset:      asset.label,
@@ -13565,6 +13866,10 @@ async function runProbEngine() {
         recommendedMode: rrData.recommendedMode,
         ev:              rrData.ev,
         feePct:          rrData.feePct,
+        marketQuality,
+        mqScore,
+        snappedStop:     rrData.snappedToStructure,
+        stopATRMult:     rrData.stopATRMult,
       });
     } catch (e) {
       console.warn(`[Probe] ${asset.label} failed:`, e.message);
@@ -13688,6 +13993,10 @@ function renderProbeResults(results, tf) {
           <div style="font-size:14px;font-weight:800;color:#fff;font-family:'Space Mono',monospace">${r.asset} <span style="color:${dirColor}">${dirEmoji} ${dirLabel}</span></div>
           <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace">$${r.price.toLocaleString(undefined,{maximumFractionDigits:4})} · ${tf} · ${fundStr}</div>
         </div>
+        <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+          <span style="font-size:7px;font-weight:700;font-family:'Space Mono',monospace;padding:2px 6px;border-radius:4px;background:${r.marketQuality === 'A' ? 'rgba(0,245,160,0.15)' : r.marketQuality === 'B' ? 'rgba(245,196,0,0.15)' : r.marketQuality === 'C' ? 'rgba(255,140,105,0.15)' : 'rgba(255,77,109,0.15)'};color:${r.marketQuality === 'A' ? '#00f5a0' : r.marketQuality === 'B' ? '#f5c400' : r.marketQuality === 'C' ? '#ff8c69' : '#ff4d6d'};border:1px solid ${r.marketQuality === 'A' ? 'rgba(0,245,160,0.3)' : r.marketQuality === 'B' ? 'rgba(245,196,0,0.3)' : r.marketQuality === 'C' ? 'rgba(255,140,105,0.3)' : 'rgba(255,77,109,0.3)'}">${r.marketQuality === 'No-Trade' ? '⛔ NO TRADE' : r.marketQuality + '-Grade'}</span>
+          ${r.snappedStop ? '<span style="font-size:6px;color:#a78bfa;font-family:\'Space Mono\',monospace">🎯 SL snapped to structure</span>' : ''}
+        </div>
       </div>
 
       <!-- Probability + RR -->
@@ -13696,7 +14005,7 @@ function renderProbeResults(results, tf) {
         <div style="flex:1">
           <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:2px">RISK / REWARD</div>
           <div style="font-size:20px;font-weight:800;color:#fff;font-family:'Space Mono',monospace">${r.rr}<span style="font-size:10px;color:#5a7a68">:1</span></div>
-          <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">TP ${r.direction==='long'?'+':'−'}${r.rrData.targetPct}% · SL ${r.direction==='long'?'−':'+'}${r.rrData.stopPct}%</div>
+          <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">TP ${r.direction==='long'?'+':'−'}${r.rrData.targetPct}% · SL ${r.direction==='long'?'−':'+'}${r.rrData.stopPct}%${r.snappedStop ? ' (' + r.stopATRMult + '× ATR, structure)' : ''}</div>
         </div>
         <div>
           <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:2px">CONFIDENCE</div>
@@ -14819,6 +15128,84 @@ async function logBestTrade(idx) {
 // ════════════════════════════════════════════════════════════════
 // 🤖 AUTO-TRADE ENGINE
 // ════════════════════════════════════════════════════════════════
+
+// ── Background Auto-Scan Timer ─────────────────────────────────
+// Runs the probability engine on a recurring interval regardless of which tab is active
+// This ensures auto-trade can execute even when the user is on other pages
+let _autoScanTimer = null;
+let _autoScanIntervalMs = 0;
+
+// Scan interval based on timeframe (no point scanning faster than candle close)
+const AUTO_SCAN_INTERVALS = {
+  '1m': 60 * 1000,       // 1 min
+  '3m': 2 * 60 * 1000,   // 2 min
+  '5m': 3 * 60 * 1000,   // 3 min
+  '15m': 10 * 60 * 1000, // 10 min
+  '30m': 15 * 60 * 1000, // 15 min
+  '1h': 30 * 60 * 1000,  // 30 min
+  '4h': 60 * 60 * 1000,  // 1 hour
+  '1d': 4 * 60 * 60 * 1000, // 4 hours
+};
+
+function startAutoScanTimer() {
+  stopAutoScanTimer(); // clear any existing timer
+
+  const autoTradeOn = $('autoTradeEnabled')?.checked ||
+    JSON.parse(localStorage.getItem('dash_autoTrade') || '{}').on;
+  if (!autoTradeOn) return; // only run background scans if auto-trade is enabled
+
+  const tf = $('probeTimeframe')?.value || '4h';
+  const intervalMs = AUTO_SCAN_INTERVALS[tf] || 60 * 60 * 1000;
+  _autoScanIntervalMs = intervalMs;
+
+  console.log(`[AutoScan] Starting background scan every ${(intervalMs / 60000).toFixed(1)}m for ${tf} timeframe`);
+
+  _autoScanTimer = setInterval(async () => {
+    // Double-check auto-trade is still enabled
+    const stillOn = $('autoTradeEnabled')?.checked ||
+      JSON.parse(localStorage.getItem('dash_autoTrade') || '{}').on;
+    if (!stillOn) {
+      stopAutoScanTimer();
+      return;
+    }
+
+    console.log('[AutoScan] Background scan triggered at', new Date().toLocaleTimeString());
+
+    // Run the engine — it will auto-trade at the end if enabled
+    try {
+      await runProbEngine();
+    } catch (e) {
+      console.warn('[AutoScan] Scan failed:', e.message);
+    }
+  }, intervalMs);
+
+  // Update the status displays
+  const status = $('autoTradeStatus');
+  if (status) {
+    status.textContent = `ACTIVE · scanning every ${intervalMs < 60000 ? (intervalMs/1000)+'s' : (intervalMs/60000)+'m'}`;
+    status.style.color = '#00f5a0';
+  }
+  const scanStatus = $('autoScanStatus');
+  if (scanStatus) {
+    scanStatus.style.display = 'block';
+    scanStatus.innerHTML = `🤖 Auto-scanning every <span style="color:#ff6b35">${intervalMs < 60000 ? (intervalMs/1000)+'s' : (intervalMs/60000)+'m'}</span> — trades execute even when you leave this page`;
+  }
+}
+
+function stopAutoScanTimer() {
+  if (_autoScanTimer) {
+    clearInterval(_autoScanTimer);
+    _autoScanTimer = null;
+    _autoScanIntervalMs = 0;
+    console.log('[AutoScan] Background scan stopped');
+  }
+  const scanStatus = $('autoScanStatus');
+  if (scanStatus) scanStatus.style.display = 'none';
+}
+
+// Start/stop auto-scan whenever auto-trade is toggled or settings change
+const _origConfirmAutoTrade = typeof confirmAutoTradeSettings === 'function' ? confirmAutoTradeSettings : null;
+
 let _autoTradeOpenCount = 0;
 let _autoTradeConfirmQueue = [];
 
@@ -14861,8 +15248,11 @@ function confirmAutoTradeSettings() {
 
   if (on) {
     toast('🤖 Auto-trade saved — ' + (mode === 'auto' ? 'Full Auto' : 'Confirm First') + ' · Min ' + minProb + '% · $' + size + '/trade · Max ' + maxOpen + ' open', 'success', 4000);
+    // Start background auto-scan timer so engine keeps scanning even when user leaves this tab
+    startAutoScanTimer();
   } else {
     toast('Auto-trade settings saved (disabled)', 'info');
+    stopAutoScanTimer();
   }
 }
 
@@ -14876,6 +15266,10 @@ function loadAutoTradeSettings() {
     if (saved.size && $('autoTradeSize')) $('autoTradeSize').value = saved.size;
     if (saved.maxOpen && $('autoTradeMaxOpen')) $('autoTradeMaxOpen').value = saved.maxOpen;
     toggleAutoTrade();
+    // Auto-start background scan if auto-trade was previously enabled
+    if (saved.on) {
+      setTimeout(() => startAutoScanTimer(), 5000); // 5s delay to let page finish loading
+    }
   } catch (e) {}
 }
 
@@ -14956,8 +15350,9 @@ async function submitBlofinConnect() {
         }
       } catch (e2) {}
 
-      // Refresh connection status
+      // Refresh connection status + start balance auto-refresh
       await checkBlofinConnection();
+      startBalanceAutoRefresh();
       toast('🔗 BloFin connected successfully!', 'success');
       setTimeout(closeBlofinConnectPopup, 1500);
     } else {
@@ -18729,6 +19124,10 @@ renderProbeResults = function(results, tf) {
           <div style="font-size:14px;font-weight:800;color:#fff;font-family:'Space Mono',monospace">${r.asset} <span style="color:${dirColor}">${dirLabel}</span> ${levBadge}</div>
           <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace">$${r.price.toLocaleString(undefined,{maximumFractionDigits:4})} · ${tf}${fundStr?' · '+fundStr:''}</div>
         </div>
+        <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+          <span style="font-size:7px;font-weight:700;font-family:'Space Mono',monospace;padding:2px 6px;border-radius:4px;background:${r.marketQuality === 'A' ? 'rgba(0,245,160,0.15)' : r.marketQuality === 'B' ? 'rgba(245,196,0,0.15)' : r.marketQuality === 'C' ? 'rgba(255,140,105,0.15)' : 'rgba(255,77,109,0.15)'};color:${r.marketQuality === 'A' ? '#00f5a0' : r.marketQuality === 'B' ? '#f5c400' : r.marketQuality === 'C' ? '#ff8c69' : '#ff4d6d'};border:1px solid ${r.marketQuality === 'A' ? 'rgba(0,245,160,0.3)' : r.marketQuality === 'B' ? 'rgba(245,196,0,0.3)' : r.marketQuality === 'C' ? 'rgba(255,140,105,0.3)' : 'rgba(255,77,109,0.3)'}">${r.marketQuality === 'No-Trade' ? '⛔ NO TRADE' : (r.marketQuality || '?') + '-Grade'}</span>
+          ${r.snappedStop ? '<span style="font-size:6px;color:#a78bfa;font-family:\'Space Mono\',monospace">🎯 SL snapped to structure</span>' : ''}
+        </div>
       </div>
 
       <!-- Probability + RR -->
@@ -18737,6 +19136,7 @@ renderProbeResults = function(results, tf) {
         <div style="flex:1">
           <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:2px">RISK / REWARD</div>
           <div style="font-size:20px;font-weight:800;color:#fff;font-family:'Space Mono',monospace">${r.rr}<span style="font-size:10px;color:#5a7a68">:1</span></div>
+          <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">SL ${slPct}%${r.snappedStop ? ' (' + (r.stopATRMult || '') + '× ATR)' : ''} · TP ${tpPct}%</div>
         </div>
         <div>
           <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:2px">CONFIDENCE</div>
@@ -18912,6 +19312,30 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 900);
 });
 
+// ── Auto-Trade Background Scanner Init ─────────────────────────
+// Load auto-trade settings on page load (not just when visiting Best Trades tab)
+// This ensures background scanning starts even if user opens a different tab first
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('dash_autoTrade') || '{}');
+      if (saved.on) {
+        // Populate form fields so the engine can read them
+        if (saved.mode && $('autoTradeMode')) $('autoTradeMode').value = saved.mode;
+        if (saved.minProb && $('autoTradeMinProb')) $('autoTradeMinProb').value = saved.minProb;
+        if (saved.size && $('autoTradeSize')) $('autoTradeSize').value = saved.size;
+        if (saved.maxOpen && $('autoTradeMaxOpen')) $('autoTradeMaxOpen').value = saved.maxOpen;
+        if ($('autoTradeEnabled')) $('autoTradeEnabled').checked = true;
+        toggleAutoTrade();
+        startAutoScanTimer();
+        console.log('[AutoScan] Auto-trade was enabled — background scanning started on page load');
+      }
+    } catch (e) {
+      console.warn('[AutoScan] Failed to init auto-scan on load:', e);
+    }
+  }, 3000); // 3s delay to let auth + BloFin connection settle
+});
+
 // ══════════════════════════════════════════════════════════════
 // LIVE TRADING DASHBOARD
 // ══════════════════════════════════════════════════════════════
@@ -19019,15 +19443,46 @@ async function liveRefreshBalance() {
     }
     const d = await r.json();
     console.log('Balance response:', JSON.stringify(d));
+    if (d.balance?._debug) console.log('[Balance Debug] Backend parsed:', JSON.stringify(d.balance._debug, null, 2));
     if (!d.balance) { if (usdtEl) usdtEl.textContent = 'No data'; if (btUsdtEl) btUsdtEl.textContent = 'No data'; return; }
     const usdt = parseFloat(d.balance.usdt);
     const avail = parseFloat(d.balance.availableBalance);
+    const fundingUsdt = parseFloat(d.balance.fundingUsdt) || 0;
+    const fundingAvail = parseFloat(d.balance.fundingAvailable) || 0;
     const usdtStr = !isNaN(usdt) && usdt > 0 ? '$' + usdt.toFixed(2) : (usdt === 0 ? '$0.00' : '--');
     const availStr = !isNaN(avail) && avail >= 0 ? '$' + avail.toFixed(2) : '--';
     if (usdtEl) usdtEl.textContent = usdtStr;
     if (availEl) availEl.textContent = availStr;
     if (btUsdtEl) btUsdtEl.textContent = usdtStr;
     if (btAvailEl) btAvailEl.textContent = availStr;
+
+    // Show funding account balance if it has funds (helps explain "where's my money?")
+    const fundingEl = document.getElementById('btFundingBal');
+    if (fundingEl) {
+      if (fundingUsdt > 0.01) {
+        fundingEl.style.display = 'flex';
+        fundingEl.innerHTML = `
+          <span style="font-size:9px;color:#5a7a68;text-transform:uppercase;letter-spacing:0.5px">Funding Acct</span>
+          <span style="font-size:14px;font-weight:700;color:#f5c400;font-family:'Space Mono',monospace">$${fundingUsdt.toFixed(2)}</span>
+          <span style="font-size:8px;color:#ff8c69;cursor:help" title="Your funds are in the BloFin Funding account. Transfer to Trading account on BloFin to trade.">⚠️ Transfer to Trading to use</span>
+        `;
+      } else {
+        fundingEl.style.display = 'none';
+      }
+    }
+
+    // If trading account available is low but funding has money, show a hint
+    if (avail < 5 && fundingUsdt > 5) {
+      const hintEl = document.getElementById('btBalanceHint');
+      if (hintEl) {
+        hintEl.style.display = 'block';
+        hintEl.innerHTML = `<span style="font-size:8px;color:#f5c400">💡 $${fundingUsdt.toFixed(2)} in Funding account — transfer to Trading on BloFin to enable auto-trade</span>`;
+      }
+    } else {
+      const hintEl = document.getElementById('btBalanceHint');
+      if (hintEl) hintEl.style.display = 'none';
+    }
+
     // Store for auto-trade balance checks
     window._lastAvailableBalance = avail;
   } catch (e) {
@@ -19036,6 +19491,28 @@ async function liveRefreshBalance() {
     if (btUsdtEl) btUsdtEl.textContent = 'Fetch error';
   }
 }
+
+// ── Auto-refresh balance every 30s ─────────────────────────────
+let _balanceRefreshTimer = null;
+function startBalanceAutoRefresh() {
+  if (_balanceRefreshTimer) return; // already running
+  // Initial fetch
+  liveRefreshBalance();
+  // Then every 30 seconds
+  _balanceRefreshTimer = setInterval(() => {
+    liveRefreshBalance();
+  }, 30 * 1000);
+  console.log('[Balance] Auto-refresh started (every 30s)');
+}
+
+// Start balance auto-refresh once BloFin is connected
+document.addEventListener('DOMContentLoaded', () => {
+  // Wait for auth + BloFin connection to settle, then start balance polling
+  setTimeout(() => {
+    const token = localStorage.getItem('dash_token');
+    if (token) startBalanceAutoRefresh();
+  }, 4000);
+});
 
 async function liveStoreCredentials() {
   const apiKey = document.getElementById('blofinApiKey')?.value?.trim();

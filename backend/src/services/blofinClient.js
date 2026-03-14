@@ -150,7 +150,7 @@ async function getMarkPrice(instId, demo) {
 
 async function getBalance(creds, demo) {
   const data = await privateGet('/api/v1/account/balance', null, creds, demo);
-  console.log('[BloFin] Raw balance response:', JSON.stringify(data).slice(0, 500));
+  console.log('[BloFin] Raw balance response (FULL):', JSON.stringify(data).slice(0, 2000));
 
   // BloFin may return array or single object
   if (!data) return { usdt: 0, locked: false };
@@ -159,23 +159,49 @@ async function getBalance(creds, demo) {
   const acct = Array.isArray(data) ? data[0] : data;
   if (!acct) return { usdt: 0, locked: false };
 
+  // Log ALL top-level account fields so we can see exactly what BloFin sends
+  console.log('[BloFin] Account-level keys:', Object.keys(acct));
+  console.log('[BloFin] Account-level values:', JSON.stringify(acct, null, 2).slice(0, 1000));
+
   const usdtDetail = (acct.details || []).find(d => d.currency === 'USDT' || d.ccy === 'USDT');
 
-  console.log('[BloFin] USDT detail:', JSON.stringify(usdtDetail).slice(0, 400));
+  if (usdtDetail) {
+    console.log('[BloFin] USDT detail keys:', Object.keys(usdtDetail));
+    console.log('[BloFin] USDT detail values:', JSON.stringify(usdtDetail, null, 2));
+  } else {
+    console.log('[BloFin] No USDT detail found in details array. Details:', JSON.stringify(acct.details).slice(0, 500));
+  }
 
-  // BloFin actual field names: available, balance, equity, frozen
-  const totalEq = parseFloat(acct.totalEquity) || 0;
-  const availBal = parseFloat(
-    usdtDetail?.available || usdtDetail?.availableEquity || usdtDetail?.availableBalance ||
-    usdtDetail?.availBal || acct.totalEquity || 0
-  ) || 0;
-  const usdtBal = parseFloat(
-    usdtDetail?.balance || usdtDetail?.equity || usdtDetail?.eq ||
-    acct.totalEquity || 0
-  ) || 0;
-  const frozen = parseFloat(usdtDetail?.frozen || usdtDetail?.frozenBalance || 0) || 0;
+  // ── Parse with comprehensive field name coverage ──
+  // BloFin API docs field names can vary across versions:
+  //   Account level: totalEquity, availableBalance, availBal, availEq
+  //   Detail level: available, availBal, availEq, cashBal, balance, equity, eq
 
-  console.log('[BloFin] Parsed — totalEq:', totalEq, 'availBal:', availBal, 'usdt:', usdtBal);
+  // Total equity (how much the account is worth)
+  const totalEq = parseFloat(acct.totalEquity || acct.totalEq || 0) || 0;
+
+  // Available balance — try account level first (more reliable), then detail level
+  const acctAvail = parseFloat(acct.availableBalance || acct.availBal || acct.availEq || 0) || 0;
+  const detailAvail = usdtDetail ? parseFloat(
+    usdtDetail.availableBalance || usdtDetail.available || usdtDetail.availBal ||
+    usdtDetail.availEq || usdtDetail.cashBal || 0
+  ) || 0 : 0;
+  // Use whichever is non-zero; prefer account-level
+  const availBal = acctAvail > 0 ? acctAvail : detailAvail > 0 ? detailAvail : totalEq;
+
+  // USDT balance (total including locked)
+  const detailBal = usdtDetail ? parseFloat(
+    usdtDetail.balance || usdtDetail.equity || usdtDetail.eq ||
+    usdtDetail.cashBal || 0
+  ) || 0 : 0;
+  const usdtBal = detailBal > 0 ? detailBal : totalEq;
+
+  // Frozen/locked in positions
+  const frozen = usdtDetail ? parseFloat(
+    usdtDetail.frozen || usdtDetail.frozenBalance || usdtDetail.frozenBal || 0
+  ) || 0 : 0;
+
+  console.log('[BloFin] FINAL Parsed — totalEq:', totalEq, 'acctAvail:', acctAvail, 'detailAvail:', detailAvail, 'availBal:', availBal, 'usdtBal:', usdtBal);
 
   return {
     totalEquity: totalEq,
@@ -183,7 +209,34 @@ async function getBalance(creds, demo) {
     usdt: usdtBal,
     frozenBalance: frozen,
     locked: false,
+    _debug: {
+      acctAvail,
+      detailAvail,
+      detailBal,
+      totalEq,
+      acctKeys: Object.keys(acct),
+      detailKeys: usdtDetail ? Object.keys(usdtDetail) : [],
+    }
   };
+}
+
+// Fetch Funding account balance (separate from Trading account)
+// BloFin has: Trading Account (for futures) and Funding Account (deposit/withdraw)
+async function getFundingBalance(creds, demo) {
+  try {
+    const data = await privateGet('/api/v1/asset/balances', null, creds, demo);
+    console.log('[BloFin] Funding balance response:', JSON.stringify(data).slice(0, 500));
+    if (!data) return { usdt: 0 };
+    const arr = Array.isArray(data) ? data : [data];
+    const usdtEntry = arr.find(d => d.currency === 'USDT' || d.ccy === 'USDT');
+    return {
+      usdt: parseFloat(usdtEntry?.balance || usdtEntry?.available || usdtEntry?.availBal || 0) || 0,
+      available: parseFloat(usdtEntry?.available || usdtEntry?.availBal || usdtEntry?.balance || 0) || 0,
+    };
+  } catch (e) {
+    console.warn('[BloFin] Funding balance fetch failed (may not be supported):', e.message);
+    return { usdt: 0, available: 0 };
+  }
 }
 
 async function getPositions(creds, demo) {
@@ -358,6 +411,7 @@ module.exports = {
   getFundingRate,
   getMarkPrice,
   getBalance,
+  getFundingBalance,
   getPositions,
   setLeverage,
   setMarginMode,

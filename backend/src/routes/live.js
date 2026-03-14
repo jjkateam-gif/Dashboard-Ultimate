@@ -508,8 +508,11 @@ router.get('/balance', async (req, res) => {
 
     const creds = liveEngine.getCredentials(req.user.id);
     const demo = liveEngine.isDemo(req.user.id);
-    const balance = await blofinClient.getBalance(creds, demo);
-    res.json({ balance: { ...balance, locked: false } });
+    const [balance, funding] = await Promise.all([
+      blofinClient.getBalance(creds, demo),
+      blofinClient.getFundingBalance(creds, demo).catch(() => ({ usdt: 0, available: 0 })),
+    ]);
+    res.json({ balance: { ...balance, fundingUsdt: funding.usdt, fundingAvailable: funding.available, locked: false } });
   } catch (err) {
     console.error('Balance fetch error:', err.message, err.stack?.split('\n')[1]);
     res.status(500).json({ error: err.message || 'Server error' });
