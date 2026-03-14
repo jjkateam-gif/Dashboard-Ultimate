@@ -8850,7 +8850,9 @@ function switchPageTab(tab) {
   }
 }
 
-// Auto-load 2Y+ of BTCUSDT daily data for Market Cycle Dashboard
+// Auto-load full BTCUSDT daily history for Market Cycle Dashboard
+// Full history needed for: 200-week MA (1400d), 730-day MA, Pi Cycle (350d with history),
+// Rainbow Chart log regression (more data = better fit), full halving cycle context
 let _autoLoadRan = false;
 async function autoLoadBTCDaily() {
   if (_autoLoadRan || (data && data.length)) return;
@@ -8860,16 +8862,17 @@ async function autoLoadBTCDaily() {
   // Set form values to match
   const symEl = $('symbol'); if (symEl) symEl.value = sym;
   const ivEl  = $('interval'); if (ivEl) ivEl.value = iv;
-  // 2.5 years back for solid 200MA/730MA coverage
+  // Full BTC history — Binance BTCUSDT starts Aug 2017 (~8 years)
+  // Covers 2+ full halving cycles, 200-week MA, and gives best log regression fit
   const end   = Date.now();
-  const start = end - (2.5 * 365 * 24 * 60 * 60 * 1000);
+  const start = new Date('2017-08-17').getTime(); // Binance BTCUSDT genesis
   // Set date inputs
   const startEl = $('startDate'); if (startEl) startEl.value = new Date(start).toISOString().split('T')[0];
   const endEl   = $('endDate');   if (endEl)   endEl.value   = new Date(end).toISOString().split('T')[0];
 
   $('loadProgress').style.display = 'block'; $('loadProgress').value = 5;
-  $('loadStatus').innerHTML = '<div class="info-box warn" style="font-size:10px">⏳ Auto-loading BTCUSDT daily data for cycle analysis...</div>';
-  $('loadingOverlay').classList.add('active'); $('loadingText').textContent = 'AUTO-LOADING BTC DAILY DATA...';
+  $('loadStatus').innerHTML = '<div class="info-box warn" style="font-size:10px">⏳ Auto-loading full BTCUSDT daily history (2017–present) for cycle analysis...</div>';
+  $('loadingOverlay').classList.add('active'); $('loadingText').textContent = 'AUTO-LOADING FULL BTC HISTORY...';
   try {
     data = await fetchKlines(sym, iv, start, end, (cursor, endTs, count) => {
       const pct = Math.min(95, Math.round((cursor - start) / (endTs - start) * 100));
@@ -8878,7 +8881,7 @@ async function autoLoadBTCDaily() {
     });
     $('loadProgress').value = 100;
     $('loadStatus').innerHTML = `<div class="info-box success" style="font-size:10px">✅ Auto-loaded <strong>${data.length}</strong> daily candles — ${sym} · ${data[0].t.substring(0,10)} → ${data[data.length-1].t.substring(0,10)}</div>`;
-    toast(`✅ Auto-loaded ${data.length} BTC daily candles for cycle analysis`);
+    toast(`✅ Auto-loaded ${data.length} BTC daily candles (2017–present)`);
     setTimeout(() => $('loadProgress').style.display = 'none', 1000);
     renderCycleDashboard(data);
   } catch(e) {
