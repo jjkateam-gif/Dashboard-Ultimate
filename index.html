@@ -2576,6 +2576,7 @@ function switchAuthView(view) {
           <button onclick="setRecFilter(null)" id="recFilterAll" style="font-size:8px;padding:4px 10px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;border:none;background:rgba(255,107,53,0.2);color:#ff6b35;font-weight:700">All</button>
           <button onclick="setRecFilter('manual')" id="recFilterManual" style="font-size:8px;padding:4px 10px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;border:none;background:transparent;color:#5a7a68;font-weight:700">📋 My Logged</button>
           <button onclick="setRecFilter('auto')" id="recFilterAuto" style="font-size:8px;padding:4px 10px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;border:none;background:transparent;color:#5a7a68;font-weight:700">🤖 Auto</button>
+          <button onclick="loadBlofinTradeHistory()" id="recFilterBlofin" style="font-size:8px;padding:4px 10px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;border:none;background:transparent;color:#5a7a68;font-weight:700">⚡ BloFin History</button>
         </div>
         <button onclick="loadRecommendations()" style="font-family:'Space Mono',monospace;font-size:9px;padding:5px 12px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:6px;cursor:pointer;width:auto;margin:0">Refresh</button>
       </div>
@@ -2626,7 +2627,7 @@ function switchAuthView(view) {
   <!-- Header -->
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div>
-      <div style="font-size:20px;font-weight:800;color:#00bfff;letter-spacing:-0.5px">🔔 Alert Manager <span style="font-size:11px;color:#aaa;font-weight:400">— Multi-condition Telegram + browser alerts</span></div>
+      <div style="font-size:20px;font-weight:800;color:#00bfff;letter-spacing:-0.5px">🔔 Alert Manager <span style="font-size:11px;color:#aaa;font-weight:400">— Browser notifications + Discord webhook alerts</span></div>
       <div id="alertEngineStatus" style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px">Engine idle</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
@@ -2638,24 +2639,50 @@ function switchAuthView(view) {
     </div>
   </div>
 
-  <!-- Telegram credentials bar -->
-  <div id="alertTgSetup" style="background:rgba(0,190,255,0.05);border:1px solid rgba(0,190,255,0.2);border-radius:10px;padding:14px;margin-bottom:16px">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-      <div style="font-size:9px;font-weight:700;color:#00bfff;font-family:'Space Mono',monospace">📲 TELEGRAM DELIVERY</div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <input id="amBotToken" type="password" placeholder="Bot token (from @BotFather)"
-          style="font-size:9px;padding:5px 8px;width:220px;background:rgba(0,0,0,0.3);border:1px solid rgba(0,190,255,0.25);border-radius:5px;color:#ddd;font-family:'Space Mono',monospace">
-        <input id="amChatId" type="text" placeholder="Chat ID (from @userinfobot)"
-          style="font-size:9px;padding:5px 8px;width:160px;background:rgba(0,0,0,0.3);border:1px solid rgba(0,190,255,0.25);border-radius:5px;color:#ddd;font-family:'Space Mono',monospace">
-        <button onclick="saveTgCredentials()" style="font-size:9px;padding:5px 12px;width:auto;margin:0;background:rgba(0,190,255,0.15);border:1px solid rgba(0,190,255,0.35);color:#00bfff;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace">Save</button>
-        <button onclick="testTgCredentials()" style="font-size:9px;padding:5px 12px;width:auto;margin:0;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);color:#aaa;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace">Test</button>
-        <span id="tgCredStatus" style="font-size:8px;font-family:'Space Mono',monospace;color:#5a7a68"></span>
+  <!-- Notification delivery setup -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+    <!-- Browser Notifications -->
+    <div style="background:rgba(0,190,255,0.05);border:1px solid rgba(0,190,255,0.2);border-radius:10px;padding:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:9px;font-weight:700;color:#00bfff;font-family:'Space Mono',monospace">🔔 BROWSER NOTIFICATIONS</div>
+        <div id="browserNotifStatus" style="font-size:8px;font-family:'Space Mono',monospace;color:#5a7a68"></div>
       </div>
+      <div style="font-size:8px;color:#aaa;font-family:'Space Mono',monospace;margin-bottom:8px">Desktop push notifications — works even when tab is in background</div>
+      <button onclick="enableBrowserNotifications()" id="enableNotifBtn"
+        style="font-size:9px;padding:6px 14px;width:auto;margin:0;background:rgba(0,190,255,0.15);border:1px solid rgba(0,190,255,0.35);color:#00bfff;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700">
+        Enable Notifications
+      </button>
+      <script>
+        (function(){
+          const el = document.getElementById('browserNotifStatus');
+          const btn = document.getElementById('enableNotifBtn');
+          if (typeof Notification !== 'undefined') {
+            if (Notification.permission === 'granted') {
+              if (el) { el.textContent = '✅ Enabled'; el.style.color = '#00f5a0'; }
+              if (btn) { btn.textContent = '✅ Enabled'; btn.disabled = true; btn.style.opacity = '0.5'; }
+            } else if (Notification.permission === 'denied') {
+              if (el) { el.textContent = '❌ Blocked — check browser settings'; el.style.color = '#ff4d6d'; }
+            }
+          }
+        })();
+      </script>
     </div>
-    <div style="font-size:8px;color:#3a5a48;font-family:'Space Mono',monospace;margin-top:8px">
-      ① Message <strong style="color:#aaa">@BotFather</strong> → /newbot to create a bot and get the token &nbsp;·&nbsp;
-      ② Message <strong style="color:#aaa">@userinfobot</strong> to get your Chat ID &nbsp;·&nbsp;
-      ③ Save credentials above — shared across all alerts
+    <!-- Discord Webhook -->
+    <div style="background:rgba(88,101,242,0.05);border:1px solid rgba(88,101,242,0.2);border-radius:10px;padding:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:9px;font-weight:700;color:#5865F2;font-family:'Space Mono',monospace">🎮 DISCORD WEBHOOK</div>
+        <span id="discordStatus" style="font-size:8px;font-family:'Space Mono',monospace;color:#5a7a68"></span>
+      </div>
+      <div style="font-size:8px;color:#aaa;font-family:'Space Mono',monospace;margin-bottom:8px">Send alerts to a Discord channel via webhook URL</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input id="discordWebhookUrl" type="password" placeholder="Discord webhook URL"
+          style="flex:1;font-size:9px;padding:5px 8px;background:rgba(0,0,0,0.3);border:1px solid rgba(88,101,242,0.25);border-radius:5px;color:#ddd;font-family:'Space Mono',monospace">
+        <button onclick="saveDiscordWebhook()" style="font-size:9px;padding:5px 12px;width:auto;margin:0;background:rgba(88,101,242,0.15);border:1px solid rgba(88,101,242,0.35);color:#5865F2;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace">Save</button>
+        <button onclick="testDiscordWebhook()" style="font-size:9px;padding:5px 12px;width:auto;margin:0;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);color:#aaa;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace">Test</button>
+      </div>
+      <div style="font-size:7px;color:#3a5a48;font-family:'Space Mono',monospace;margin-top:6px">
+        Server Settings → Integrations → Webhooks → New Webhook → Copy URL
+      </div>
     </div>
   </div>
 
@@ -3050,10 +3077,13 @@ function switchAuthView(view) {
       <div style="font-size:8px;color:#aaa;font-family:'Space Mono',monospace;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Delivery</div>
       <div style="display:flex;gap:16px">
         <label style="display:flex;align-items:center;gap:6px;font-size:9px;color:#ccc;font-family:'Space Mono',monospace;cursor:pointer">
-          <input type="checkbox" id="am_tg" checked style="width:13px;height:13px"> Telegram
+          <input type="checkbox" id="am_browser" checked style="width:13px;height:13px"> 🔔 Browser notification
         </label>
         <label style="display:flex;align-items:center;gap:6px;font-size:9px;color:#ccc;font-family:'Space Mono',monospace;cursor:pointer">
-          <input type="checkbox" id="am_browser" checked style="width:13px;height:13px"> Browser notification
+          <input type="checkbox" id="am_discord" checked style="width:13px;height:13px"> 🎮 Discord webhook
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:9px;color:#555;font-family:'Space Mono',monospace;cursor:pointer">
+          <input type="checkbox" id="am_tg" style="width:13px;height:13px"> 📲 Telegram (legacy)
         </label>
       </div>
     </div>
@@ -8194,6 +8224,63 @@ async function sendTelegram(token, chatId, message) {
   if (!data.ok) throw new Error(data.description || 'Telegram error');
   return data;
 }
+
+// ── Discord Webhook ────────────────────────────────────────────
+async function sendDiscordWebhook(webhookUrl, message) {
+  const res = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: message })
+  });
+  if (!res.ok) throw new Error('Discord webhook failed: ' + res.status);
+}
+
+function saveDiscordWebhook() {
+  const url = document.getElementById('discordWebhookUrl')?.value?.trim();
+  if (!url) { toast('Enter a webhook URL', 'error'); return; }
+  localStorage.setItem('discord_webhook_url', url);
+  const el = document.getElementById('discordStatus');
+  if (el) { el.textContent = '✅ Saved'; el.style.color = '#00f5a0'; setTimeout(() => { el.textContent = ''; }, 3000); }
+  toast('🎮 Discord webhook saved');
+}
+
+async function testDiscordWebhook() {
+  const url = document.getElementById('discordWebhookUrl')?.value?.trim() || localStorage.getItem('discord_webhook_url') || '';
+  const el = document.getElementById('discordStatus');
+  if (!url) { toast('Enter webhook URL first', 'error'); return; }
+  if (el) { el.textContent = 'Sending...'; el.style.color = '#f5c400'; }
+  try {
+    await sendDiscordWebhook(url, '✅ **Dashboard Alert Test**\nYour Discord alerts are connected and working!');
+    if (el) { el.textContent = '✅ Working!'; el.style.color = '#00f5a0'; setTimeout(() => { el.textContent = ''; }, 4000); }
+    toast('🎮 Test message sent to Discord');
+  } catch(e) {
+    if (el) { el.textContent = '❌ ' + e.message; el.style.color = '#ff4d6d'; }
+    toast('Discord error: ' + e.message, 'error');
+  }
+}
+
+function enableBrowserNotifications() {
+  if (typeof Notification === 'undefined') { toast('Browser notifications not supported', 'error'); return; }
+  Notification.requestPermission().then(p => {
+    const el = document.getElementById('browserNotifStatus');
+    const btn = document.getElementById('enableNotifBtn');
+    if (p === 'granted') {
+      if (el) { el.textContent = '✅ Enabled'; el.style.color = '#00f5a0'; }
+      if (btn) { btn.textContent = '✅ Enabled'; btn.disabled = true; btn.style.opacity = '0.5'; }
+      new Notification('🔔 Dashboard Alerts', { body: 'Browser notifications enabled!' });
+      toast('🔔 Notifications enabled');
+    } else {
+      if (el) { el.textContent = '❌ Denied — check browser settings'; el.style.color = '#ff4d6d'; }
+      toast('Notifications blocked by browser', 'error');
+    }
+  });
+}
+
+// Load saved Discord webhook URL into form
+(function() {
+  const saved = localStorage.getItem('discord_webhook_url');
+  if (saved) { const el = document.getElementById('discordWebhookUrl'); if (el) el.value = saved; }
+})();
 
 async function checkSignalNow() {
   const tgStatus = $('tgStatus');
@@ -13923,6 +14010,134 @@ function recomputePortfolio() {
 // Init portfolio on page load
 try { loadPortfolioSettings(); } catch {}
 
+// ─── BloFin Real Trade History ────────────────────────────────
+async function loadBlofinTradeHistory() {
+  // Highlight active tab
+  ['recFilterAll','recFilterManual','recFilterAuto','recFilterBlofin'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    const active = id === 'recFilterBlofin';
+    btn.style.background = active ? 'rgba(255,107,53,0.2)' : 'transparent';
+    btn.style.color = active ? '#ff6b35' : '#5a7a68';
+  });
+
+  const el = document.getElementById('recHistoryList');
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center;padding:30px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:10px">Loading BloFin trade history...</div>';
+
+  try {
+    const [ordersR, fillsR] = await Promise.all([
+      fetch(LIVE_API + '/orders-history?limit=50', { headers: liveHeaders() }).catch(() => null),
+      fetch(LIVE_API + '/fills?limit=50', { headers: liveHeaders() }).catch(() => null),
+    ]);
+
+    let orders = [];
+    let fills = [];
+    if (ordersR?.ok) { const d = await ordersR.json(); orders = d.orders || d.data || []; }
+    if (fillsR?.ok) { const d = await fillsR.json(); fills = d.fills || d.data || []; }
+
+    // If both endpoints fail, try the general trade history endpoint
+    if (orders.length === 0 && fills.length === 0) {
+      const histR = await fetch(LIVE_API + '/trade-history?limit=50', { headers: liveHeaders() }).catch(() => null);
+      if (histR?.ok) { const d = await histR.json(); orders = d.orders || d.trades || d.data || []; }
+    }
+
+    if (orders.length === 0 && fills.length === 0) {
+      el.innerHTML = '<div style="text-align:center;padding:30px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:10px">No BloFin trade history found. Make sure BloFin is connected and you have placed trades.</div>';
+      // Clear summary cards
+      updateBlofinSummary([]);
+      return;
+    }
+
+    // Merge and deduplicate by orderId, prefer fills for real execution data
+    const merged = new Map();
+    for (const o of orders) {
+      const id = o.orderId || o.ordId || o.id || Math.random();
+      merged.set(id, { ...o, _source: 'order' });
+    }
+    for (const f of fills) {
+      const id = f.orderId || f.ordId || f.id || Math.random();
+      const existing = merged.get(id) || {};
+      merged.set(id, { ...existing, ...f, _source: 'fill' });
+    }
+
+    const trades = Array.from(merged.values())
+      .sort((a, b) => (b.cTime || b.ts || b.timestamp || 0) - (a.cTime || a.ts || a.timestamp || 0));
+
+    renderBlofinHistory(trades);
+    updateBlofinSummary(trades);
+  } catch(e) {
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:#ff4d6d;font-family:\'Space Mono\',monospace;font-size:10px">Error loading BloFin history: ' + e.message + '</div>';
+  }
+}
+
+function renderBlofinHistory(trades) {
+  const el = document.getElementById('recHistoryList');
+  if (!el) return;
+  if (trades.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:10px">No trades found</div>';
+    return;
+  }
+
+  const header = '<div style="display:grid;grid-template-columns:1.4fr 1fr 0.7fr 0.8fr 0.8fr 0.8fr 1fr 0.8fr;gap:10px;padding:10px 16px;font-size:9px;color:#5a7a68;font-family:\'Space Mono\',monospace;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.08)"><span>Date</span><span>Instrument</span><span>Side</span><span>Size</span><span>Price</span><span>Fee</span><span>P&L</span><span>Status</span></div>';
+
+  const rows = trades.map(t => {
+    const ts = t.cTime || t.ts || t.timestamp || t.fillTime;
+    const date = ts ? new Date(Number(ts)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+    const inst = (t.instId || t.symbol || '').replace('-USDT', '');
+    const side = t.side || t.posSide || '';
+    const sideColor = side.toLowerCase().includes('buy') || side.toLowerCase().includes('long') ? '#00f5a0' : '#ff4d6d';
+    const sideIcon = side.toLowerCase().includes('buy') || side.toLowerCase().includes('long') ? '▲' : '▼';
+    const size = t.sz || t.size || t.fillSz || '—';
+    const price = t.avgPx || t.px || t.fillPx || t.price || '—';
+    const fmtPrice = typeof price === 'string' && price !== '—' ? '$' + parseFloat(price).toLocaleString(undefined, {maximumFractionDigits:4}) : price;
+    const fee = t.fee ? parseFloat(t.fee).toFixed(4) : '—';
+    const pnl = t.pnl || t.realizedPnl || t.profit || null;
+    const pnlNum = pnl ? parseFloat(pnl) : null;
+    const pnlStr = pnlNum != null ? (pnlNum >= 0 ? '+$' : '-$') + Math.abs(pnlNum).toFixed(2) : '—';
+    const pnlColor = pnlNum > 0 ? '#00f5a0' : pnlNum < 0 ? '#ff4d6d' : '#5a7a68';
+    const status = t.state || t.status || 'filled';
+    const statusColor = status === 'filled' || status === 'closed' ? '#00f5a0' : status === 'canceled' || status === 'cancelled' ? '#ff4d6d' : '#f5c400';
+
+    return '<div style="display:grid;grid-template-columns:1.4fr 1fr 0.7fr 0.8fr 0.8fr 0.8fr 1fr 0.8fr;gap:10px;padding:9px 16px;font-size:11px;font-family:\'Space Mono\',monospace;border-bottom:1px solid rgba(255,255,255,0.03);border-left:3px solid ' + sideColor + '44;transition:background 0.15s" onmouseenter="this.style.background=\'rgba(255,255,255,0.03)\'" onmouseleave="this.style.background=\'transparent\'">' +
+      '<span style="color:#888;font-size:10px">' + date + '</span>' +
+      '<span style="color:#e0e0e0;font-weight:700">' + inst + '</span>' +
+      '<span style="color:' + sideColor + '">' + sideIcon + ' ' + side.toUpperCase() + '</span>' +
+      '<span style="color:#aaa">' + size + '</span>' +
+      '<span style="color:#ddd">' + fmtPrice + '</span>' +
+      '<span style="color:#555">' + fee + '</span>' +
+      '<span style="color:' + pnlColor + ';font-weight:700">' + pnlStr + '</span>' +
+      '<span style="color:' + statusColor + ';font-size:9px">' + status + '</span>' +
+    '</div>';
+  }).join('');
+
+  el.innerHTML = header + rows;
+}
+
+function updateBlofinSummary(trades) {
+  const filled = trades.filter(t => (t.state || t.status) !== 'canceled');
+  const withPnl = filled.filter(t => t.pnl || t.realizedPnl || t.profit);
+  const wins = withPnl.filter(t => parseFloat(t.pnl || t.realizedPnl || t.profit || 0) > 0);
+  const losses = withPnl.filter(t => parseFloat(t.pnl || t.realizedPnl || t.profit || 0) < 0);
+  const totalPnl = withPnl.reduce((s, t) => s + parseFloat(t.pnl || t.realizedPnl || t.profit || 0), 0);
+
+  const el = (id, val, color) => { const e = document.getElementById(id); if (e) { e.textContent = val; if (color) e.style.color = color; } };
+  el('recTotal', filled.length);
+  el('recWins', wins.length, '#00f5a0');
+  el('recLosses', losses.length, '#ff4d6d');
+  const wr = withPnl.length > 0 ? ((wins.length / withPnl.length) * 100).toFixed(1) + '%' : '—';
+  el('recWinRate', wr, withPnl.length > 0 && wins.length / withPnl.length >= 0.55 ? '#00f5a0' : '#f5c400');
+  const avgPnl = withPnl.length > 0 ? totalPnl / withPnl.length : 0;
+  el('recAvgPnl', avgPnl !== 0 ? (avgPnl > 0 ? '+$' : '-$') + Math.abs(avgPnl).toFixed(2) : '—', avgPnl > 0 ? '#00f5a0' : avgPnl < 0 ? '#ff4d6d' : '#5a7a68');
+
+  // Update portfolio display
+  const pfPnl = document.getElementById('pfTotalPnl');
+  if (pfPnl && totalPnl !== 0) {
+    pfPnl.textContent = (totalPnl >= 0 ? '+$' : '-$') + Math.abs(totalPnl).toFixed(2);
+    pfPnl.style.color = totalPnl >= 0 ? '#00f5a0' : '#ff4d6d';
+  }
+}
+
 function renderRecHistory(recs) {
   _lastRecsList = recs; // store for portfolio calc
   const el = document.getElementById('recHistoryList');
@@ -15526,7 +15741,7 @@ async function fireAlertCore(alert, message, detail='') {
     }
   }
 
-  // Telegram
+  // Telegram (legacy — still works if credentials saved)
   if (alert.telegram !== false) {
     const { token, chatId } = amGetTg();
     if (token && chatId) {
@@ -15535,6 +15750,18 @@ async function fireAlertCore(alert, message, detail='') {
         await sendTelegram(token, chatId, tgMsg);
       } catch(e) {
         console.warn('[Alert] TG send failed:', e.message);
+      }
+    }
+  }
+
+  // Discord webhook
+  if (alert.discord !== false) {
+    const webhookUrl = localStorage.getItem('discord_webhook_url') || '';
+    if (webhookUrl) {
+      try {
+        await sendDiscordWebhook(webhookUrl, `🔔 **${alert.name}**\n${message}${detail ? '\n' + detail : ''}`);
+      } catch(e) {
+        console.warn('[Alert] Discord send failed:', e.message);
       }
     }
   }
@@ -16145,7 +16372,8 @@ function saveAlert() {
   const type    = $('am_type')?.value;
   const name    = ($('am_name')?.value || '').trim() || type;
   const cooldown = parseInt($('am_cooldown')?.value || '3600000');
-  const tg      = $('am_tg')?.checked !== false;
+  const tg      = $('am_tg')?.checked || false;
+  const discord = $('am_discord')?.checked !== false;
   const browser = $('am_browser')?.checked !== false;
 
   if (!type) { toast('Select an alert type', 'error'); return; }
@@ -16155,6 +16383,7 @@ function saveAlert() {
     id:        'al_' + Date.now(),
     type, name, cooldown,
     telegram:  tg,
+    discord,
     browser,
     enabled:   true,
     createdAt: new Date().toISOString(),
@@ -18585,6 +18814,9 @@ async function loadPredictionMarkets() {
     if (!PRED_STATE.sseConnected) connectPredictionStream();
   } catch (e) {
     console.error('Prediction load error:', e);
+    const mkEl = document.getElementById('predMarketsList');
+    if (mkEl) mkEl.innerHTML = '<div style="text-align:center;padding:30px;color:#ff4d6d;font-family:\'Space Mono\',monospace;font-size:10px">⚠️ Failed to load markets: ' + (e.message.includes('Failed to fetch') || e.message.includes('NetworkError') ? 'Backend not connected. Make sure the server is running.' : e.message) + '</div>';
+    toast('Prediction markets failed to load', 'error');
   } finally {
     PRED_STATE.loading = false;
   }
@@ -18719,39 +18951,66 @@ function renderPredictionPerformance(data) {
 }
 
 async function startPredictionBot() {
+  const el = document.getElementById('predBotStatus');
   try {
     const token = localStorage.getItem('dash_token');
-    await fetch(BACKEND_URL + '/predictions/start', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } });
-    const el = document.getElementById('predBotStatus');
+    if (!token) { toast('Login required — connect to backend first', 'error'); return; }
+    if (el) { el.textContent = 'Starting...'; el.style.color = '#f5c400'; }
+    const r = await fetch(BACKEND_URL + '/predictions/start', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!r.ok) throw new Error('Server returned ' + r.status);
     if (el) { el.textContent = 'Running'; el.style.color = '#00f5a0'; }
-  } catch {}
+    toast('🤖 Prediction bot started');
+  } catch(e) {
+    if (el) { el.textContent = 'Error'; el.style.color = '#ff4d6d'; }
+    toast('Failed to start bot: ' + (e.message.includes('timeout') ? 'Backend not responding' : e.message), 'error');
+  }
 }
 
 async function stopPredictionBot() {
+  const el = document.getElementById('predBotStatus');
   try {
     const token = localStorage.getItem('dash_token');
-    await fetch(BACKEND_URL + '/predictions/stop', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } });
-    const el = document.getElementById('predBotStatus');
+    if (!token) { toast('Login required', 'error'); return; }
+    if (el) { el.textContent = 'Stopping...'; el.style.color = '#f5c400'; }
+    const r = await fetch(BACKEND_URL + '/predictions/stop', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!r.ok) throw new Error('Server returned ' + r.status);
     if (el) { el.textContent = 'Stopped'; el.style.color = '#ff4d6d'; }
-  } catch {}
+    toast('🤖 Prediction bot stopped');
+  } catch(e) {
+    if (el) { el.textContent = 'Error'; el.style.color = '#ff4d6d'; }
+    toast('Failed to stop bot: ' + (e.message.includes('timeout') ? 'Backend not responding' : e.message), 'error');
+  }
 }
 
 async function savePredictionConfig() {
   try {
     const token = localStorage.getItem('dash_token');
+    if (!token) { toast('Login required', 'error'); return; }
     const config = {
       betSize: parseFloat(document.getElementById('predBetSize')?.value || 10),
       edgeThreshold: parseFloat(document.getElementById('predEdgeThreshold')?.value || 10) / 100,
       sniperEnabled: document.getElementById('predSniperEnabled')?.checked ?? true,
       arbEnabled: document.getElementById('predArbEnabled')?.checked ?? true,
     };
-    await fetch(BACKEND_URL + '/predictions/config', {
+    const r = await fetch(BACKEND_URL + '/predictions/config', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify(config)
+      body: JSON.stringify(config),
+      signal: AbortSignal.timeout(10000)
     });
-    alert('Config saved!');
-  } catch {}
+    if (!r.ok) throw new Error('Server returned ' + r.status);
+    toast('✅ Config saved');
+  } catch(e) {
+    toast('Failed to save config: ' + (e.message.includes('timeout') ? 'Backend not responding' : e.message), 'error');
+  }
 }
 
 </script>
