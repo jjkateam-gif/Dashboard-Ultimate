@@ -906,8 +906,8 @@ function switchAuthView(view) {
       </div>
       <div class="zone-labels">
         <span>🟢 DEEP BEAR<br>Accumulate</span>
-        <span style="text-align:center">🔵 RECOVERY<br>Build position</span>
-        <span style="text-align:center">🟡 MID CYCLE<br>Trend follow</span>
+        <span style="text-align:center">🔵 EARLY BULL<br>Build position</span>
+        <span style="text-align:center">🟡 MID BULL<br>Trend follow</span>
         <span style="text-align:center">🟠 LATE BULL<br>Take profits</span>
         <span style="text-align:right">🔴 EUPHORIA<br>Exit</span>
       </div>
@@ -3602,29 +3602,70 @@ function renderCycleDashboard(d){
     adjustedScore = Math.max(adjustedScore, 62);
   }
 
+  // ── Determine cycle DIRECTION (bull vs bear) ──
+  // Uses 200MA position, ATH drawdown, trend direction, and halving phase
+  // to determine if we're in a bull or bear market context
+  const maInd = indicators.find(i=>i.name==='200-Day MA');
+  const belowMA = maInd && maInd.score < 40;         // price well below 200MA
+  const aboveMA = maInd && maInd.score > 60;          // price well above 200MA
+  const deepDD = athInd && athInd.score < 35;         // >40% drawdown from ATH
+  const nearATH = athInd && athInd.score > 70;        // <20% from ATH
+  const bearTrend = trendScore < 40;                  // trend pointing down
+  const bullTrend = trendScore > 60;                  // trend pointing up
+  const postPeak = ['POST-PEAK DISTRIBUTION','HISTORICAL PEAK ZONE'].includes(halvingPhase);
+  const preRally = ['EARLY CYCLE','ACCUMULATION','MID CYCLE'].includes(halvingPhase);
+
+  // Bear signals: below 200MA, deep drawdown, bearish trend, post-peak halving
+  const bearSignals = (belowMA?1:0) + (deepDD?1:0) + (bearTrend?1:0) + (postPeak?1:0);
+  // Bull signals: above 200MA, near ATH, bullish trend, pre-rally halving
+  const bullSignals = (aboveMA?1:0) + (nearATH?1:0) + (bullTrend?1:0) + (preRally?1:0);
+
+  const isBearMarket = bearSignals >= 2 || (bearSignals >= 1 && bullSignals === 0);
+  const isBullMarket = bullSignals >= 2 || (bullSignals >= 1 && bearSignals === 0);
+  // Store globally for indicator cards to use
+  window._cycleDirection = isBearMarket ? 'bear' : isBullMarket ? 'bull' : 'neutral';
+
   if(adjustedScore < 20){
     vb.className='verdict-badge accumulate';
-    vb.innerHTML='🟢 ACCUMULATE — DEEP BEAR ZONE';
+    vb.innerHTML='🟢 ACCUMULATE — DEEP BEAR';
     vs.textContent='Multiple indicators showing extreme undervaluation. Historically the best time to build a position. Risk is lower here than it feels.';
   } else if(adjustedScore < 36){
     vb.className='verdict-badge hold';
-    vb.innerHTML='🔵 BUY / BUILD POSITION';
-    vs.textContent='Early recovery or oversold conditions. Good time to enter or add to positions. Not yet in overbought territory.';
+    if (isBearMarket) {
+      vb.innerHTML='🔵 EARLY BEAR — BUILD POSITION';
+      vs.textContent='Bear market conditions but approaching oversold levels. Start building positions cautiously. DCA into strength.';
+    } else {
+      vb.innerHTML='🔵 EARLY BULL — BUILD POSITION';
+      vs.textContent='Early recovery or oversold conditions. Good time to enter or add to positions. Not yet in overbought territory.';
+    }
   } else if(adjustedScore < 50){
     vb.className='verdict-badge hold';
-    vb.innerHTML='🔵 HOLD — MID CYCLE';
-    vs.textContent='Mid-cycle conditions. Mixed signals. Ride existing positions with stops in place. Wait for clearer direction before adding.';
+    if (isBearMarket) {
+      vb.innerHTML='🔵 MID BEAR — HOLD / ACCUMULATE';
+      vs.textContent='Bear market with mixed signals. Below key MAs, meaningful drawdown from ATH. Look for bottoming signals before aggressive buying.';
+    } else if (isBullMarket) {
+      vb.innerHTML='🔵 MID BULL — HOLD / RIDE TREND';
+      vs.textContent='Bull market with healthy momentum. Ride existing positions with stops in place. Add on pullbacks to key support.';
+    } else {
+      vb.innerHTML='🔵 HOLD — TRANSITIONAL';
+      vs.textContent='Market in transition between bull and bear. Mixed signals across indicators. Maintain positions with tight risk management.';
+    }
   } else if(adjustedScore < 62){
     vb.className='verdict-badge caution';
-    vb.innerHTML='🟡 CAUTION — ELEVATED RISK';
-    vs.textContent='Risk is elevated. Could be late cycle OR a bearish trend taking hold. Tighten stop losses. Reduce new position sizes. Watch trend direction closely.';
+    if (isBearMarket) {
+      vb.innerHTML='🟡 CAUTION — LATE BEAR / DISTRIBUTION';
+      vs.textContent='Bear market with elevated risk signals. Could be distribution before further downside. Reduce exposure, tighten stops. Watch for capitulation.';
+    } else {
+      vb.innerHTML='🟡 CAUTION — ELEVATED RISK';
+      vs.textContent='Risk is elevated. Late cycle conditions developing. Tighten stop losses. Reduce new position sizes. Watch trend direction closely.';
+    }
   } else if(adjustedScore < 76){
     vb.className='verdict-badge reduce';
-    vb.innerHTML='🟠 REDUCE EXPOSURE';
-    vs.textContent='High-risk territory. Multiple warning signals active. Strongly consider reducing position size. Move profits to stable assets.';
+    vb.innerHTML='🟠 LATE BULL — REDUCE EXPOSURE';
+    vs.textContent='Late bull / high-risk territory. Multiple warning signals active. Strongly consider reducing position size. Move profits to stable assets.';
   } else {
     vb.className='verdict-badge exit';
-    vb.innerHTML='🔴 EXIT / EXTREME TOP RISK';
+    vb.innerHTML='🔴 EUPHORIA — EXIT RISK';
     vs.textContent='Extreme signals. Historically within range of major cycle tops. Consider exiting most or all positions.';
   }
 
@@ -3659,7 +3700,7 @@ function renderCycleDashboard(d){
       <div class="ci-bar-track">
         <div class="ci-bar-fill" style="width:${ind.score}%;background:${barColor}"></div>
       </div>
-      <div class="ci-signal ${ind.signal}">${ind.signal==='bull'?'▼ ACCUMULATE — Low Risk':ind.signal==='bear'?'▲ CAUTION — High Risk':'◆ NEUTRAL — Mid Cycle'} &nbsp;·&nbsp; Score: ${ind.score}/100</div>
+      <div class="ci-signal ${ind.signal}">${ind.signal==='bull'?'▼ ACCUMULATE — Low Risk':ind.signal==='bear'?'▲ CAUTION — High Risk':window._cycleDirection==='bear'?'◆ NEUTRAL — Mid Bear':window._cycleDirection==='bull'?'◆ NEUTRAL — Mid Bull':'◆ NEUTRAL — Transitional'} &nbsp;·&nbsp; Score: ${ind.score}/100</div>
       <div class="ci-desc">${ind.desc}</div>
     `;
     grid.appendChild(card);
