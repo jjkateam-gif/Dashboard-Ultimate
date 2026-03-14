@@ -504,7 +504,7 @@ details[open] summary::before{transform:rotate(90deg)}
 .verdict-badge.reduce{background:rgba(255,140,0,0.12);color:#ff8c00;border-color:rgba(255,140,0,0.4)}
 .verdict-badge.exit{background:rgba(255,77,109,0.12);color:#ff4d6d;border-color:rgba(255,77,109,0.4)}
 .verdict-badge.loading{background:rgba(255,255,255,0.04);color:var(--text-muted);border-color:var(--border)}
-.verdict-sub{font-family:'Space Mono',monospace;font-size:9px;color:var(--text-muted);max-width:300px;line-height:1.5}
+.verdict-sub{font-family:'Space Mono',monospace;font-size:11px;color:var(--text-muted);max-width:400px;line-height:1.6}
 
 /* Indicator bars */
 .cycle-indicators{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
@@ -513,13 +513,13 @@ details[open] summary::before{transform:rotate(90deg)}
 .ci-card{background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:9px;padding:11px 13px;transition:border-color 0.3s}
 .ci-card:hover{border-color:rgba(0,245,160,0.2)}
 .ci-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
-.ci-name{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px}
-.ci-val{font-family:'Space Mono',monospace;font-size:10px;font-weight:700}
+.ci-name{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px}
+.ci-val{font-family:'Space Mono',monospace;font-size:12px;font-weight:700}
 .ci-bar-track{height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;margin-bottom:5px}
 .ci-bar-fill{height:100%;border-radius:3px;transition:width 1s ease,background 0.6s}
-.ci-signal{font-family:'Space Mono',monospace;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.ci-signal{font-family:'Space Mono',monospace;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
 .ci-signal.bull{color:var(--primary)}.ci-signal.bear{color:var(--red)}.ci-signal.neutral{color:var(--yellow)}
-.ci-desc{font-family:'Space Mono',monospace;font-size:8px;color:var(--text-muted);margin-top:3px;line-height:1.4}
+.ci-desc{font-family:'Space Mono',monospace;font-size:10px;color:var(--text-muted);margin-top:4px;line-height:1.5}
 
 /* Zone bar */
 .zone-bar-wrap{margin-top:16px}
@@ -645,7 +645,8 @@ details[open] summary::before{transform:rotate(90deg)}
 .login-box .remember-row label{font-family:'Space Mono',monospace;font-size:10px;color:var(--text-muted);cursor:pointer}
 .logout-btn{position:fixed;top:8px;right:18px;z-index:10001;background:rgba(10,15,20,0.97);border:1px solid rgba(255,77,109,0.4);
   color:var(--red);padding:5px 12px;border-radius:6px;font-family:'Space Mono',monospace;font-size:9px;cursor:pointer;
-  letter-spacing:1px;text-transform:uppercase;transition:all 0.3s;backdrop-filter:blur(14px);box-shadow:0 2px 12px rgba(0,0,0,0.6)}
+  letter-spacing:1px;text-transform:uppercase;transition:all 0.3s;backdrop-filter:blur(14px);box-shadow:0 2px 12px rgba(0,0,0,0.6);
+  width:auto!important;margin-top:0!important}
 .logout-btn:hover{background:rgba(255,77,109,0.25);border-color:var(--red)}
 
 </style>
@@ -3442,6 +3443,98 @@ function calcCycleDashboard(d){
   })();
 
 
+  // ---- 9. MAYER MULTIPLE (200-day MA ratio) — weight 10 ----
+  // Classic metric: Price / 200-day SMA. Below 0.8 = extreme buy, above 2.4 = extreme sell (97.5th percentile)
+  (function(){
+    const ma200=sma(c,200);
+    const ma=ma200[n-1];
+    if(!ma){results.push({name:'Mayer Multiple',score:50,signal:'neutral',val:'Need 200+ candles',desc:'Price / 200-day SMA ratio. Load 1Y+ daily data.',weight:10});return;}
+    const mayer = last / ma;
+    let score;
+    if(mayer < 0.5)       score = 3;
+    else if(mayer < 0.8)  score = 5 + (mayer - 0.5) / 0.3 * 15;   // 5–20
+    else if(mayer < 1.0)  score = 20 + (mayer - 0.8) / 0.2 * 15;  // 20–35
+    else if(mayer < 1.4)  score = 35 + (mayer - 1.0) / 0.4 * 20;  // 35–55
+    else if(mayer < 2.4)  score = 55 + (mayer - 1.4) / 1.0 * 30;  // 55–85
+    else                  score = Math.min(97, 85 + (mayer - 2.4) / 1.0 * 12); // 85–97
+    score = Math.round(Math.max(3, Math.min(97, score)));
+    const signal = mayer < 0.8 ? 'bull' : mayer > 2.4 ? 'bear' : 'neutral';
+    results.push({
+      name:'Mayer Multiple',score,signal,weight:10,
+      val:mayer.toFixed(2)+'x',
+      desc:`${mayer<0.8?'⚡ Below 0.8x — historically the best buying zone (bottom 15% of all days).':mayer<1.0?'Below 200MA — bearish but approaching value territory.':mayer<1.4?'Healthy range — normal bull market territory.':mayer<2.4?'Extended — mid to late cycle. Historically 97.5% of days are below 2.4x.':'🔴 Above 2.4x — extreme territory. Only 2.5% of BTC history has been this high.'}`
+    });
+  })();
+
+  // ---- 10. RAINBOW CHART (log regression bands) — weight 10 ----
+  // Logarithmic regression of BTC price mapped to 9 bands from "Fire Sale" to "Maximum Bubble"
+  (function(){
+    if(n < 200){results.push({name:'Rainbow Chart',score:50,signal:'neutral',val:'Need 200+ candles',desc:'Log regression band position',weight:10});return;}
+    // Compute log regression: log10(price) = a * dayIndex + b
+    // Use simple linear regression on log prices
+    const logPrices = c.map(p => Math.log10(Math.max(1, p)));
+    let sumX=0, sumY=0, sumXY=0, sumX2=0;
+    for(let i=0; i<n; i++){
+      sumX += i; sumY += logPrices[i]; sumXY += i*logPrices[i]; sumX2 += i*i;
+    }
+    const a = (n*sumXY - sumX*sumY) / (n*sumX2 - sumX*sumX);
+    const b = (sumY - a*sumX) / n;
+    const regValue = Math.pow(10, a*(n-1) + b); // regression center price
+    const ratio = last / regValue;
+
+    // Map ratio to 9 bands (0.3x = fire sale, 3x = max bubble)
+    // Band thresholds: 0.4, 0.6, 0.8, 1.0, 1.3, 1.7, 2.2, 3.0
+    let band, bandColor;
+    if(ratio < 0.4)      { band = 'Fire Sale'; bandColor = '#0000ff'; }
+    else if(ratio < 0.6) { band = 'BUY!'; bandColor = '#00b3ff'; }
+    else if(ratio < 0.8) { band = 'Accumulate'; bandColor = '#00ff00'; }
+    else if(ratio < 1.0) { band = 'Still Cheap'; bandColor = '#80ff00'; }
+    else if(ratio < 1.3) { band = 'HODL'; bandColor = '#ffff00'; }
+    else if(ratio < 1.7) { band = 'Is This a Bubble?'; bandColor = '#ffaa00'; }
+    else if(ratio < 2.2) { band = 'FOMO Intensifies'; bandColor = '#ff6600'; }
+    else if(ratio < 3.0) { band = 'Sell. Seriously.'; bandColor = '#ff0000'; }
+    else                 { band = 'Maximum Bubble'; bandColor = '#aa0000'; }
+
+    const score = Math.round(Math.max(3, Math.min(97, (Math.log(ratio) - Math.log(0.3)) / (Math.log(3.5) - Math.log(0.3)) * 100)));
+    const signal = ratio < 0.7 ? 'bull' : ratio > 2.0 ? 'bear' : 'neutral';
+    results.push({
+      name:'Rainbow Chart',score,signal,weight:10,
+      val:`<span style="color:${bandColor}">${band}</span> (${ratio.toFixed(2)}x)`,
+      desc:`Price is at ${ratio.toFixed(2)}x the log regression midline. Band: "${band}". ${ratio<0.7?'⚡ Deep value territory — historically excellent entry point.':ratio<1.0?'Below regression — accumulation territory.':ratio<1.5?'Fair value range — healthy market.':ratio<2.2?'⚠️ Extended above regression — late cycle territory.':'🔴 Extreme overextension — historically near major cycle tops.'}`
+    });
+  })();
+
+  // ---- 11. DIMINISHING RETURNS MODEL — weight 5 ----
+  // Each BTC cycle peak-to-peak return decays ~70%. Projects current cycle expected range.
+  (function(){
+    // Historical trough-to-peak multipliers: 93x, 29x, 17x, ~6.3x (current)
+    // Log decay rate: each cycle ~60-70% less
+    const halvingDate = new Date('2024-04-20');
+    const lastBarDate = new Date(d[n-1].t);
+    const daysSince = Math.round((lastBarDate - halvingDate) / 864e5);
+    if(daysSince < 0){results.push({name:'Diminishing Returns',score:50,signal:'neutral',val:'Pre-2024 halving',desc:'Cycle return decay model',weight:5});return;}
+
+    // Cycle 4 trough was ~$15,500 (Nov 2022). Projected peak range based on diminishing returns:
+    const cycleTrough = 15500;
+    const conservativeMultiple = 4.5;  // ~70% decay from 17x
+    const aggressiveMultiple = 8.0;    // less decay scenario
+    const conservativeTarget = cycleTrough * conservativeMultiple; // ~$69,750
+    const aggressiveTarget = cycleTrough * aggressiveMultiple;     // ~$124,000
+    const midTarget = (conservativeTarget + aggressiveTarget) / 2;
+
+    const pctToConservative = (last / conservativeTarget) * 100;
+    const pctToAggressive = (last / aggressiveTarget) * 100;
+
+    // Score: how far through the projected return range
+    const score = Math.round(Math.max(5, Math.min(95, (last - cycleTrough) / (aggressiveTarget - cycleTrough) * 100)));
+    const signal = pctToConservative < 50 ? 'bull' : pctToAggressive > 90 ? 'bear' : 'neutral';
+    results.push({
+      name:'Diminishing Returns',score,signal,weight:5,
+      val:`$${(last/1000).toFixed(1)}K / $${(midTarget/1000).toFixed(0)}K target`,
+      desc:`Cycle 4 projected peak: $${(conservativeTarget/1000).toFixed(0)}K–$${(aggressiveTarget/1000).toFixed(0)}K (based on 60-70% return decay per cycle). Currently at ${pctToConservative.toFixed(0)}% of conservative target. ${pctToConservative>100?'⚠️ Above conservative target — entering diminishing returns zone.':pctToConservative>70?'Approaching conservative cycle target.':'Still below projected cycle peak range.'}`
+    });
+  })();
+
   let totalWeight=0,weightedSum=0;
   results.forEach(r=>{weightedSum+=r.score*r.weight;totalWeight+=r.weight;});
   const overallScore=Math.round(weightedSum/totalWeight);
@@ -3534,14 +3627,16 @@ function renderCycleDashboard(d){
     vs.textContent='Extreme signals. Historically within range of major cycle tops. Consider exiting most or all positions.';
   }
 
-  // Add halving cycle context below the verdict
+  // Add halving cycle context below the verdict (clear old ones first to prevent duplicates)
   if (halvingPhase) {
+    Array.from(vs.parentElement.querySelectorAll('[data-halving-ctx]')).forEach(el => el.remove());
     const emotionBadge = halvingEmotion ? ` · ${halvingEmotion}` : '';
     const daysCtx = halvingDays > 0
       ? (daysToBottom > 0 ? `~${daysToBottom} days to projected bottom` : `${halvingDays - 863} days past avg bottom`)
       : '';
     const ctxEl = document.createElement('div');
-    ctxEl.style.cssText = 'font-family:Space Mono,monospace;font-size:8px;color:#a78bfa;margin-top:8px;padding:6px 10px;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);border-radius:6px;line-height:1.6';
+    ctxEl.setAttribute('data-halving-ctx', '1');
+    ctxEl.style.cssText = 'font-family:Space Mono,monospace;font-size:10px;color:#a78bfa;margin-top:8px;padding:8px 12px;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);border-radius:6px;line-height:1.7';
     ctxEl.innerHTML = `<strong>${halvingPhase}</strong>${emotionBadge}`
       + (daysCtx ? ` | ${daysCtx}` : '')
       + `<br><span style="color:#5a7a68">Halving cycle: Day ${halvingDays} · Score: ${halvingInd.score}/100</span>`;
@@ -8434,6 +8529,8 @@ async function authBoot() {
     const res  = await backendFetch('GET', '/auth/me');
     currentUser = res.user;
     showLoggedIn(res);
+    // Auto-load BTC daily data for cycle dashboard after successful auth
+    setTimeout(() => { if (typeof autoLoadBTCDaily === 'function') autoLoadBTCDaily(); }, 500);
   } catch(e) {
     // Token invalid/expired — clear it
     authToken = null;
@@ -8744,9 +8841,51 @@ function switchPageTab(tab) {
     liveRefreshAll();
   } else if (tab === 'predictions') {
     loadPredictionMarkets();
+  } else if (tab === 'backtester') {
+    // Auto-load BTC 1d data for cycle dashboard if no data loaded yet
+    if (!data || !data.length) autoLoadBTCDaily();
   } else {
     clearInterval(degenRefreshTimer); degenRefreshTimer = null;
     clearInterval(liveFeedTimer);     liveFeedTimer     = null;
+  }
+}
+
+// Auto-load 2Y+ of BTCUSDT daily data for Market Cycle Dashboard
+let _autoLoadRan = false;
+async function autoLoadBTCDaily() {
+  if (_autoLoadRan || (data && data.length)) return;
+  _autoLoadRan = true;
+  const sym = 'BTCUSDT';
+  const iv  = '1d';
+  // Set form values to match
+  const symEl = $('symbol'); if (symEl) symEl.value = sym;
+  const ivEl  = $('interval'); if (ivEl) ivEl.value = iv;
+  // 2.5 years back for solid 200MA/730MA coverage
+  const end   = Date.now();
+  const start = end - (2.5 * 365 * 24 * 60 * 60 * 1000);
+  // Set date inputs
+  const startEl = $('startDate'); if (startEl) startEl.value = new Date(start).toISOString().split('T')[0];
+  const endEl   = $('endDate');   if (endEl)   endEl.value   = new Date(end).toISOString().split('T')[0];
+
+  $('loadProgress').style.display = 'block'; $('loadProgress').value = 5;
+  $('loadStatus').innerHTML = '<div class="info-box warn" style="font-size:10px">⏳ Auto-loading BTCUSDT daily data for cycle analysis...</div>';
+  $('loadingOverlay').classList.add('active'); $('loadingText').textContent = 'AUTO-LOADING BTC DAILY DATA...';
+  try {
+    data = await fetchKlines(sym, iv, start, end, (cursor, endTs, count) => {
+      const pct = Math.min(95, Math.round((cursor - start) / (endTs - start) * 100));
+      $('loadProgress').value = pct;
+      $('loadingText').textContent = `AUTO-LOADING... ${count} candles`;
+    });
+    $('loadProgress').value = 100;
+    $('loadStatus').innerHTML = `<div class="info-box success" style="font-size:10px">✅ Auto-loaded <strong>${data.length}</strong> daily candles — ${sym} · ${data[0].t.substring(0,10)} → ${data[data.length-1].t.substring(0,10)}</div>`;
+    toast(`✅ Auto-loaded ${data.length} BTC daily candles for cycle analysis`);
+    setTimeout(() => $('loadProgress').style.display = 'none', 1000);
+    renderCycleDashboard(data);
+  } catch(e) {
+    $('loadStatus').innerHTML = `<div class="info-box error" style="font-size:10px">❌ Auto-load failed: ${e.message}. Click Load manually.</div>`;
+    _autoLoadRan = false; // Allow retry
+  } finally {
+    $('loadingOverlay').classList.remove('active');
   }
 }
 
