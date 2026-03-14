@@ -12386,7 +12386,63 @@ function updateTfWinRateCache(timeframes) {
   console.log('[Scoring] TF win rate cache updated:', JSON.stringify(_tfWinRateCache));
 }
 
-function scoreConfluence(signals, direction, regime, fundingRate, tf) {
+// ── Cross-timeframe alignment ────────────────────────────────
+// Maps each base TF to 2 higher TFs for trend confirmation
+const CROSS_TF_MAP = {
+  '5m':  ['1h', '4h'],
+  '15m': ['1h', '4h'],
+  '30m': ['4h', '1d'],
+  '1h':  ['4h', '1d'],
+  '4h':  ['1d', '1w'],
+  '1d':  ['1w'],
+};
+
+// Quick trend read from candle data — returns { bull, bear, strength }
+function quickTrendBias(d) {
+  if (!d || d.length < 55) return { bull: false, bear: false, strength: 0 };
+  const c = d.map(x => x.c);
+  const last = c.length - 1;
+
+  // EMA 21/55 trend
+  const emaF = ema(c, 21), emaS = ema(c, 55);
+  const emaBull = emaF[last] > emaS[last];
+
+  // RSI direction
+  const R = rsi(c, 14);
+  const rsiVal = R[last];
+  const rsiBull = rsiVal != null && rsiVal > 50;
+
+  // Price vs EMA55
+  const priceAboveEMA = c[last] > emaS[last];
+
+  // Count bullish signals (0-3)
+  const bullCount = (emaBull ? 1 : 0) + (rsiBull ? 1 : 0) + (priceAboveEMA ? 1 : 0);
+  const isBull = bullCount >= 2;
+  const isBear = bullCount <= 1;
+  const strength = Math.abs(bullCount - 1.5) / 1.5; // 0 = mixed, 1 = strong agreement
+
+  return { bull: isBull, bear: isBear, strength, rsi: rsiVal, emaBull, priceAboveEMA };
+}
+
+// Fetch higher TF data for an asset, returns array of { tf, bias }
+async function fetchCrossTFBias(sym, baseTf) {
+  const higherTFs = CROSS_TF_MAP[baseTf];
+  if (!higherTFs || !higherTFs.length) return [];
+
+  const results = await Promise.allSettled(
+    higherTFs.map(async htf => {
+      const d = await probeKlines(sym, htf);
+      const bias = quickTrendBias(d);
+      return { tf: htf, ...bias };
+    })
+  );
+
+  return results
+    .filter(r => r.status === 'fulfilled')
+    .map(r => r.value);
+}
+
+function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFData) {
   const dir = direction === 'long' ? 'bull' : 'bear';
   const opp = direction === 'long' ? 'bear' : 'bull';
 
@@ -12490,6 +12546,24 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf) {
     if (direction === 'long'  && fundingRate < -0.02) prob += 3; // negative = squeeze fuel
     if (direction === 'short' && fundingRate < -0.05) prob -= 3; // crowded short
     if (direction === 'short' && fundingRate > 0.10)  prob += 3; // extreme longs = fade
+  }
+
+  // Cross-timeframe alignment adjustment
+  if (crossTFData && crossTFData.length > 0) {
+    let ctfBoost = 0;
+    for (const htf of crossTFData) {
+      const aligned = (direction === 'long' && htf.bull) || (direction === 'short' && htf.bear);
+      const opposing = (direction === 'long' && htf.bear) || (direction === 'short' && htf.bull);
+      const adj = 3 * htf.strength; // 0–3 points scaled by strength of higher TF signal
+      if (aligned) {
+        ctfBoost += adj;
+        hits.push({ ind: 'XTF_' + htf.tf, label: `${htf.tf} trend aligned (${htf.bull ? '▲ bull' : '▼ bear'})`, pts: Math.round(adj) });
+      } else if (opposing) {
+        ctfBoost -= adj;
+        misses.push({ ind: 'XTF_' + htf.tf, label: `${htf.tf} trend opposing (${htf.bull ? '▲ bull' : '▼ bear'})` });
+      }
+    }
+    prob += ctfBoost;
   }
 
   // Performance-adaptive scoring: use actual historical win rates per timeframe
@@ -12610,26 +12684,32 @@ async function runProbEngine() {
   const tf = $('probeTimeframe')?.value || '4h';
   const leverage = parseInt($('probeLeverage')?.value || 1);
   const setupsEl = $('probeSetups');
+  const hasHigherTFs = CROSS_TF_MAP[tf] && CROSS_TF_MAP[tf].length > 0;
+  const ctfLabel = hasHigherTFs ? ` + cross-TF (${CROSS_TF_MAP[tf].join(', ')})` : '';
   if (setupsEl) setupsEl.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace">
     <div style="font-size:24px;margin-bottom:8px;animation:livePulse 1s infinite">⚡</div>
-    Fetching live data for ${PROBE_ASSETS.length} assets on ${tf}${leverage > 1 ? ' · ' + leverage + '× leverage' : ''}...<br>
-    <span style="font-size:8px;opacity:0.6">Running 7 indicators per asset, computing ${leverage > 1 ? 'leverage-adjusted ' : ''}confluence...</span>
+    Fetching live data for ${PROBE_ASSETS.length} assets on ${tf}${ctfLabel}${leverage > 1 ? ' · ' + leverage + '× leverage' : ''}...<br>
+    <span style="font-size:8px;opacity:0.6">Running 7 indicators per asset${hasHigherTFs ? ' + higher-TF trend analysis' : ''}, computing ${leverage > 1 ? 'leverage-adjusted ' : ''}confluence...</span>
   </div>`;
 
   const results = [];
 
   for (const asset of PROBE_ASSETS) {
     try {
-      const d = await probeKlines(asset.sym, tf);
+      // Fetch base TF and higher TFs in parallel
+      const [d, crossTFData] = await Promise.all([
+        probeKlines(asset.sym, tf),
+        fetchCrossTFBias(asset.sym, tf)
+      ]);
       const { signals, atr: atrVal, price, macro_bull } = computeLiveSignals(d);
       const regimeData = detectCurrentRegime(d);
 
       // Get live funding rate if cached from funding monitor
       const fundingRate = fundingHistory[asset.sym]?.slice(-1)[0]?.rate ?? null;
 
-      // Score both directions, keep the better one
-      const longScore  = scoreConfluence(signals, 'long',  regimeData.regime, fundingRate, tf);
-      const shortScore = scoreConfluence(signals, 'short', regimeData.regime, fundingRate, tf);
+      // Score both directions with cross-TF data
+      const longScore  = scoreConfluence(signals, 'long',  regimeData.regime, fundingRate, tf, crossTFData);
+      const shortScore = scoreConfluence(signals, 'short', regimeData.regime, fundingRate, tf, crossTFData);
 
       const best = longScore.prob >= shortScore.prob ? { ...longScore, direction: 'long' } : { ...shortScore, direction: 'short' };
 
