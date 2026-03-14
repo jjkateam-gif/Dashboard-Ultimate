@@ -12893,11 +12893,21 @@ function intervalMs(iv) {
 }
 
 // ── Compute all signals on the last bar ──────────────────────
-function computeLiveSignals(d) {
+function computeLiveSignals(d, tf) {
   const last = d.length - 1;
   const c    = d.map(x => x.c);
   const results = {};
   const price = c[last];
+
+  // ── Stale candle guard (#10 feedback) ──
+  // If most recent candle is less than 25% complete (based on range vs avg), exclude from ATR
+  // This prevents half-formed candles from triggering false squeeze/volatility signals
+  const _staleCandleGuard = d.length > 2 && d[last] ? (() => {
+    const avgRange = d.slice(-21, -1).reduce((s, x) => s + (x.h - x.l), 0) / Math.min(20, d.length - 1);
+    const curRange = d[last].h - d[last].l;
+    return avgRange > 0 && curRange < avgRange * 0.25;
+  })() : false;
+  const _atrEndIdx = _staleCandleGuard ? last - 1 : last;
 
   // Detect regime for adaptive thresholds (price vs EMA200)
   const ema200Arr = ema(c, 200);
@@ -12940,11 +12950,18 @@ function computeLiveSignals(d) {
     label: emaIsFlat ? `EMA 21/55 — Flat (${(emaSpread*100).toFixed(2)}% spread, ranging)` : emaCross ? 'EMA 21/55 — Golden Cross ▲' : emaBearCross ? 'EMA 21/55 — Death Cross ▼' : emaBull ? 'EMA 21/55 — Bull trend ▲' : 'EMA 21/55 — Bear trend ▼',
   };
 
-  // MACD (5/35/5) — optimized for crypto (research: wider fast/slow gap = +11% annual vs -3.6% for default)
-  const macdFast = ema(c, 5), macdSlow = ema(c, 35);
+  // MACD — TF-adaptive parameters (feedback: one-size-fits-all hurts short/long TFs)
+  // Short TFs: faster params for micro-momentum. Med: crypto-optimized. Long: traditional stability.
+  const _shortTFsMACD = ['1m','3m','5m','15m'];
+  const _longTFsMACD = ['1d','3d','1w'];
+  const _macdParams = _shortTFsMACD.includes(tf) ? { f:5, s:13, sig:8 }
+    : _longTFsMACD.includes(tf) ? { f:12, s:26, sig:9 }
+    : { f:5, s:35, sig:5 }; // 30m–4h: crypto-optimized
+  const macdFast = ema(c, _macdParams.f), macdSlow = ema(c, _macdParams.s);
   const macdLine = c.map((_, i) => macdFast[i] != null && macdSlow[i] != null ? macdFast[i] - macdSlow[i] : null);
-  const macdSig  = ema(macdLine.map(v => v ?? 0), 5);
+  const macdSig  = ema(macdLine.map(v => v ?? 0), _macdParams.sig);
   const macdVal  = macdLine[last], macdSigVal = macdSig[last];
+  const _macdLabel = `MACD ${_macdParams.f}/${_macdParams.s}/${_macdParams.sig}`;
   // Neutral zone: when MACD line is near zero (within 0.1% of price) = no momentum
   const macdNeutral = macdVal != null && Math.abs(macdVal) < price * 0.001;
   const macdCrossBull = last > 0 && macdLine[last-1] != null && macdLine[last-1] <= macdSig[last-1] && macdVal > macdSigVal;
@@ -12958,13 +12975,13 @@ function computeLiveSignals(d) {
     cross: (macdCrossBull || macdCrossBear) && macdCrossStrong,
     crossBull: macdCrossBull && macdCrossStrong,
     crossBear: macdCrossBear && macdCrossStrong,
-    label: macdNeutral ? 'MACD 5/35/5 — Near zero (no momentum)'
-         : macdCrossBull && macdCrossStrong ? 'MACD 5/35/5 — Strong bullish cross ▲'
-         : macdCrossBear && macdCrossStrong ? 'MACD 5/35/5 — Strong bearish cross ▼'
-         : macdCrossBull ? 'MACD 5/35/5 — Weak bullish cross (near zero)'
-         : macdCrossBear ? 'MACD 5/35/5 — Weak bearish cross (near zero)'
-         : macdVal > macdSigVal ? 'MACD 5/35/5 — Above signal ▲'
-         : 'MACD 5/35/5 — Below signal ▼',
+    label: macdNeutral ? `${_macdLabel} — Near zero (no momentum)`
+         : macdCrossBull && macdCrossStrong ? `${_macdLabel} — Strong bullish cross ▲`
+         : macdCrossBear && macdCrossStrong ? `${_macdLabel} — Strong bearish cross ▼`
+         : macdCrossBull ? `${_macdLabel} — Weak bullish cross (near zero)`
+         : macdCrossBear ? `${_macdLabel} — Weak bearish cross (near zero)`
+         : macdVal > macdSigVal ? `${_macdLabel} — Above signal ▲`
+         : `${_macdLabel} — Below signal ▼`,
   };
 
   // Bollinger Bands (2.5 std dev for crypto volatility)
@@ -13008,20 +13025,25 @@ function computeLiveSignals(d) {
     label: stK == null ? '—' : stK < stochOversold ? `StochRSI ${stK?.toFixed(0)} — Oversold (≤${stochOversold}) ▲` : stK > stochOverbought ? `StochRSI ${stK?.toFixed(0)} — Overbought (≥${stochOverbought}) ▼` : `StochRSI ${stK?.toFixed(0)} — Neutral`,
   };
 
-  // Ichimoku — FULL implementation with correct Donchian midpoint formula
-  // Crypto-adjusted periods: 20/60/120 (doubled from 9/26/52 for 24/7 markets)
-  const ichiTenkan = donchianMid(d, 20);   // Conversion line (was 9)
-  const ichiKijun  = donchianMid(d, 60);   // Base line (was 26)
-  // Senkou Span A = (Tenkan + Kijun) / 2, plotted 60 periods ahead (we use current for scoring)
+  // Ichimoku — TF-adaptive periods (feedback: 20/60/120 too slow on short TFs)
+  // Short: traditional 9/26/52 (works at micro scale). Med: moderate crypto. Long: full crypto-adjusted.
+  const _shortTFsIchi = ['1m','3m','5m','15m'];
+  const _longTFsIchi = ['1d','3d','1w'];
+  const _ichiParams = _shortTFsIchi.includes(tf) ? { tenkan:9, kijun:26, spanB:52 }
+    : _longTFsIchi.includes(tf) ? { tenkan:20, kijun:60, spanB:120 }
+    : { tenkan:10, kijun:30, spanB:60 }; // 30m–4h: moderate crypto adjustment
+  const ichiTenkan = donchianMid(d, _ichiParams.tenkan);
+  const ichiKijun  = donchianMid(d, _ichiParams.kijun);
+  // Senkou Span A = (Tenkan + Kijun) / 2, plotted kijun periods ahead (we use current for scoring)
   const senkouA = ichiTenkan[last] != null && ichiKijun[last] != null ? (ichiTenkan[last] + ichiKijun[last]) / 2 : null;
-  // Senkou Span B = Donchian midpoint of 120 periods, plotted 60 ahead
-  const ichiSpanB = donchianMid(d, 120);
+  // Senkou Span B = Donchian midpoint of spanB periods
+  const ichiSpanB = donchianMid(d, _ichiParams.spanB);
   const senkouB = ichiSpanB[last];
   // Cloud boundaries
   const cloudTop = senkouA != null && senkouB != null ? Math.max(senkouA, senkouB) : null;
   const cloudBot = senkouA != null && senkouB != null ? Math.min(senkouA, senkouB) : null;
-  // Chikou Span = current close plotted 60 periods back — check if it's above/below past price
-  const chikouRef = last >= 60 ? c[last - 60] : null;
+  // Chikou Span = current close plotted kijun periods back
+  const chikouRef = last >= _ichiParams.kijun ? c[last - _ichiParams.kijun] : null;
   const chikouBull = chikouRef != null && price > chikouRef;
   const chikouBear = chikouRef != null && price < chikouRef;
   // Signal logic: price position relative to cloud + TK cross + Chikou confirmation
@@ -13135,9 +13157,27 @@ function computeLiveSignals(d) {
     label: volLabel,
   };
 
-  // ATR for R/R calculation
+  // ATR for R/R calculation (with stale candle guard)
   const atrVals = atr(d, 14);
-  const currentATR = atrVals[last] || (price * 0.02);
+  const currentATR = atrVals[_atrEndIdx] || atrVals[last] || (price * 0.02);
+
+  // ── Entry Efficiency Score (feedback: prevent chasing extended moves) ──
+  // Measures how favorable current price location is for entry
+  const ema21Arr = ema(c, 21);
+  const ema21Dist = ema21Arr[last] != null ? (price - ema21Arr[last]) / ema21Arr[last] : 0;
+  const recentImpulse = d.length > 3 ? Math.abs(c[last] - c[last-3]) / (currentATR || price * 0.02) : 0;
+  const bbMidDist = bbMid[last] != null ? (price - bbMid[last]) / (bbUpper[last] - bbLower[last] || 1) : 0;
+  let entryEfficiency = 'Acceptable';
+  // Check if price is chasing after 3+ candles of expansion in trade direction
+  const _last3Bull = d.length > 3 && c[last] > c[last-1] && c[last-1] > c[last-2] && c[last-2] > c[last-3];
+  const _last3Bear = d.length > 3 && c[last] < c[last-1] && c[last-1] < c[last-2] && c[last-2] < c[last-3];
+  if (recentImpulse > 2.5 || (_last3Bull && ema21Dist > 0.02) || (_last3Bear && ema21Dist < -0.02)) {
+    entryEfficiency = 'Chasing';  // Extended move — poor entry location
+  } else if (Math.abs(ema21Dist) < 0.003 && Math.abs(bbMidDist) < 0.2) {
+    entryEfficiency = 'Excellent'; // Near mean — ideal pullback entry
+  } else if (recentImpulse > 1.8) {
+    entryEfficiency = 'Late';      // Impulse move but not extreme
+  }
 
   // ══════════════════════════════════════════════════════════════
   // MARKET QUALITY GRADE (#8) — Is this environment worth trading?
@@ -13176,7 +13216,7 @@ function computeLiveSignals(d) {
 
   const marketQuality = mqScore >= 7 ? 'A' : mqScore >= 4 ? 'B' : mqScore >= 1 ? 'C' : 'No-Trade';
 
-  return { signals: results, atr: currentATR, price, macro_bull, marketQuality, mqScore };
+  return { signals: results, atr: currentATR, price, macro_bull, marketQuality, mqScore, entryEfficiency, staleCandleUsed: _staleCandleGuard };
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -13261,6 +13301,26 @@ function getCalibrationStats() {
   try {
     return JSON.parse(localStorage.getItem(CAL_DATA_KEY) || '{"buckets":{}}');
   } catch (e) { return { buckets: {} }; }
+}
+
+// ══════════════════════════════════════════════════════════════
+// CALIBRATION FEEDBACK LOOP (feedback from all 3 AIs)
+// Uses recorded prediction accuracy to adjust prob used for Kelly sizing
+// Display shows raw probability (what indicators say)
+// Kelly/sizing uses calibrated probability (what actually happens)
+// ══════════════════════════════════════════════════════════════
+function getCalibratedProb(rawProb) {
+  try {
+    const cal = JSON.parse(localStorage.getItem(CAL_DATA_KEY) || '{"buckets":{}}');
+    const bucket = Math.floor(rawProb / 5) * 5;
+    const key = `${bucket}-${bucket+5}`;
+    const data = cal.buckets[key];
+    if (!data || data.predictions < 20) return rawProb; // not enough data yet — use raw
+    const actualWR = (data.wins / data.predictions) * 100;
+    // Bayesian shrinkage: blend raw toward actual. weight = n / (n + 50)
+    const weight = data.predictions / (data.predictions + 50);
+    return Math.round(rawProb * (1 - weight) + actualWR * weight);
+  } catch (e) { return rawProb; }
 }
 
 // ── Score confluence → probability ───────────────────────────
@@ -13546,11 +13606,13 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
       else if (direction === 'short' && fundingRate >= _fundPct.p95) applyAdj(3, `Funding: >95th pctile (fade crowd)`, true, 4);
       else if (direction === 'short' && fundingRate >= _fundPct.p90) applyAdj(2, `Funding: >90th pctile (fade signal)`, true, 4);
     } else {
-      // Fallback: hardcoded thresholds (still decent)
-      if (direction === 'long'  && fundingRate > 0.08) applyAdj(-3, 'Funding: crowded longs', false, 4);
-      if (direction === 'long'  && fundingRate < -0.02) applyAdj(3, 'Funding: squeeze fuel (neg)', true, 4);
-      if (direction === 'short' && fundingRate < -0.05) applyAdj(-3, 'Funding: crowded shorts', false, 4);
-      if (direction === 'short' && fundingRate > 0.10)  applyAdj(3, 'Funding: extreme longs (fade)', true, 4);
+      // Feedback: hardcoded fallback thresholds are stale and misleading
+      // If not enough percentile data, skip funding adjustment entirely (0 is safer than wrong)
+      // Only apply for extreme outliers that are clearly abnormal regardless of regime
+      if (direction === 'long'  && fundingRate > 0.15) applyAdj(-2, 'Funding: extremely crowded longs', false, 4);
+      if (direction === 'long'  && fundingRate < -0.05) applyAdj(2, 'Funding: strong negative (squeeze fuel)', true, 4);
+      if (direction === 'short' && fundingRate < -0.10) applyAdj(-2, 'Funding: extremely crowded shorts', false, 4);
+      if (direction === 'short' && fundingRate > 0.15)  applyAdj(2, 'Funding: extreme longs (fade)', true, 4);
     }
   }
 
@@ -13611,7 +13673,7 @@ function findSwingPoints(candles, leftBars = 5, rightBars = 3) {
   return { swingLows, swingHighs };
 }
 
-function estimateRR(price, atrVal, direction, prob, leverage = 1, confidence, candles) {
+function estimateRR(price, atrVal, direction, prob, leverage = 1, confidence, candles, marketQuality) {
   // ── Stop distance: 2.0× ATR default, then snap to structure (#4) ──
   const defaultStopMult = 2.0;
   let stop = atrVal * defaultStopMult;
@@ -13681,18 +13743,34 @@ function estimateRR(price, atrVal, direction, prob, leverage = 1, confidence, ca
   // Expected value
   const ev = (prob / 100 * levTargetPct) - ((1 - prob / 100) * levStopPct);
 
-  // Kelly-based optimal leverage
-  const kellyFrac = rr > 0 ? ((prob / 100) * rr - (1 - prob / 100)) / rr : 0;
+  // Kelly-based optimal leverage — uses CALIBRATED probability for sizing (feedback from all 3 AIs)
+  // Display shows raw prob (what indicators say), Kelly uses what actually happens
+  const calibratedProb = getCalibratedProb(prob);
+  const kellyFrac = rr > 0 ? ((calibratedProb / 100) * rr - (1 - calibratedProb / 100)) / rr : 0;
   const safeKelly = Math.max(0, kellyFrac * 0.5); // Half-Kelly for safety
   let optimalLev = Math.max(1, Math.min(20, Math.floor(safeKelly / (stopPct / 100))));
 
   // ── Confidence-based leverage hard caps (#7) ──
   // Prevents recommending stupid leverage even when Kelly math allows it
   const conf = confidence || 'Low';
-  const levCap = conf === 'High' ? 10 : conf === 'Medium' ? 5 : 2;
+  const baseLevCap = conf === 'High' ? 10 : conf === 'Medium' ? 5 : 2;
+  // Market quality adjusts the cap (feedback: High confidence in C-grade market ≠ High in A-grade)
+  const mqMult = marketQuality === 'A' ? 1.0 : marketQuality === 'B' ? 0.8 : marketQuality === 'C' ? 0.5 : 0;
+  const levCap = Math.max(1, Math.round(baseLevCap * mqMult));
   optimalLev = Math.min(optimalLev, levCap);
 
+  // A-grade market auto-boost: if conditions are excellent, auto-apply 2× minimum leverage
+  // Only when confidence is Medium+ (we trust the signal) and EV is positive
+  const _evCheck = (calibratedProb / 100 * (netTargetPct * leverage)) - ((1 - calibratedProb / 100) * (stopPct * leverage));
+  if (marketQuality === 'A' && (conf === 'High' || conf === 'Medium') && _evCheck > 0 && optimalLev < 2) {
+    optimalLev = 2;
+  }
+
   const recommendedMode = optimalLev <= 1 ? 'spot' : 'perps';
+
+  // Market quality → position sizing multiplier (feedback from all 3 AIs)
+  // A=100%, B=80%, C=50%, No-Trade=0%
+  const mqSizeMult = marketQuality === 'A' ? 1.0 : marketQuality === 'B' ? 0.80 : marketQuality === 'C' ? 0.50 : 0;
 
   return {
     stop: stopPrice, target: targetPrice, rr,
@@ -13709,6 +13787,8 @@ function estimateRR(price, atrVal, direction, prob, leverage = 1, confidence, ca
     snappedToStructure,
     swingPrice,
     stopATRMult: stopATRMult.toFixed(1),
+    calibratedProb,
+    mqSizeMult,
   };
 }
 
@@ -13783,33 +13863,39 @@ async function runProbEngine() {
         probeKlines(asset.sym, tf),
         fetchCrossTFBias(asset.sym, tf)
       ]);
-      const { signals, atr: atrVal, price, macro_bull, marketQuality, mqScore } = computeLiveSignals(d);
+      const { signals, atr: atrVal, price, macro_bull, marketQuality, mqScore, entryEfficiency, staleCandleUsed } = computeLiveSignals(d, tf);
       const localRegime = detectCurrentRegime(d);
 
-      // Blended regime: BTC = 100% for BTC itself, 60% BTC + 40% local for alts
+      // Blended regime: BTC = 100% for BTC itself, weighted blend for alts (gradient, not binary)
+      // Feedback: numeric scoring preserves nuance (BTC bull + SOL bear ≠ both sideways)
       let regimeData = localRegime;
       if (btcRegime && asset.sym !== 'BTCUSDT') {
-        // Extract base regime (strip volatility suffix for blending)
-        const btcBase = btcRegime.regime.split('_')[0]; // 'bull', 'bear', 'sideways'
+        const btcBase = btcRegime.regime.split('_')[0];
         const localBase = localRegime.regime.split('_')[0];
         const volSuffix = localRegime.expanding ? '_volatile' : localRegime.compressing ? '_squeeze' : '';
 
-        // Blend: if BTC and local agree → strong signal. If they disagree → cautious/sideways
+        // Numeric regime scores: bull=+1, sideways=0, bear=-1
+        const regimeScore = { bull: 1, sideways: 0, bear: -1, neutral: 0 };
+        const btcScore = regimeScore[btcBase] ?? 0;
+        const localScore = regimeScore[localBase] ?? 0;
+
+        // Major L1s decouple more from BTC → 50/50 blend. Others → 60/40 BTC-heavy.
+        const majorL1s = ['ETHUSDT', 'SOLUSDT', 'BNBUSDT'];
+        const btcWeight = majorL1s.includes(asset.sym) ? 0.50 : 0.60;
+        const blendedScore = btcWeight * btcScore + (1 - btcWeight) * localScore;
+
+        // Map score to regime: >0.3 bull, <-0.3 bear, else sideways
         let blendedBase;
-        if (btcBase === localBase) {
-          blendedBase = btcBase; // Both agree — strong
-        } else if (btcBase === 'sideways' || localBase === 'sideways') {
-          blendedBase = btcBase !== 'sideways' ? btcBase : localBase; // One sideways → defer to the other
-        } else {
-          // BTC says bull, local says bear (or vice versa) → cautious sideways
-          blendedBase = 'sideways';
-        }
+        if (blendedScore > 0.3) blendedBase = 'bull';
+        else if (blendedScore < -0.3) blendedBase = 'bear';
+        else blendedBase = 'sideways';
 
         regimeData = {
           ...localRegime,
           regime: blendedBase + volSuffix,
           _btcRegime: btcBase,
           _localRegime: localBase,
+          _blendedScore: blendedScore,
           _blended: true,
         };
       }
@@ -13833,7 +13919,7 @@ async function runProbEngine() {
         shortScore.prob = Math.max(25, shortScore.prob - levPenalty);
       }
 
-      const rrData = estimateRR(price, atrVal, best.direction, best.prob, leverage, best.confidence, d);
+      const rrData = estimateRR(price, atrVal, best.direction, best.prob, leverage, best.confidence, d, marketQuality);
 
       // Calibration tracking (#10): record prediction + resolve any previous ones
       if (best.prob >= 55) { // Only track meaningful signals
@@ -13870,9 +13956,40 @@ async function runProbEngine() {
         mqScore,
         snappedStop:     rrData.snappedToStructure,
         stopATRMult:     rrData.stopATRMult,
+        entryEfficiency,
+        calibratedProb:  rrData.calibratedProb,
+        mqSizeMult:      rrData.mqSizeMult,
       });
     } catch (e) {
       console.warn(`[Probe] ${asset.label} failed:`, e.message);
+    }
+  }
+
+  // ── Cross-asset correlation discount (feedback from all 3 AIs) ──
+  // If 3+ assets signal same direction above 60%, they're likely correlated (one bet in disguise)
+  // Apply small discount to 2nd, 3rd, 4th+ correlated assets to prevent naive position stacking
+  const longAbove60 = results.filter(r => r.direction === 'long' && r.prob >= 60);
+  const shortAbove60 = results.filter(r => r.direction === 'short' && r.prob >= 60);
+  function applyCorrelationDiscount(group) {
+    if (group.length < 3) return;
+    // Sort by prob descending — top setup keeps full score
+    group.sort((a, b) => b.prob - a.prob);
+    for (let i = 1; i < group.length; i++) {
+      const discount = Math.min(4, i + 1); // 2nd=-2, 3rd=-3, 4th+=-4
+      group[i].prob = Math.max(25, group[i].prob - discount);
+      group[i]._correlationDiscount = discount;
+    }
+  }
+  applyCorrelationDiscount(longAbove60);
+  applyCorrelationDiscount(shortAbove60);
+
+  // ── Entry efficiency penalty (feedback: prevent chasing extended moves) ──
+  // Light penalty — not a hard block. Chasing = -3, Late = -1. Doesn't kill trades.
+  for (const r of results) {
+    if (r.entryEfficiency === 'Chasing') {
+      r.prob = Math.max(25, r.prob - 3);
+    } else if (r.entryEfficiency === 'Late') {
+      r.prob = Math.max(25, r.prob - 1);
     }
   }
 
@@ -13996,6 +14113,7 @@ function renderProbeResults(results, tf) {
         <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
           <span style="font-size:7px;font-weight:700;font-family:'Space Mono',monospace;padding:2px 6px;border-radius:4px;background:${r.marketQuality === 'A' ? 'rgba(0,245,160,0.15)' : r.marketQuality === 'B' ? 'rgba(245,196,0,0.15)' : r.marketQuality === 'C' ? 'rgba(255,140,105,0.15)' : 'rgba(255,77,109,0.15)'};color:${r.marketQuality === 'A' ? '#00f5a0' : r.marketQuality === 'B' ? '#f5c400' : r.marketQuality === 'C' ? '#ff8c69' : '#ff4d6d'};border:1px solid ${r.marketQuality === 'A' ? 'rgba(0,245,160,0.3)' : r.marketQuality === 'B' ? 'rgba(245,196,0,0.3)' : r.marketQuality === 'C' ? 'rgba(255,140,105,0.3)' : 'rgba(255,77,109,0.3)'}">${r.marketQuality === 'No-Trade' ? '⛔ NO TRADE' : r.marketQuality + '-Grade'}</span>
           ${r.snappedStop ? '<span style="font-size:6px;color:#a78bfa;font-family:\'Space Mono\',monospace">🎯 SL snapped to structure</span>' : ''}
+          ${r.entryEfficiency && r.entryEfficiency !== 'Acceptable' ? '<span style="font-size:6px;font-family:\'Space Mono\',monospace;color:' + (r.entryEfficiency === 'Excellent' ? '#00f5a0' : r.entryEfficiency === 'Chasing' ? '#ff4d6d' : '#f5c400') + '">' + (r.entryEfficiency === 'Excellent' ? '✦ Excellent entry' : r.entryEfficiency === 'Chasing' ? '⚠ Chasing' : '⏳ Late entry') + '</span>' : ''}
         </div>
       </div>
 
@@ -14005,12 +14123,12 @@ function renderProbeResults(results, tf) {
         <div style="flex:1">
           <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:2px">RISK / REWARD</div>
           <div style="font-size:20px;font-weight:800;color:#fff;font-family:'Space Mono',monospace">${r.rr}<span style="font-size:10px;color:#5a7a68">:1</span></div>
-          <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">TP ${r.direction==='long'?'+':'−'}${r.rrData.targetPct}% · SL ${r.direction==='long'?'−':'+'}${r.rrData.stopPct}%${r.snappedStop ? ' (' + r.stopATRMult + '× ATR, structure)' : ''}</div>
+          <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">TP ${r.direction==='long'?'+':'−'}${r.rrData.targetPct}% · SL ${r.direction==='long'?'−':'+'}${r.rrData.stopPct}%${r.snappedStop ? ' (' + r.stopATRMult + '× ATR, structure)' : ''}${r.mqSizeMult < 1 ? ' · Size: ' + Math.round(r.mqSizeMult*100) + '%' : ''}</div>
         </div>
         <div>
           <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:2px">CONFIDENCE</div>
           <div style="font-size:13px;font-weight:700;color:${r.confColor};font-family:'Space Mono',monospace">${r.confidence}</div>
-          <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">${(r.confluence*100).toFixed(0)}% confluence</div>
+          <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">${(r.confluence*100).toFixed(0)}% confluence${r._correlationDiscount ? ' · -' + r._correlationDiscount + ' corr' : ''}</div>
         </div>
       </div>
 
@@ -15471,8 +15589,14 @@ async function processAutoTrades(results, tf) {
   const maxSize = +($('policyMaxSize')?.value || 500);
   const posSize = Math.min(+($('autoTradeSize')?.value || 100), maxSize);
 
-  // Filter setups above threshold
-  const qualifying = results.filter(r => r.prob >= minProb);
+  // Filter setups — prob threshold + basic quality gates (not too strict, just sensible)
+  const qualifying = results.filter(r =>
+    r.prob >= minProb &&
+    r.marketQuality !== 'No-Trade' &&        // Don't trade dead/choppy markets
+    r.confidence !== 'Low' &&                 // Require at least Medium confidence
+    r.entryEfficiency !== 'Chasing' &&        // Don't chase extended moves
+    parseFloat(r.ev || 0) > 0                 // Only positive expected value
+  );
   if (!qualifying.length) return;
 
   // Refresh balance and sync open positions from BloFin
@@ -15501,17 +15625,21 @@ async function processAutoTrades(results, tf) {
   // Only trade as many as balance allows
   let remainingBalance = availBalance;
   for (const r of toTrade) {
-    if (remainingBalance < posSize) {
+    // Apply market quality sizing: A=100%, B=80%, C=50%
+    const mqAdjSize = Math.round(posSize * (r.mqSizeMult || 1));
+    if (remainingBalance < mqAdjSize) {
       toast('🤖 Auto-trade: insufficient remaining balance for more trades ($' + remainingBalance.toFixed(2) + ' left)', 'warn', 4000);
       break;
     }
     const idx = results.indexOf(r);
     if (mode === 'auto') {
       // Full auto — execute directly via API (no modal)
-      toast('🤖 Auto-executing: ' + r.asset + ' ' + r.direction.toUpperCase() + ' (' + r.prob + '% prob) · $' + posSize, 'info', 3000);
+      const sizeNote = r.mqSizeMult < 1 ? ` (${r.marketQuality}-grade: ${Math.round(r.mqSizeMult*100)}% size)` : '';
+      const levNote = r.marketQuality === 'A' && r.optimalLev >= 2 ? ` · A-grade ${r.optimalLev}× lev` : '';
+      toast('🤖 Auto-executing: ' + r.asset + ' ' + r.direction.toUpperCase() + ' (' + r.prob + '% prob) · $' + mqAdjSize + sizeNote + levNote, 'info', 3000);
       (async () => {
         try {
-          await autoExecDirect(r, idx, posSize);
+          await autoExecDirect(r, idx, mqAdjSize);
           logBestTrade(idx);
           _autoTradeOpenCount++;
           liveRefreshBalance(); // Update balance display after trade
@@ -15519,7 +15647,7 @@ async function processAutoTrades(results, tf) {
           toast('🤖 Auto-trade failed: ' + e.message, 'error');
         }
       })();
-      remainingBalance -= posSize;
+      remainingBalance -= mqAdjSize;
     } else {
       // Confirm mode — show notification with Execute/Skip
       showAutoTradeConfirm(r, idx, tf);
@@ -15534,7 +15662,10 @@ async function autoExecDirect(r, idx, posSize) {
   const tpPct = parseFloat($('bt_tp_' + idx)?.value || r.rrData?.targetPct || 6);
   const modeBtn = $('btMode_perps_' + idx);
   const tradeMode = modeBtn?.style?.background?.includes('167') ? 'perps' : 'spot';
-  const lev = tradeMode === 'perps' ? parseInt($('bt_lev_' + idx)?.value || 1) : 1;
+  // Use engine's optimal leverage (includes A-grade 2× boost) if card UI hasn't been manually set
+  const cardLev = parseInt($('bt_lev_' + idx)?.value || 0);
+  const engineLev = r.optimalLev || 1;
+  const lev = tradeMode === 'perps' ? Math.max(cardLev, engineLev) : (engineLev >= 2 ? engineLev : 1);
   const side = r.direction === 'long' ? 'buy' : 'sell';
 
   // Fetch current price
@@ -16973,11 +17104,12 @@ async function runAlertPoll() {
     try {
       const d = await getKlines(a.symbol, a.tf || '4h', 200);
       if (!d) continue;
-      const { signals, atr: atrVal, price } = computeLiveSignals(d);
+      const _alertTf = a.tf || '4h';
+      const { signals, atr: atrVal, price } = computeLiveSignals(d, _alertTf);
       const regimeData = detectCurrentRegime(d);
       const fundingRate = fundingHistory[a.symbol]?.slice(-1)[0]?.rate ?? null;
-      const longScore   = scoreConfluence(signals, 'long',  regimeData.regime, fundingRate, a.tf || '4h');
-      const shortScore  = scoreConfluence(signals, 'short', regimeData.regime, fundingRate, a.tf || '4h');
+      const longScore   = scoreConfluence(signals, 'long',  regimeData.regime, fundingRate, _alertTf);
+      const shortScore  = scoreConfluence(signals, 'short', regimeData.regime, fundingRate, _alertTf);
       const best  = longScore.prob >= shortScore.prob ? {...longScore, direction:'long'} : {...shortScore, direction:'short'};
       const threshold = parseInt(a.probThreshold) || 70;
       if (best.prob >= threshold) {
@@ -19127,6 +19259,7 @@ renderProbeResults = function(results, tf) {
         <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
           <span style="font-size:7px;font-weight:700;font-family:'Space Mono',monospace;padding:2px 6px;border-radius:4px;background:${r.marketQuality === 'A' ? 'rgba(0,245,160,0.15)' : r.marketQuality === 'B' ? 'rgba(245,196,0,0.15)' : r.marketQuality === 'C' ? 'rgba(255,140,105,0.15)' : 'rgba(255,77,109,0.15)'};color:${r.marketQuality === 'A' ? '#00f5a0' : r.marketQuality === 'B' ? '#f5c400' : r.marketQuality === 'C' ? '#ff8c69' : '#ff4d6d'};border:1px solid ${r.marketQuality === 'A' ? 'rgba(0,245,160,0.3)' : r.marketQuality === 'B' ? 'rgba(245,196,0,0.3)' : r.marketQuality === 'C' ? 'rgba(255,140,105,0.3)' : 'rgba(255,77,109,0.3)'}">${r.marketQuality === 'No-Trade' ? '⛔ NO TRADE' : (r.marketQuality || '?') + '-Grade'}</span>
           ${r.snappedStop ? '<span style="font-size:6px;color:#a78bfa;font-family:\'Space Mono\',monospace">🎯 SL snapped to structure</span>' : ''}
+          ${r.entryEfficiency && r.entryEfficiency !== 'Acceptable' ? '<span style="font-size:6px;font-family:\'Space Mono\',monospace;color:' + (r.entryEfficiency === 'Excellent' ? '#00f5a0' : r.entryEfficiency === 'Chasing' ? '#ff4d6d' : '#f5c400') + '">' + (r.entryEfficiency === 'Excellent' ? '✦ Excellent entry' : r.entryEfficiency === 'Chasing' ? '⚠ Chasing' : '⏳ Late entry') + '</span>' : ''}
         </div>
       </div>
 
@@ -19136,7 +19269,7 @@ renderProbeResults = function(results, tf) {
         <div style="flex:1">
           <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:2px">RISK / REWARD</div>
           <div style="font-size:20px;font-weight:800;color:#fff;font-family:'Space Mono',monospace">${r.rr}<span style="font-size:10px;color:#5a7a68">:1</span></div>
-          <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">SL ${slPct}%${r.snappedStop ? ' (' + (r.stopATRMult || '') + '× ATR)' : ''} · TP ${tpPct}%</div>
+          <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">SL ${slPct}%${r.snappedStop ? ' (' + (r.stopATRMult || '') + '× ATR)' : ''} · TP ${tpPct}%${r.mqSizeMult < 1 ? ' · Size: ' + Math.round(r.mqSizeMult*100) + '%' : ''}</div>
         </div>
         <div>
           <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:2px">CONFIDENCE</div>
