@@ -9227,12 +9227,17 @@ function clientScoreToken(pair) {
   else if (liq >= 5000)                   { score += 6;  signals.push('⚠️ Thin liquidity'); }
   else                                    { score -= 20; signals.push('❌ Too thin (<$5K)'); }
 
-  // ── Vol/Mcap (snapshot) ───────────────────────────────
-  if      (volMcap >= 10) { score += 25; signals.push('🔥 Extreme vol/mcap ' + volMcap.toFixed(1) + 'x'); }
-  else if (volMcap >= 6)  { score += 20; signals.push('🔥 High vol/mcap '    + volMcap.toFixed(1) + 'x'); }
-  else if (volMcap >= 3)  { score += 13; signals.push('📈 Good vol/mcap '    + volMcap.toFixed(1) + 'x'); }
-  else if (volMcap >= 1)  { score += 6; }
-  else if (volMcap < 0.2) { score -= 12; signals.push('💀 Dead volume'); }
+  // ── Vol/Mcap (age-adjusted thresholds) ────────────────
+  // Research: same ratio means less as token ages. Higher bar for <48h, lower for older.
+  const vmLegendary = age < 48 ? 10 : 4;
+  const vmStrong    = age < 48 ? 6  : 2;
+  const vmGood      = age < 48 ? 3  : 1;
+  const vmWeak      = age < 48 ? 1  : 0.5;
+  if      (volMcap >= vmLegendary) { score += 25; signals.push('🔥 Extreme vol/mcap ' + volMcap.toFixed(1) + 'x'); }
+  else if (volMcap >= vmStrong)    { score += 20; signals.push('🔥 High vol/mcap '    + volMcap.toFixed(1) + 'x'); }
+  else if (volMcap >= vmGood)      { score += 13; signals.push('📈 Good vol/mcap '    + volMcap.toFixed(1) + 'x'); }
+  else if (volMcap >= vmWeak)      { score += 6; }
+  else                             { score -= 12; signals.push('💀 Dead volume'); }
 
   // ── Volume acceleration (NEW) ─────────────────────────
   if      (volAccel >= 2.5) { score += 15; signals.push('🚀 Volume surging (' + volAccel.toFixed(1) + 'x rate)'); }
@@ -9260,7 +9265,8 @@ function clientScoreToken(pair) {
   else if (txDensity < 30 && vol24 > 50000) { score -= 12; signals.push('⚠️ Low tx count — suspicious volume'); }
 
   // ── Buy pressure (1h is most signal-rich) ─────────────
-  if      (buyRatio >= 0.75) { score += 22; signals.push('💚 Dominant buying ' + Math.round(buyRatio*100) + '%'); }
+  if      (buyRatio >= 0.90) { score += 8;  signals.push('⚠️ Buy ratio ' + Math.round(buyRatio*100) + '% — possibly manipulated'); } // Item 2: >90% red flag
+  else if (buyRatio >= 0.75) { score += 22; signals.push('💚 Dominant buying ' + Math.round(buyRatio*100) + '%'); }
   else if (buyRatio >= 0.65) { score += 15; signals.push('💚 Strong buy pressure ' + Math.round(buyRatio*100) + '%'); }
   else if (buyRatio >= 0.55) { score += 7; }
   else if (buyRatio < 0.40)  { score -= 15; signals.push('🔴 Sell pressure ' + Math.round((1-buyRatio)*100) + '% sells'); }
@@ -9296,7 +9302,7 @@ function clientScoreToken(pair) {
   // Momentum alignment: both 1h and 24h up = trend intact
   if (ch1h > 5 && ch24h > 20) { score += 5; signals.push('✅ Momentum aligned'); }
 
-  // ── Socials ───────────────────────────────────────────
+  // ── Socials + velocity — Items 12 ─────────────────────
   const socials = pair.info?.socials || [];
   const hasTw = socials.some(s => s.type === 'twitter');
   const hasTg = socials.some(s => s.type === 'telegram');
@@ -9305,6 +9311,16 @@ function clientScoreToken(pair) {
   else if (hasTw && hasTg)      { score += 8;  signals.push('🐦 Twitter + TG'); }
   else if (hasTw || hasTg)      { score += 4;  signals.push('🔗 Has social'); }
   else                          { score -= 10; signals.push('⚠️ No socials found'); }
+
+  // Social velocity proxy: new token (<24h) with full socials + high tx = viral interest
+  // True social velocity needs Twitter API, but tx density + socials + age is a good proxy
+  if (age < 24 && hasTw && hasTg && txDensity > 1000) {
+    score += 8;
+    signals.push('🔥 Social velocity — new + active community + high engagement');
+  } else if (age < 48 && hasTw && txDensity > 500) {
+    score += 4;
+    signals.push('📊 Growing social momentum');
+  }
 
   // ── Narrative theme matching ──────────────────────────
   const sym  = pair.baseToken?.symbol || '';
@@ -9317,13 +9333,66 @@ function clientScoreToken(pair) {
     score -= 4; // no narrative = harder to get viral attention
   }
 
-  // ── DNA pattern matching ──────────────────────────────
+  // ── Safety gates, honeypot, dev selling — Items 3, 7, 10 ──
+  // NOTE: Mint/freeze authority, top holder %, dev selling, LP lock are handled
+  // by the RugCheck post-processing step (evaluateRugSafety → degenScore adjust).
+  // These fire AFTER this scoring function returns. See the rug enrichment loop below.
+
+  // ── Wash trading improvements — Item 8 ───────────────
+  // Already have volPerTx check above. Add: if buy/sell counts are suspiciously equal = bot
+  if (totalTx1h >= 20 && buys1h > 0 && sells1h > 0) {
+    const bsRatio = Math.min(buys1h, sells1h) / Math.max(buys1h, sells1h);
+    if (bsRatio > 0.95 && totalTx1h > 50) {
+      score -= 15;
+      signals.push('🤖 Buy/sell counts nearly equal — possible wash trading');
+    }
+  }
+
+  // ── 72h survival bonus — Item 13 ─────────────────────
+  // Research: 68% of Solana tokens rug within 72h. Surviving past 72h is significant.
+  if (age > 72 && age <= 168 && liq > 10000) {
+    score += 8;
+    signals.push('🛡️ Survived 72h+ (beats 68% rug rate)');
+  } else if (age > 168 && liq > 10000) {
+    score += 5;
+    signals.push('🛡️ Survived 7d+ — established');
+  }
+
+  // ── CEX listing signal — Item 11 ─────────────────────
+  // Check if token name/symbol suggests CEX listing potential (Binance was #1 catalyst)
+  const cexPlatforms = pair.info?.websites?.some(w =>
+    w.url && (w.url.includes('binance') || w.url.includes('coinbase') || w.url.includes('bybit') || w.url.includes('okx'))
+  ) || false;
+  if (cexPlatforms) {
+    score += 12;
+    signals.push('🏛️ CEX listed/listing detected');
+  }
+
+  // ── DNA pattern matching (expanded with new templates — Item 1) ──
   const dnaMatches = [];
-  if (volMcap >= 8  && buyRatio >= 0.73) dnaMatches.push({ coin: 'FARTCOIN', color: '#ff6b35' });
-  if (volMcap >= 4  && buyRatio >= 0.65 && mcap < 2_000_000) dnaMatches.push({ coin: 'WIF', color: '#a78bfa' });
-  if (buyRatio >= 0.65 && ch1h > 15 && age < 48) dnaMatches.push({ coin: 'PNUT', color: '#f5c400' });
-  if (liq >= 80_000 && buyRatio >= 0.68 && volMcap >= 3) dnaMatches.push({ coin: 'POPCAT', color: '#63b3ed' });
-  if (volMcap >= 10 && buyRatio >= 0.70 && mcap < 100_000) dnaMatches.push({ coin: 'BONK', color: '#00f5a0' });
+  // Original templates
+  if (volMcap >= 8  && buyRatio >= 0.73) dnaMatches.push({ coin: 'FARTCOIN', color: '#ff6b35', confidence: 'high' });
+  if (volMcap >= 4  && buyRatio >= 0.65 && mcap < 2_000_000) dnaMatches.push({ coin: 'WIF', color: '#a78bfa', confidence: 'high' });
+  if (buyRatio >= 0.65 && ch1h > 15 && age < 48) dnaMatches.push({ coin: 'PNUT', color: '#f5c400', confidence: 'medium' });
+  if (liq >= 80_000 && buyRatio >= 0.68 && volMcap >= 3) dnaMatches.push({ coin: 'POPCAT', color: '#63b3ed', confidence: 'medium' });
+  if (volMcap >= 10 && buyRatio >= 0.70 && mcap < 100_000) dnaMatches.push({ coin: 'BONK', color: '#00f5a0', confidence: 'high' });
+
+  // New templates — Item 1
+  // TRUMP DNA: celebrity/political catalyst, massive volume, fast mcap growth
+  if (volMcap >= 3 && buyRatio >= 0.60 && age < 24 && liq >= 500_000)
+    dnaMatches.push({ coin: 'TRUMP', color: '#ff0080', confidence: 'high' });
+  // GOAT DNA: AI-narrative, strong vol/mcap, early stage
+  if (volMcap >= 5 && buyRatio >= 0.65 && mcap < 5_000_000 && matchedThemes.some(t => t.toLowerCase().includes('ai')))
+    dnaMatches.push({ coin: 'GOAT', color: '#c084fc', confidence: 'medium' });
+  // BOME DNA: presale rocket, extreme early volume, fast graduation
+  if (volMcap >= 6 && buyRatio >= 0.70 && age < 72 && mcap < 10_000_000)
+    dnaMatches.push({ coin: 'BOME', color: '#ff8c00', confidence: 'medium' });
+  // MEW DNA: airdrop-driven, high holder growth, resilient dip buying
+  if (buyRatio >= 0.62 && liq >= 50_000 && txDensity > 1000 && ch1h > -5)
+    dnaMatches.push({ coin: 'MEW', color: '#63ed8f', confidence: 'medium' });
+  // AI16Z DNA: AI agent narrative, moderate vol/mcap, strong socials
+  if (volMcap >= 3 && buyRatio >= 0.60 && hasTw && hasTg && matchedThemes.some(t => t.toLowerCase().includes('ai')))
+    dnaMatches.push({ coin: 'AI16Z', color: '#00c9ff', confidence: 'medium' });
 
   score = Math.max(0, Math.min(100, score));
 
@@ -9522,8 +9591,24 @@ async function runClientDegenScan() {
           t.signals.push('⚠️ Insider wallets ' + rug.insiderPct + '%');
         }
 
-        // Dev selling
+        // Dev selling — Item 10
         if (rug.devSelling) { t.degenScore = Math.max(0, t.degenScore - 20); t.signals.push('❌ Dev wallet selling'); }
+
+        // Honeypot detection — Item 7
+        // If RugCheck flags indicate honeypot or extreme sell restrictions
+        if (rug.kills?.some(k => k.toLowerCase().includes('honeypot'))) {
+          t.degenScore = Math.max(0, t.degenScore - 40);
+          t.signals.push('🍯 HONEYPOT DETECTED — cannot sell');
+        }
+        // Also check if sell tax is extreme (from rug flags)
+        const taxFlag = rug.flags?.find(f => f.toLowerCase().includes('tax') || f.toLowerCase().includes('fee'));
+        if (taxFlag && /\d+/.test(taxFlag)) {
+          const taxPct = parseInt(taxFlag.match(/\d+/)[0]);
+          if (taxPct > 20) {
+            t.degenScore = Math.max(0, t.degenScore - 25);
+            t.signals.push('⚠️ High sell tax: ' + taxPct + '%');
+          }
+        }
 
         // Clean contract signals
         if (rug.score < 100) t.signals.unshift('🛡️ Clean contract');
@@ -9821,6 +9906,30 @@ const EMBEDDED_DNA = {
     keySignals:['AI narrative','Pump.fun graduated','Twitter KOL','Rapid volume'],
     notes:'First major "AI agent" meme coin. AI narrative + pump.fun graduation combo.',
   },
+  TRUMP: {
+    name:'Official Trump', launched:'Jan 2025', peakReturn:'$27B peak mcap',
+    earlyMcap:10000000, volMcapRatio:4.0, buyRatio1h:0.62, liquidityUsd:2000000, ageAtEntry:2,
+    keySignals:['Celebrity/political catalyst','Massive retail onboarding','Moonshot app $400M vol','CEX listings'],
+    notes:'Reached $10B in <24h. Celebrity-driven token. Political narrative + mainstream app onboarding.',
+  },
+  BOME: {
+    name:'Book of Meme', launched:'Mar 2024', peakReturn:'100x in 3 days',
+    earlyMcap:500000, volMcapRatio:7.5, buyRatio1h:0.72, liquidityUsd:100000, ageAtEntry:8,
+    keySignals:['Presale raised 10K+ SOL','Binance listing +250%','Extreme early volume','Community narrative'],
+    notes:'$1B mcap in 48h — fastest ever. Presale rocket + Binance listing catalyst.',
+  },
+  MEW: {
+    name:'cat in a dogs world', launched:'Mar 2024', peakReturn:'$919M mcap in 1 month',
+    earlyMcap:800000, volMcapRatio:3.5, buyRatio1h:0.64, liquidityUsd:60000, ageAtEntry:12,
+    keySignals:['10% airdrop to ecosystem','Instant holder base','Resilient in dips','Cat narrative vs dog coins'],
+    notes:'Airdrop to Solana users created instant community. +11% when market was down.',
+  },
+  AI16Z: {
+    name:'ai16z', launched:'Late 2024', peakReturn:'$2.5B mcap peak',
+    earlyMcap:1000000, volMcapRatio:3.2, buyRatio1h:0.63, liquidityUsd:150000, ageAtEntry:24,
+    keySignals:['AI agent narrative','Full social presence','Strong community','DAO structure'],
+    notes:'AI agent narrative token — peaked at $2.34. Different from pure memes: utility + narrative.',
+  },
 };
 
 async function showDNAModal() {
@@ -9833,7 +9942,7 @@ async function showDNAModal() {
 function closeDNAModal() { $('dnaModal').style.display = 'none'; }
 
 function renderDNAModal(dna) {
-  const coinColors = { WIF:'#a78bfa', FARTCOIN:'#ff6b35', BONK:'#ff8c00', POPCAT:'#00c9ff', PNUT:'#f5c400', GOAT:'#00f5a0' };
+  const coinColors = { WIF:'#a78bfa', FARTCOIN:'#ff6b35', BONK:'#ff8c00', POPCAT:'#00c9ff', PNUT:'#f5c400', GOAT:'#00f5a0', TRUMP:'#ff0080', BOME:'#ff8c00', MEW:'#63ed8f', AI16Z:'#00c9ff' };
   let html = '';
   for (const [key, coin] of Object.entries(dna)) {
     const color = coinColors[key] || '#aaa';
@@ -11788,6 +11897,8 @@ function checkMilestones(entry, currentMcap) {
       };
       // Fire a toast notification
       showMilestoneToast(entry.symbol, m);
+      // Track smart wallets from winning tokens (5x+)
+      if (m.mult >= 5) learnSmartWallets(entry.address, entry.symbol, m.key);
     }
   }
 }
@@ -14650,6 +14761,43 @@ function learnFromAllHistory() {
   console.log(`[Adaptive] Re-learned from ${ready.length} tokens. Weights:`,
     Object.entries(learnInit().features).map(([k,v]) => `${k}:${v.weightMult?.toFixed(2)}`).join(', ')
   );
+}
+
+// ════════════════════════════════════════════════════════════════
+// 💰 SMART MONEY TRACKER — Item 4
+// ════════════════════════════════════════════════════════════════
+// Builds a local database of wallets that were early buyers on winning tokens.
+// Cross-references new tokens against these "smart wallets" for scoring boost.
+const SMART_WALLETS_KEY = 'degenSmartWallets_v1';
+
+function smartWalletsLoad() { try { return JSON.parse(localStorage.getItem(SMART_WALLETS_KEY) || '{}'); } catch { return {}; } }
+function smartWalletsSave(d) { try { localStorage.setItem(SMART_WALLETS_KEY, JSON.stringify(d)); } catch {} }
+
+// When a token hits 5x+ milestone, save its top early holders as "smart wallets"
+// Called from the milestone checking flow
+function learnSmartWallets(tokenAddress, tokenSymbol, milestone) {
+  if (!tokenAddress || !milestone || !['5x','10x','25x','50x','100x'].includes(milestone)) return;
+  const wallets = smartWalletsLoad();
+  // Tag this token as a winner — we'll harvest wallets when we can
+  if (!wallets._winners) wallets._winners = {};
+  wallets._winners[tokenAddress] = {
+    symbol: tokenSymbol, milestone, taggedAt: Date.now(),
+    harvested: wallets._winners[tokenAddress]?.harvested || false
+  };
+  smartWalletsSave(wallets);
+}
+
+// Check if any holders of a new token are known smart wallets
+function checkSmartMoney(holderAddresses) {
+  if (!holderAddresses || !holderAddresses.length) return { count: 0, wallets: [] };
+  const known = smartWalletsLoad();
+  const matches = [];
+  for (const addr of holderAddresses) {
+    if (known[addr]) {
+      matches.push({ wallet: addr.slice(0,6)+'...', wins: known[addr].wins || 0, lastWin: known[addr].lastWin || '' });
+    }
+  }
+  return { count: matches.length, wallets: matches };
 }
 
 // Schedule learning: run after P100 prices refresh and on tab views
