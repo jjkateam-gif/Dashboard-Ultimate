@@ -13245,11 +13245,14 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
     prob = prob * 0.7 + avgWR * 0.3;
   }
 
-  prob = Math.min(85, Math.max(30, Math.round(prob)));
-
-  // Confidence rating
+  // Confidence rating (based on raw indicator confluence)
   const confidence = confluence >= 0.72 ? 'High' : confluence >= 0.50 ? 'Medium' : 'Low';
   const confColor  = confidence === 'High' ? '#00f5a0' : confidence === 'Medium' ? '#f5c400' : '#ff8c69';
+
+  // Cap probability based on confidence — regime/TF bonuses alone shouldn't create
+  // high-probability signals when the actual indicators barely agree
+  const probCap = confidence === 'High' ? 85 : confidence === 'Medium' ? 72 : 64;
+  prob = Math.min(probCap, Math.max(30, Math.round(prob)));
 
   return { prob, confluence, confidence, confColor, hits, misses };
 }
@@ -13489,7 +13492,8 @@ function renderProbeResults(results, tf) {
     const dirColor = r.direction === 'long' ? '#00f5a0' : '#ff4d6d';
     const dirLabel = r.direction === 'long' ? 'LONG' : 'SHORT';
     const probColor = r.prob >= 70 ? '#00f5a0' : r.prob >= 60 ? '#f5c400' : r.prob >= 50 ? '#ff8c69' : '#ff4d6d';
-    const rankLabel = idx === 0 ? '🥇 TOP SETUP' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx+1}`;
+    // Only award TOP SETUP to #1 if it has Medium+ confidence — otherwise it's regime-driven, not high-conviction
+    const rankLabel = idx === 0 && (r.confidence === 'High' || r.confidence === 'Medium') ? '🥇 TOP SETUP' : idx === 0 ? '#1' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx+1}`;
     const fundStr = r.fundingRate != null
       ? `<span style="color:${r.fundingRate > 0.08 ? '#ff4d6d' : r.fundingRate < 0 ? '#a855f7' : '#5a7a68'}">Funding: ${r.fundingRate > 0 ? '+' : ''}${(r.fundingRate).toFixed(3)}%</span>`
       : '';
@@ -18513,7 +18517,7 @@ renderProbeResults = function(results, tf) {
     const dirColor  = r.direction === 'long' ? '#00f5a0' : '#ff4d6d';
     const dirLabel  = r.direction === 'long' ? '▲ LONG'  : '▼ SHORT';
     const probColor = r.prob >= 70 ? '#00f5a0' : r.prob >= 60 ? '#f5c400' : r.prob >= 50 ? '#ff8c69' : '#ff4d6d';
-    const rankLabel = idx === 0 ? '🥇 TOP SETUP' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx+1}`;
+    const rankLabel = idx === 0 && (r.confidence === 'High' || r.confidence === 'Medium') ? '🥇 TOP SETUP' : idx === 0 ? '#1' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx+1}`;
     const slPct     = parseFloat(r.rrData?.stopPct   || 2).toFixed(1);
     const tpPct     = parseFloat(r.rrData?.targetPct || 4).toFixed(1);
     const lev       = r.leverage || 1;
