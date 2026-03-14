@@ -3336,7 +3336,7 @@ function calcCycleDashboard(d){
   //   2020   | 2020-05-11 | 2021-11-10 | 548d       | 2022-11-21 | 924d       | 376d         | -77.6%
   //   AVG    |            |            | 480d       |            | 863d       | 383d         | -82.9%
   //
-  //   2024   | 2024-04-20 | 2025-01-20 | 275d       | proj ~Aug 2026 (halving avg) or ~Feb 2026 (ATH avg)
+  //   2024   | 2024-04-20 | 2025-10-06 | 534d       | proj ~Aug 2026 (halving avg) or ~Mar 2026 (ATH avg)
   //
   // Phase boundaries (days post-halving):
   //   0–90:    Post-halving consolidation (BTC often dips post-halving)
@@ -3509,33 +3509,30 @@ function calcCycleDashboard(d){
   })();
 
   // ---- 11. DIMINISHING RETURNS MODEL — weight 5 ----
-  // Each BTC cycle peak-to-peak return decays ~70%. Projects current cycle expected range.
+  // Each BTC cycle peak-to-peak return decays. Actual cycle 4 data now available.
+  // Historical trough-to-peak multipliers: 93x, 29x, 17x, 8.1x (cycle 4 confirmed)
   (function(){
-    // Historical trough-to-peak multipliers: 93x, 29x, 17x, ~6.3x (current)
-    // Log decay rate: each cycle ~60-70% less
     const halvingDate = new Date('2024-04-20');
     const lastBarDate = new Date(d[n-1].t);
     const daysSince = Math.round((lastBarDate - halvingDate) / 864e5);
     if(daysSince < 0){results.push({name:'Diminishing Returns',score:50,signal:'neutral',val:'Pre-2024 halving',desc:'Cycle return decay model',weight:5});return;}
 
-    // Cycle 4 trough was ~$15,500 (Nov 2022). Projected peak range based on diminishing returns:
+    // Cycle 4: trough $15,500 (Nov 2022) → ATH ~$126,000 (Oct 6, 2025) = 8.1x
+    // Confirmed diminishing returns: 93x → 29x → 17x → 8.1x
     const cycleTrough = 15500;
-    const conservativeMultiple = 4.5;  // ~70% decay from 17x
-    const aggressiveMultiple = 8.0;    // less decay scenario
-    const conservativeTarget = cycleTrough * conservativeMultiple; // ~$69,750
-    const aggressiveTarget = cycleTrough * aggressiveMultiple;     // ~$124,000
-    const midTarget = (conservativeTarget + aggressiveTarget) / 2;
+    const cycleATH = 126000;        // Confirmed Oct 6, 2025
+    const cycleMultiple = cycleATH / cycleTrough; // ~8.1x
+    const pctFromTrough = ((last - cycleTrough) / cycleTrough * 100);
+    const pctOfATH = (last / cycleATH) * 100;
+    const drawdownFromATH = ((cycleATH - last) / cycleATH * 100);
 
-    const pctToConservative = (last / conservativeTarget) * 100;
-    const pctToAggressive = (last / aggressiveTarget) * 100;
-
-    // Score: how far through the projected return range
-    const score = Math.round(Math.max(5, Math.min(95, (last - cycleTrough) / (aggressiveTarget - cycleTrough) * 100)));
-    const signal = pctToConservative < 50 ? 'bull' : pctToAggressive > 90 ? 'bear' : 'neutral';
+    // Score: position between trough and ATH (0 = at trough, 100 = at ATH)
+    const score = Math.round(Math.max(5, Math.min(95, pctOfATH)));
+    const signal = pctOfATH < 40 ? 'bull' : pctOfATH > 85 ? 'bear' : 'neutral';
     results.push({
       name:'Diminishing Returns',score,signal,weight:5,
-      val:`$${(last/1000).toFixed(1)}K / $${(midTarget/1000).toFixed(0)}K target`,
-      desc:`Cycle 4 projected peak: $${(conservativeTarget/1000).toFixed(0)}K–$${(aggressiveTarget/1000).toFixed(0)}K (based on 60-70% return decay per cycle). Currently at ${pctToConservative.toFixed(0)}% of conservative target. ${pctToConservative>100?'⚠️ Above conservative target — entering diminishing returns zone.':pctToConservative>70?'Approaching conservative cycle target.':'Still below projected cycle peak range.'}`
+      val:`${cycleMultiple.toFixed(1)}x cycle · ${drawdownFromATH.toFixed(0)}% from ATH`,
+      desc:`Cycle 4 confirmed: $${(cycleTrough/1000).toFixed(1)}K → $${(cycleATH/1000).toFixed(0)}K (${cycleMultiple.toFixed(1)}x). Diminishing returns pattern: 93x → 29x → 17x → 8.1x. Currently ${drawdownFromATH > 5 ? drawdownFromATH.toFixed(0) + '% below cycle ATH' : 'near cycle ATH'}. ${pctOfATH < 40 ? '⚡ Deep below cycle ATH — historically strong accumulation zone.' : pctOfATH < 70 ? 'Mid-range — between cycle trough and ATH.' : pctOfATH > 90 ? '⚠️ Near cycle ATH — diminishing returns territory.' : 'Upper range of cycle.'}`
     });
   })();
 
@@ -10147,7 +10144,7 @@ function renderCycleImmediate() {
   } else if (daysSince < 560) {
     phase = 'Historical Peak Zone ⚠️'; phaseColor = '#ff6b35';
     nextMilestone = `${560-daysSince}d to end of peak window`;
-    phaseDesc = 'All 3 prior cycles peaked Day 366–546. Maximum caution.';
+    phaseDesc = 'All 3 prior cycles peaked Day 367–548. Maximum caution.';
   } else if (daysSince < 730) {
     phase = 'Post-Peak Distribution'; phaseColor = '#ff4d6d';
     nextMilestone = `Day ${daysSince-560} into distribution`;
@@ -10165,7 +10162,7 @@ function renderCycleImmediate() {
     <span style="color:${phaseColor};font-weight:700">${phase}</span><br>
     Day <b>${daysSince}</b> post-halving (Apr 20 2024) · ${nextMilestone}<br>
     <span style="color:#5a7a68">${phaseDesc}</span><br>
-    <span style="color:#3a5a48;font-size:7px">Historical peaks: Day 366 (2012), Day 526 (2016), Day 546 (2020) · Meter spans 800 days</span>`;
+    <span style="color:#3a5a48;font-size:7px">Historical peaks: Day 367 (2012), Day 526 (2016), Day 548 (2020) · Meter spans 800 days</span>`;
 }
 
 // ── Sub-tab switching ──────────────────────────────────────
@@ -10417,9 +10414,9 @@ function computeCyclePosition(global, coins) {
   const daysSince = Math.round((now - halvingDate) / 86400000);
 
   // ── Calibrated from actual historical cycles ──
-  // 2012 halving → ATH peak: Day 366
+  // 2012 halving → ATH peak: Day 367
   // 2016 halving → ATH peak: Day 526
-  // 2020 halving → ATH peak: Day 546
+  // 2020 halving → ATH peak: Day 548
   // Average historical peak window: Day 450–560
   // At Day 687 we are well past all three historical peak windows.
   //
@@ -10451,7 +10448,7 @@ function computeCyclePosition(global, coins) {
   } else if (daysSince < 560) {
     phase = 'Historical Peak Zone ⚠️'; phaseColor = '#ff6b35';
     nextMilestone = `${560 - daysSince}d to end of peak window`;
-    phaseDesc = 'All 3 prior cycles peaked between Day 366–546. Maximum caution — potential cycle top.';
+    phaseDesc = 'All 3 prior cycles peaked between Day 367–548. Maximum caution — potential cycle top.';
   } else if (daysSince < 730) {
     phase = 'Post-Peak Distribution'; phaseColor = '#ff4d6d';
     nextMilestone = `Day ${daysSince - 560} into distribution phase`;
@@ -10467,10 +10464,10 @@ function computeCyclePosition(global, coins) {
 
   // Historical context for this exact day
   const historicalNote = daysSince >= 560
-    ? `⚠️ Day ${daysSince} is past all three prior cycle peaks (Day 366, 526, 546)`
+    ? `⚠️ Day ${daysSince} is past all three prior cycle peaks (Day 367, 526, 548)`
     : daysSince >= 450
-    ? `⚠️ Inside historical peak window. Prior peaks: Day 366, 526, 546`
-    : `Historical peaks occurred at Day 366, 526, 546 — currently Day ${daysSince}`;
+    ? `⚠️ Inside historical peak window. Prior peaks: Day 367, 526, 548`
+    : `Historical peaks occurred at Day 367, 526, 548 — currently Day ${daysSince}`;
 
   // Bottom projection
   const avgBotDay = 863; // historical avg days halving→bottom (777, 889, 924)
@@ -10490,7 +10487,7 @@ function computeCyclePosition(global, coins) {
   const btcCoinForATH = Array.isArray(coins) ? coins.find(c => c.id === 'bitcoin') : null;
   const liveAthDate = btcCoinForATH?.ath_date ? new Date(btcCoinForATH.ath_date) : null;
   // Fallback: hardcoded date (update manually if CoinGecko data unavailable)
-  const ath2024 = (liveAthDate && !isNaN(liveAthDate.getTime())) ? liveAthDate : new Date('2025-01-20');
+  const ath2024 = (liveAthDate && !isNaN(liveAthDate.getTime())) ? liveAthDate : new Date('2025-10-06');
   const avgATHtoBot = 383; // historical avg days ATH→bottom (410, 363, 376)
   const projBotFromATH = new Date(ath2024.getTime() + avgATHtoBot * 86400000);
   const daysSinceATH2024 = Math.round((new Date() - ath2024) / 86400000);
@@ -10606,7 +10603,7 @@ function renderOverview() {
     { label:'Market Sentiment', value: fg?.data?.[0]?.value_classification || '?', color: fgVal2 > 60 ? '#00f5a0' : fgVal2 > 40 ? '#f5c400' : '#ff4d6d' },
     { label:'Best 7d performers', value: topGainers.map(c => `${c.symbol?.toUpperCase()} +${c.c7d?.toFixed(0)}%`).join(', '), color: '#00f5a0' },
     { label:'Worst 7d performers', value: topLosers.map(c => `${c.symbol?.toUpperCase()} ${c.c7d?.toFixed(0)}%`).join(', '), color: '#ff4d6d' },
-    { label:'Cycle tailwind', value: cycle.daysSince < 450 ? '✅ Within historical bull window' : cycle.daysSince < 560 ? '⚠️ Inside historical peak zone (Day 366–546 prior peaks)' : '🔴 Past all historical peak windows — Day 366/526/546', color: cycle.daysSince < 450 ? '#00f5a0' : cycle.daysSince < 560 ? '#ff6b35' : '#ff4d6d' },
+    { label:'Cycle tailwind', value: cycle.daysSince < 450 ? '✅ Within historical bull window' : cycle.daysSince < 560 ? '⚠️ Inside historical peak zone (Day 367–548 prior peaks)' : '🔴 Past all historical peak windows — Day 367/526/548', color: cycle.daysSince < 450 ? '#00f5a0' : cycle.daysSince < 560 ? '#ff6b35' : '#ff4d6d' },
     { label:'ETF / Institutional', value: (ETF_STATE.loaded && ETF_STATE.data) ? (() => { const d = Array.isArray(ETF_STATE.data) ? ETF_STATE.data : []; const last7 = d.slice(-7); const net7 = last7.reduce((s,x) => s + parseFloat(x.totalNetFlow ?? x.netFlow ?? x.value ?? x.flow ?? 0), 0); return net7 > 500 ? '🟢 Strong ETF inflows (7d)' : net7 > 0 ? '🟡 Mild ETF inflows (7d)' : net7 > -300 ? '⚪ Mixed ETF flows (7d)' : '🔴 ETF outflows (7d)'; })() : 'Data not loaded', color: (ETF_STATE.loaded && ETF_STATE.data) ? '#63b3ed' : '#888' },
     { label:'⚠️ Standing risks', value: 'Macro: Fed policy, geopolitical uncertainty, regulatory (static reminder)', color: '#888' },
   ];
