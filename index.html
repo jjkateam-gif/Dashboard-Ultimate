@@ -9598,6 +9598,8 @@ async function runClientDegenScan() {
     refreshP100Prices().catch(e => console.warn('[P100 refresh]', e.message));
     // Check degen auto-trade rules
     checkDegenAutoTrade(tokens);
+    // Process adaptive learning: check pending outcomes + learn from history
+    processPendingOutcomes().catch(e => console.warn('[Adaptive]', e.message));
     // Fire any degen_score + perfect100 alert rules
     checkScanBasedAlerts(tokens);
     // Check all P100 + watchlist tokens for 100x club promotion
@@ -10015,17 +10017,18 @@ function calcMemeProbability(c) {
     adj10x = (rate10x - base10x) * w;
   }
 
-  // Feature-specific boosts based on what winners had in common
+  // Feature-specific boosts — now scaled by adaptive learned weights
+  const aw = getAdaptiveWeights();
   let boost = 0;
-  if (c.volMcapRatio >= 8)  boost += 0.06;  // high vol/mcap strongly correlated
-  if (c.buyPct >= 73)       boost += 0.05;  // dominant buying
-  if (c.ageHours >= 4 && c.ageHours <= 12) boost += 0.04; // sweet spot entry
+  if (c.volMcapRatio >= 8)  boost += 0.06 * (aw.volMcap || 1);
+  if (c.buyPct >= 73)       boost += 0.05 * (aw.buyRatio || 1);
+  if (c.ageHours >= 4 && c.ageHours <= 12) boost += 0.04 * (aw.age || 1);
   if (c.liquidity >= 50000 && c.liquidity <= 500000) boost += 0.03;
-  if (c.mcap > 0 && c.mcap < 100000) boost += 0.05; // micro-cap
+  if (c.mcap > 0 && c.mcap < 100000) boost += 0.05 * (aw.mcap || 1);
   // Penalties
-  if (c.buyPct != null && c.buyPct < 50) boost -= 0.08;
-  if (c.volMcapRatio < 0.5) boost -= 0.06;
-  if (c.ageHours > 168)     boost -= 0.04;
+  if (c.buyPct != null && c.buyPct < 50) boost -= 0.08 * (aw.buyRatio || 1);
+  if (c.volMcapRatio < 0.5) boost -= 0.06 * (aw.volMcap || 1);
+  if (c.ageHours > 168)     boost -= 0.04 * (aw.age || 1);
 
   return {
     p2x:  Math.max(2, Math.min(95, Math.round((base2x  + adj2x  + boost) * 100))),
@@ -11698,6 +11701,7 @@ function toggleWatchlist(address, tokenData, btn) {
     }
     toast('⭐ Added to watchlist!');
     updateWatchlistCount();
+    learnTrackToken(tokenData); // Track for adaptive learning
   }
 }
 
@@ -12041,6 +12045,7 @@ function removeFromWatchlist(address) {
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(updateWatchlistCount, 500);
   setTimeout(loadDegenAutoTradeSettings, 600);
+  setTimeout(learnFromAllHistory, 2000); // Bootstrap adaptive model from existing data
 });
 
 // ============================================================
@@ -14487,7 +14492,232 @@ function checkDegenAutoTrade(tokens) {
   updateDegenAutoTradeStatus();
 }
 
-// ── Called every scan — captures new perfect-100 tokens ──────
+// ════════════════════════════════════════════════════════════════
+// 🧠 ADAPTIVE LEARNING ENGINE (EWMA-based weight adjustment)
+// ════════════════════════════════════════════════════════════════
+// Learns from P100, Watchlist, and Bought tokens that reach milestones.
+// Tracks success rates per feature bucket with exponential smoothing.
+// Adjusts scoring weights over time to improve accuracy.
+
+const LEARN_KEY = 'degenAdaptive_v2';
+const LEARN_PENDING_KEY = 'degenPendingOutcomes_v1';
+const LEARN_ALPHA = 0.2;       // EWMA smoothing factor
+const LEARN_MIN_SAMPLES = 10;  // Don't adjust weights until N samples per bucket
+const LEARN_WEIGHT_MIN = 0.5;  // Weight multiplier floor
+const LEARN_WEIGHT_MAX = 2.0;  // Weight multiplier ceiling
+
+// Feature bucket definitions: [featureName, bucketName, test(token)]
+const LEARN_BUCKETS = {
+  volMcap: [
+    { name: 'low',    test: t => (t.captureVMR || t.entryVolMcap || 0) < 2 },
+    { name: 'medium', test: t => { const v = t.captureVMR || t.entryVolMcap || 0; return v >= 2 && v < 6; } },
+    { name: 'high',   test: t => (t.captureVMR || t.entryVolMcap || 0) >= 6 },
+  ],
+  buyRatio: [
+    { name: 'weak',   test: t => (t.captureBuyPct || t.entryBuyRatio || 50) < 60 },
+    { name: 'good',   test: t => { const b = t.captureBuyPct || t.entryBuyRatio || 50; return b >= 60 && b < 73; } },
+    { name: 'strong', test: t => (t.captureBuyPct || t.entryBuyRatio || 50) >= 73 },
+  ],
+  age: [
+    { name: 'early',  test: t => (t.captureAge || t.entryAge || 24) < 12 },
+    { name: 'mid',    test: t => { const a = t.captureAge || t.entryAge || 24; return a >= 12 && a < 48; } },
+    { name: 'old',    test: t => (t.captureAge || t.entryAge || 24) >= 48 },
+  ],
+  mcap: [
+    { name: 'micro',  test: t => (t.captureMcap || t.entryMcap || 100000) < 100000 },
+    { name: 'small',  test: t => { const m = t.captureMcap || t.entryMcap || 100000; return m >= 100000 && m < 1000000; } },
+    { name: 'large',  test: t => (t.captureMcap || t.entryMcap || 100000) >= 1000000 },
+  ],
+};
+
+function learnLoad() { try { return JSON.parse(localStorage.getItem(LEARN_KEY) || '{}'); } catch { return {}; } }
+function learnSave(d) { try { localStorage.setItem(LEARN_KEY, JSON.stringify(d)); } catch {} }
+function pendingLoad() { try { return JSON.parse(localStorage.getItem(LEARN_PENDING_KEY) || '[]'); } catch { return []; } }
+function pendingSave(d) { try { localStorage.setItem(LEARN_PENDING_KEY, JSON.stringify(d)); } catch {} }
+
+// Initialize learning model structure if needed
+function learnInit() {
+  let model = learnLoad();
+  if (!model.features) {
+    model = {
+      features: {},
+      totalTracked: 0,
+      totalHit2x: 0,
+      totalHit5x: 0,
+      totalHit10x: 0,
+      lastUpdated: null,
+      accuracy: { predictionErrors: [], avgError: null },
+    };
+    for (const [feat, buckets] of Object.entries(LEARN_BUCKETS)) {
+      model.features[feat] = { weightMult: 1.0 };
+      for (const b of buckets) {
+        model.features[feat][b.name] = { n: 0, hit2x: 0, hit5x: 0, hit10x: 0, rate2x: 0, rate5x: 0, rate10x: 0 };
+      }
+    }
+    learnSave(model);
+  }
+  return model;
+}
+
+// Record a token's outcome into the learning model
+function learnRecord(token, hit2x, hit5x, hit10x) {
+  const model = learnInit();
+
+  for (const [feat, buckets] of Object.entries(LEARN_BUCKETS)) {
+    for (const b of buckets) {
+      if (b.test(token)) {
+        const bucket = model.features[feat][b.name];
+        bucket.n++;
+        if (hit2x)  bucket.hit2x++;
+        if (hit5x)  bucket.hit5x++;
+        if (hit10x) bucket.hit10x++;
+        // EWMA smoothed rates
+        const alpha = bucket.n < 5 ? 0.5 : LEARN_ALPHA; // faster learning early
+        bucket.rate2x  = alpha * (hit2x?1:0)  + (1-alpha) * bucket.rate2x;
+        bucket.rate5x  = alpha * (hit5x?1:0)  + (1-alpha) * bucket.rate5x;
+        bucket.rate10x = alpha * (hit10x?1:0) + (1-alpha) * bucket.rate10x;
+        break; // only one bucket per feature
+      }
+    }
+  }
+
+  model.totalTracked++;
+  if (hit2x)  model.totalHit2x++;
+  if (hit5x)  model.totalHit5x++;
+  if (hit10x) model.totalHit10x++;
+  model.lastUpdated = new Date().toISOString();
+
+  // Recalculate weight multipliers (only when enough data)
+  const baseRate2x = model.totalTracked > 0 ? model.totalHit2x / model.totalTracked : 0.3;
+  for (const [feat, buckets] of Object.entries(LEARN_BUCKETS)) {
+    let bestRate = 0, worstRate = 1;
+    for (const b of buckets) {
+      const bucket = model.features[feat][b.name];
+      if (bucket.n >= LEARN_MIN_SAMPLES) {
+        bestRate  = Math.max(bestRate,  bucket.rate2x);
+        worstRate = Math.min(worstRate, bucket.rate2x);
+      }
+    }
+    // Weight multiplier: how much does the best bucket outperform baseline?
+    if (bestRate > 0 && baseRate2x > 0) {
+      const rawMult = bestRate / baseRate2x;
+      model.features[feat].weightMult = Math.max(LEARN_WEIGHT_MIN, Math.min(LEARN_WEIGHT_MAX, rawMult));
+    }
+  }
+
+  learnSave(model);
+  return model;
+}
+
+// Get current adaptive weight multipliers for probability calc
+function getAdaptiveWeights() {
+  const model = learnInit();
+  const weights = {};
+  for (const [feat] of Object.entries(LEARN_BUCKETS)) {
+    weights[feat] = model.features[feat]?.weightMult || 1.0;
+  }
+  weights._totalTracked = model.totalTracked;
+  weights._totalHit2x   = model.totalHit2x;
+  return weights;
+}
+
+// Process all stored P100/Watchlist/Bought tokens for learning
+function learnFromAllHistory() {
+  const p100  = Object.values(p100Load());
+  const wl    = Object.values(wlLoad());
+  const bl    = Object.values(blLoad());
+  const all   = [...p100, ...wl, ...bl];
+
+  // Only process tokens old enough to have meaningful outcome data (>24h)
+  const ready = all.filter(t => {
+    const age = (Date.now() - new Date(t.capturedAt || t.addedAt || 0).getTime()) / 3600000;
+    return age > 24;
+  });
+
+  if (ready.length === 0) return;
+
+  // Re-initialize model and re-learn from all data
+  localStorage.removeItem(LEARN_KEY);
+  const model = learnInit();
+
+  for (const t of ready) {
+    const hit2x  = !!t.milestones?.['2x'];
+    const hit5x  = !!t.milestones?.['5x'];
+    const hit10x = !!t.milestones?.['10x'];
+    learnRecord(t, hit2x, hit5x, hit10x);
+  }
+
+  console.log(`[Adaptive] Re-learned from ${ready.length} tokens. Weights:`,
+    Object.entries(learnInit().features).map(([k,v]) => `${k}:${v.weightMult?.toFixed(2)}`).join(', ')
+  );
+}
+
+// Schedule learning: run after P100 prices refresh and on tab views
+// Geometric check intervals for pending outcomes: 1h, 6h, 24h, 7d
+const LEARN_CHECK_INTERVALS = [1, 6, 24, 168]; // hours
+
+function addPendingOutcome(token) {
+  const pending = pendingLoad();
+  if (pending.find(p => p.address === token.address)) return;
+  pending.push({
+    address:   token.address,
+    symbol:    token.symbol || '???',
+    addedAt:   Date.now(),
+    score:     token.degenScore || token.captureScore || token.entryScore || 0,
+    mcap:      token.mcap || token.captureMcap || token.entryMcap || 0,
+    vmr:       token.volMcapRatio || token.captureVMR || token.entryVolMcap || 0,
+    buyPct:    token.buyPct || token.captureBuyPct || token.entryBuyRatio || 50,
+    age:       token.ageHours || token.captureAge || token.entryAge || 0,
+    checksCompleted: [],
+  });
+  pendingSave(pending.slice(-200)); // cap at 200
+}
+
+async function processPendingOutcomes() {
+  const pending = pendingLoad();
+  if (!pending.length) return;
+
+  const now = Date.now();
+  let changed = false;
+
+  for (const p of pending) {
+    const ageH = (now - p.addedAt) / 3600000;
+    const nextCheck = LEARN_CHECK_INTERVALS.find(h => h > Math.max(...p.checksCompleted, 0));
+    if (!nextCheck || ageH < nextCheck) continue;
+
+    // Token is due for a check — look up in P100/Watchlist/Bought for milestone data
+    const allStores = { ...p100Load(), ...wlLoad(), ...blLoad() };
+    const entry = allStores[p.address];
+    if (!entry) continue;
+
+    const hit2x  = !!entry.milestones?.['2x'];
+    const hit5x  = !!entry.milestones?.['5x'];
+    const hit10x = !!entry.milestones?.['10x'];
+
+    // Record into learning model
+    learnRecord(entry, hit2x, hit5x, hit10x);
+    p.checksCompleted.push(nextCheck);
+    changed = true;
+
+    // Track prediction accuracy
+    const model = learnLoad();
+    const predicted = p.score; // 0-100
+    const actual = hit10x ? 90 : hit5x ? 70 : hit2x ? 50 : 20;
+    const error = Math.abs(predicted - actual);
+    model.accuracy.predictionErrors = [...(model.accuracy.predictionErrors || []), error].slice(-100);
+    model.accuracy.avgError = model.accuracy.predictionErrors.reduce((a,b)=>a+b,0) / model.accuracy.predictionErrors.length;
+    learnSave(model);
+  }
+
+  // Remove fully checked tokens (completed all intervals)
+  const cleaned = pending.filter(p => p.checksCompleted.length < LEARN_CHECK_INTERVALS.length);
+  if (changed || cleaned.length !== pending.length) pendingSave(cleaned);
+}
+
+// Auto-add tokens to pending when they enter P100, watchlist, or bought
+function learnTrackToken(token) {
+  addPendingOutcome(token);
+}
 function autoCaptureP100(tokens) {
   const log = p100Load();
   let newCount = 0;
@@ -14541,6 +14771,7 @@ function autoCaptureP100(tokens) {
       outcome:      'active',  // active | moonshot | rugged | stale
     };
     newCount++;
+    learnTrackToken(t); // Track for adaptive learning
     toast(`🔥 Perfect 100! ${t.symbol} auto-logged to P100 tab`, 'success');
     if (Notification?.permission === 'granted') {
       new Notification('🔥 Perfect 100 Score!', {
