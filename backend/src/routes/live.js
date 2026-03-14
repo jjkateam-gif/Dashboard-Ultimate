@@ -271,26 +271,48 @@ router.post('/order', async (req, res) => {
     if (!creds) return res.status(400).json({ error: 'Credentials not unlocked' });
 
     const demo = liveEngine.isDemo(req.user.id);
-    const { instId, side, orderType, size, price, leverage, tpPrice, slPrice, marginMode } = req.body;
-    if (!instId || !side || !size) return res.status(400).json({ error: 'instId, side, and size required' });
+    const { instId, side, orderType, size, sizeUsd: sizeUsdParam, price, leverage, tpPrice, slPrice, marginMode } = req.body;
+    if (!instId || !side) return res.status(400).json({ error: 'instId and side required' });
 
     const direction = side === 'buy' ? 'long' : 'short';
     const lev = leverage || 1;
     const markPrice = await blofinClient.getMarkPrice(instId, demo) || 0;
 
-    // Convert size (in base asset units from frontend) to BloFin contracts
-    let contractSize = parseFloat(size);
+    // Get instrument info for contract conversion
+    let contractValue = null;
+    let lotSize = null;
+    let minSize = null;
     try {
       const markets = await blofinClient.getMarkets(demo);
       const mkt = markets.find(m => m.name === instId);
-      if (mkt && mkt.contractValue) {
-        const cv = parseFloat(mkt.contractValue);
-        contractSize = Math.max(1, Math.round(parseFloat(size) / cv));
-        console.log(`[Order] ${instId}: size=${size} base units / contractValue=${cv} = ${contractSize} contracts`);
+      if (mkt) {
+        contractValue = parseFloat(mkt.contractValue) || null;
+        minSize = parseFloat(mkt.minSize) || 1;
+        lotSize = parseFloat(mkt.lotSize) || parseFloat(mkt.minSize) || 1;
       }
-    } catch (e) { console.warn('[Order] Could not fetch contractValue:', e.message); }
+    } catch (e) { console.warn('[Order] Could not fetch instrument info:', e.message); }
 
-    const sizeUsd = contractSize * (markPrice || 0) * parseFloat(size > 0 ? 1 : 0);
+    // Calculate contract size
+    let contractSize;
+    if (sizeUsdParam && markPrice && contractValue) {
+      // Frontend sent USD amount — convert to contracts
+      // contracts = USD / (price × contractValue)
+      const rawContracts = parseFloat(sizeUsdParam) / (markPrice * contractValue);
+      // Round to lot size and enforce minimum
+      contractSize = Math.max(minSize || 1, Math.round(rawContracts / (lotSize || 1)) * (lotSize || 1));
+      console.log(`[Order] ${instId}: $${sizeUsdParam} USD / ($${markPrice} × ${contractValue} cv) = ${rawContracts} → ${contractSize} contracts (lot: ${lotSize}, min: ${minSize})`);
+    } else if (size && contractValue) {
+      // Frontend sent base asset units — convert to contracts
+      contractSize = Math.max(minSize || 1, Math.round(parseFloat(size) / contractValue));
+      console.log(`[Order] ${instId}: ${size} base units / ${contractValue} cv = ${contractSize} contracts`);
+    } else if (size) {
+      contractSize = parseFloat(size);
+      console.log(`[Order] ${instId}: using raw size=${contractSize} (no contractValue)`);
+    } else {
+      return res.status(400).json({ error: 'size or sizeUsd required' });
+    }
+
+    const sizeUsd = contractSize * (markPrice || 0) * (contractValue || 1);
 
     // Safety check
     const collateral = parseFloat(size) * markPrice / lev;

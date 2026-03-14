@@ -13666,23 +13666,19 @@ async function autoExecDirect(r, idx, posSize) {
   }
   if (!lastPrice) throw new Error('Could not fetch price for ' + instId);
 
-  // Calculate order size
-  const effectiveSize = posSize * (lev > 1 ? lev : 1);
-  const rawSize = effectiveSize / lastPrice;
-  const isBtc = instId.toUpperCase().startsWith('BTC');
-  const decimals = isBtc ? 4 : 2;
-  const contractSize = rawSize.toFixed(decimals);
+  // Send size in USD — backend handles contract conversion using BloFin instrument data
+  const sizeUsd = posSize;
 
   // Calculate SL/TP prices
   const slPrice = r.direction === 'long'
-    ? (lastPrice * (1 - slPct / 100)).toFixed(decimals + 2)
-    : (lastPrice * (1 + slPct / 100)).toFixed(decimals + 2);
+    ? (lastPrice * (1 - slPct / 100)).toFixed(6)
+    : (lastPrice * (1 + slPct / 100)).toFixed(6);
   const tpPrice = r.direction === 'long'
-    ? (lastPrice * (1 + tpPct / 100)).toFixed(decimals + 2)
-    : (lastPrice * (1 - tpPct / 100)).toFixed(decimals + 2);
+    ? (lastPrice * (1 + tpPct / 100)).toFixed(6)
+    : (lastPrice * (1 - tpPct / 100)).toFixed(6);
 
   const body = {
-    instId, side, orderType: 'market', size: contractSize,
+    instId, side, orderType: 'market', sizeUsd: sizeUsd,
     leverage: lev, marginMode: 'cross',
     slPrice, tpPrice
   };
@@ -16721,13 +16717,9 @@ async function confirmBlofinExec() {
     const marginMode = $('bfMarginMode')?.value || 'cross';
     const limitPrice = orderType !== 'market' ? parseFloat($('bfLimitPrice')?.value) : undefined;
     const side = p.setup.direction === 'long' ? 'buy' : 'sell';
-    // FIX 4: Round contract size to proper increments per pair
-    const rawSize = p.positionSize / p.lastPrice;
-    const isBtc = p.instId.toUpperCase().startsWith('BTC');
-    const decimals = isBtc ? 4 : 2;
-    const contractSize = rawSize.toFixed(decimals);
 
-    const body = { instId: p.instId, side, orderType, size: contractSize, leverage: p.leverage, marginMode };
+    // Send USD amount — backend handles contract conversion using BloFin instrument data
+    const body = { instId: p.instId, side, orderType, sizeUsd: p.positionSize, leverage: p.leverage, marginMode };
     if (p.tpPrice) body.tpPrice = p.tpPrice;
     if (p.slPrice) body.slPrice = p.slPrice;
     if (limitPrice) body.price = limitPrice;

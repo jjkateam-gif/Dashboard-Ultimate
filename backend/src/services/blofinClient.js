@@ -85,7 +85,16 @@ async function privatePost(path, body, creds, isTrading = false, demo) {
   });
   if (!res.ok) throw new Error(`BloFin API ${path}: HTTP ${res.status}`);
   const json = await res.json();
-  if (json.code !== '0') throw new Error(`BloFin ${path}: ${json.msg || json.code}`);
+  if (json.code !== '0') {
+    // BloFin returns per-order errors in data array — extract the specific message
+    let detail = json.msg || json.code;
+    if (Array.isArray(json.data) && json.data[0] && json.data[0].msg) {
+      detail += ' → ' + json.data[0].msg;
+      if (json.data[0].code) detail += ' (code: ' + json.data[0].code + ')';
+    }
+    console.error(`[BloFin] POST ${path} failed:`, JSON.stringify(json));
+    throw new Error(`BloFin ${path}: ${detail}`);
+  }
   return json.data;
 }
 
@@ -97,7 +106,8 @@ async function getMarkets(demo) {
     name: inst.instId,           // e.g. 'BTC-USDT'
     symbol: inst.instId.replace('-', ''),
     maxLeverage: parseInt(inst.maxLever) || 100,
-    minSize: inst.minSize || '0.001',
+    minSize: inst.minSize || '1',
+    lotSize: inst.lotSize || inst.minSize || '1',
     tickSize: inst.tickSize,
     contractValue: inst.contractValue,
     protocol: 'blofin',
@@ -197,12 +207,15 @@ async function getPositions(creds, demo) {
 
 /* ── Trading (Private) ───────────────────────────────────────── */
 
-async function setLeverage(creds, instId, lever, marginMode, demo) {
-  return privatePost('/api/v1/account/set-leverage', {
+async function setLeverage(creds, instId, lever, marginMode, demo, positionSide) {
+  const body = {
     instId,
     leverage: String(lever),     // BloFin expects 'leverage' not 'lever'
     marginMode: marginMode || 'cross',
-  }, creds, false, demo);
+  };
+  // In hedge mode, must specify positionSide ('long' or 'short')
+  if (positionSide) body.positionSide = positionSide;
+  return privatePost('/api/v1/account/set-leverage', body, creds, false, demo);
 }
 
 async function setMarginMode(creds, instId, marginMode, demo) {
@@ -229,10 +242,10 @@ async function openPosition({ creds, instId, direction, size, leverage, orderTyp
     console.warn(`[BloFin] setPositionMode warning: ${e.message}`);
   }
 
-  // Set leverage first
+  // Set leverage for the specific position side (required in hedge mode)
   try {
-    await setLeverage(creds, instId, leverage, mode, demo);
-    console.log(`[BloFin] Leverage set to ${leverage}x for ${instId}`);
+    await setLeverage(creds, instId, leverage, mode, demo, direction);
+    console.log(`[BloFin] Leverage set to ${leverage}x for ${instId} ${direction}`);
   } catch (e) {
     // Log but continue — leverage may already be at the desired level
     console.warn(`[BloFin] setLeverage warning: ${e.message}`);
