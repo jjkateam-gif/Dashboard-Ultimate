@@ -12387,41 +12387,56 @@ function updateTfWinRateCache(timeframes) {
 }
 
 // ── Cross-timeframe alignment ────────────────────────────────
-// Maps each base TF to 2 higher TFs for trend confirmation
+// 3-layer system: base TF → middle (setup) TF → higher (trend) TF
+// Uses 4-6x ratio between layers per Elder's Triple Screen & research consensus
 const CROSS_TF_MAP = {
-  '5m':  ['1h', '4h'],
-  '15m': ['1h', '4h'],
-  '30m': ['4h', '1d'],
-  '1h':  ['4h', '1d'],
-  '4h':  ['1d', '1w'],
-  '1d':  ['1w'],
+  '5m':  ['15m', '1h'],    // 3x + 12x — 15m for structure, 1h for session trend
+  '15m': ['1h', '4h'],     // 4x + 16x — 1h for intraday, 4h for swing
+  '30m': ['4h', '1d'],     // 8x + 48x — 4h for swing, 1d for macro
+  '1h':  ['4h', '1d'],     // 4x + 24x — 4h for swing, 1d for macro
+  '4h':  ['1d', '1w'],     // 6x + 42x — 1d for trend, 1w for macro
+  '1d':  ['1w'],           // 7x — weekly macro only
 };
 
 // Quick trend read from candle data — returns { bull, bear, strength }
+// Uses EMA 200 (top research-backed filter), EMA 21/55, RSI direction, MACD
 function quickTrendBias(d) {
   if (!d || d.length < 55) return { bull: false, bear: false, strength: 0 };
   const c = d.map(x => x.c);
   const last = c.length - 1;
 
-  // EMA 21/55 trend
-  const emaF = ema(c, 21), emaS = ema(c, 55);
-  const emaBull = emaF[last] > emaS[last];
+  // EMA 200 — the #1 cited HTF filter in research
+  const ema200 = ema(c, 200);
+  const hasEMA200 = ema200[last] != null;
+  const priceAboveEMA200 = hasEMA200 && c[last] > ema200[last];
 
-  // RSI direction
+  // EMA 21/55 trend (golden cross / death cross)
+  const emaF = ema(c, 21), emaS = ema(c, 55);
+  const emaBull = emaF[last] != null && emaS[last] != null && emaF[last] > emaS[last];
+
+  // RSI > 50 = bullish momentum, < 50 = bearish (research consensus)
   const R = rsi(c, 14);
   const rsiVal = R[last];
   const rsiBull = rsiVal != null && rsiVal > 50;
 
-  // Price vs EMA55
-  const priceAboveEMA = c[last] > emaS[last];
+  // MACD histogram direction — Elder's preferred Screen 1 indicator
+  const macdFast = ema(c, 12), macdSlow = ema(c, 26);
+  const macdLine = c.map((_, i) => macdFast[i] != null && macdSlow[i] != null ? macdFast[i] - macdSlow[i] : null);
+  const macdSig = ema(macdLine.map(v => v ?? 0), 9);
+  const macdHist = macdLine[last] != null && macdSig[last] != null ? macdLine[last] - macdSig[last] : null;
+  const macdBull = macdHist != null && macdHist > 0;
 
-  // Count bullish signals (0-3)
-  const bullCount = (emaBull ? 1 : 0) + (rsiBull ? 1 : 0) + (priceAboveEMA ? 1 : 0);
-  const isBull = bullCount >= 2;
-  const isBear = bullCount <= 1;
-  const strength = Math.abs(bullCount - 1.5) / 1.5; // 0 = mixed, 1 = strong agreement
+  // Weighted scoring: EMA200 (strongest), then EMA trend, RSI, MACD
+  // EMA200 counts double because research shows it's the single best filter
+  const bullPts = (hasEMA200 ? (priceAboveEMA200 ? 2 : 0) : 0) + (emaBull ? 1 : 0) + (rsiBull ? 1 : 0) + (macdBull ? 1 : 0);
+  const maxPts = (hasEMA200 ? 2 : 0) + 3; // 5 max with EMA200, 3 without
+  const ratio = maxPts > 0 ? bullPts / maxPts : 0.5;
 
-  return { bull: isBull, bear: isBear, strength, rsi: rsiVal, emaBull, priceAboveEMA };
+  const isBull = ratio > 0.6;
+  const isBear = ratio < 0.4;
+  const strength = Math.abs(ratio - 0.5) * 2; // 0 = mixed, 1 = full agreement
+
+  return { bull: isBull, bear: isBear, strength, rsi: rsiVal, emaBull, priceAboveEMA200: hasEMA200 ? priceAboveEMA200 : null, macdBull };
 }
 
 // Fetch higher TF data for an asset, returns array of { tf, bias }
@@ -12548,21 +12563,43 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
     if (direction === 'short' && fundingRate > 0.10)  prob += 3; // extreme longs = fade
   }
 
-  // Cross-timeframe alignment adjustment
+  // Cross-timeframe alignment adjustment (research: HTF alignment is the single biggest edge)
+  // QuantPedia study: filtering against HTF trend doubled Sharpe ratio
+  // Research consensus: HTF should act as a heavy gate, not a small tweak
   if (crossTFData && crossTFData.length > 0) {
     let ctfBoost = 0;
+    let allAligned = true;
+    let anyOpposing = false;
+
     for (const htf of crossTFData) {
       const aligned = (direction === 'long' && htf.bull) || (direction === 'short' && htf.bear);
       const opposing = (direction === 'long' && htf.bear) || (direction === 'short' && htf.bull);
-      const adj = 3 * htf.strength; // 0–3 points scaled by strength of higher TF signal
+
       if (aligned) {
+        // Aligned HTF: +5 to +8 pts per TF (scaled by signal strength)
+        const adj = 5 + 3 * htf.strength; // 5–8 points
         ctfBoost += adj;
-        hits.push({ ind: 'XTF_' + htf.tf, label: `${htf.tf} trend aligned (${htf.bull ? '▲ bull' : '▼ bear'})`, pts: Math.round(adj) });
+        const details = [htf.emaBull ? 'EMA▲' : 'EMA▼', htf.priceAboveEMA200 != null ? (htf.priceAboveEMA200 ? '200MA▲' : '200MA▼') : '', htf.macdBull ? 'MACD▲' : 'MACD▼'].filter(Boolean).join(' ');
+        hits.push({ ind: 'XTF_' + htf.tf, label: `${htf.tf} trend aligned (${details})`, pts: Math.round(adj) });
       } else if (opposing) {
+        // Opposing HTF: heavy penalty -8 to -12 pts (research: trading against HTF halves returns)
+        const adj = 8 + 4 * htf.strength; // 8–12 points penalty
         ctfBoost -= adj;
-        misses.push({ ind: 'XTF_' + htf.tf, label: `${htf.tf} trend opposing (${htf.bull ? '▲ bull' : '▼ bear'})` });
+        anyOpposing = true;
+        allAligned = false;
+        const details = [htf.emaBull ? 'EMA▲' : 'EMA▼', htf.priceAboveEMA200 != null ? (htf.priceAboveEMA200 ? '200MA▲' : '200MA▼') : '', htf.macdBull ? 'MACD▲' : 'MACD▼'].filter(Boolean).join(' ');
+        misses.push({ ind: 'XTF_' + htf.tf, label: `${htf.tf} trend opposing (${details})` });
+      } else {
+        allAligned = false;
       }
     }
+
+    // Bonus: all higher TFs aligned = extra confluence boost
+    if (allAligned && crossTFData.length >= 2) {
+      ctfBoost += 4;
+      hits.push({ ind: 'XTF_ALL', label: 'All higher TFs aligned — strong confluence', pts: 4 });
+    }
+
     prob += ctfBoost;
   }
 
