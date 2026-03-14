@@ -2621,6 +2621,47 @@ function switchAuthView(view) {
 
 </div><!-- end page_trades -->
 
+<!-- Tax Export Section (inside trades page, before close) -->
+<script>
+// Inject tax export section dynamically after page_trades content loads
+(function(){
+  const trPage = document.getElementById('page_trades');
+  if (!trPage) return;
+  const taxDiv = document.createElement('div');
+  taxDiv.id = 'taxExportSection';
+  taxDiv.style.cssText = 'margin-top:20px;border-top:1px solid rgba(255,255,255,0.05);padding-top:16px';
+  taxDiv.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#a78bfa">📋 TAX EXPORT — TRADE HISTORY</div>
+        <div style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;margin-top:2px">Download monthly trade reports for tax purposes. Trades are cached locally so history accumulates over time.</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.15);border-radius:8px;padding:10px 14px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:6px">
+        <label style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;white-space:nowrap">MONTH</label>
+        <select id="taxMonth" onchange="renderTaxPreview()" style="font-size:10px;padding:4px 8px;background:#0a1a10;border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer"></select>
+      </div>
+      <div style="height:20px;border-left:1px solid rgba(255,255,255,0.08)"></div>
+      <button onclick="exportTaxCSV()" style="font-family:'Space Mono',monospace;font-size:9px;padding:5px 14px;background:rgba(0,245,160,0.12);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:6px;cursor:pointer;width:auto;margin:0">⬇ Download CSV</button>
+      <button onclick="exportTaxPDF()" style="font-family:'Space Mono',monospace;font-size:9px;padding:5px 14px;background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:6px;cursor:pointer;width:auto;margin:0">📄 PDF Summary</button>
+      <button onclick="refreshTaxCache()" style="font-family:'Space Mono',monospace;font-size:9px;padding:5px 14px;background:rgba(255,107,53,0.12);border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:6px;cursor:pointer;width:auto;margin:0">🔄 Sync BloFin</button>
+      <div style="height:20px;border-left:1px solid rgba(255,255,255,0.08)"></div>
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <div style="text-align:center"><div style="font-size:7px;color:#5a7a68;text-transform:uppercase">Cached Trades</div><div id="taxCachedCount" style="font-size:14px;font-weight:700;font-family:'Space Mono',monospace;color:#a78bfa">0</div></div>
+        <div style="text-align:center"><div style="font-size:7px;color:#5a7a68;text-transform:uppercase">Month Trades</div><div id="taxMonthCount" style="font-size:14px;font-weight:700;font-family:'Space Mono',monospace;color:#e0e0e0">0</div></div>
+        <div style="text-align:center"><div style="font-size:7px;color:#5a7a68;text-transform:uppercase">Month P&L</div><div id="taxMonthPnl" style="font-size:14px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">$0</div></div>
+        <div style="text-align:center"><div style="font-size:7px;color:#5a7a68;text-transform:uppercase">Total Fees</div><div id="taxMonthFees" style="font-size:14px;font-weight:700;font-family:'Space Mono',monospace;color:#ff4d6d">$0</div></div>
+      </div>
+    </div>
+    <div id="taxPreviewList" style="max-height:400px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 transparent;background:rgba(0,0,0,0.15);border:1px solid rgba(255,255,255,0.05);border-radius:8px">
+      <div style="text-align:center;padding:30px;color:#5a7a68;font-family:'Space Mono',monospace;font-size:10px">Click "🔄 Sync BloFin" to load and cache your trade history, or trades will auto-cache when you view BloFin History above.</div>
+    </div>
+  `;
+  trPage.appendChild(taxDiv);
+})();
+</script>
+
 <!-- ========== ALERTS PAGE ========== -->
 <div id="page_alerts" style="display:none">
 
@@ -14066,6 +14107,8 @@ async function loadBlofinTradeHistory() {
 
     renderBlofinHistory(trades);
     updateBlofinSummary(trades);
+    // Auto-cache for tax export
+    if (typeof mergeTradesToCache === 'function') mergeTradesToCache(trades);
   } catch(e) {
     el.innerHTML = '<div style="text-align:center;padding:30px;color:#ff4d6d;font-family:\'Space Mono\',monospace;font-size:10px">Error loading BloFin history: ' + e.message + '</div>';
   }
@@ -14137,6 +14180,380 @@ function updateBlofinSummary(trades) {
     pfPnl.style.color = totalPnl >= 0 ? '#00f5a0' : '#ff4d6d';
   }
 }
+
+// ========== TAX EXPORT & TRADE CACHE SYSTEM ==========
+const TAX_CACHE_KEY = 'blofin_trade_cache';
+
+function getTaxCache() {
+  try { return JSON.parse(localStorage.getItem(TAX_CACHE_KEY) || '[]'); }
+  catch { return []; }
+}
+
+function saveTaxCache(trades) {
+  localStorage.setItem(TAX_CACHE_KEY, JSON.stringify(trades));
+}
+
+function mergeTradesToCache(newTrades) {
+  const cache = getTaxCache();
+  const existing = new Map(cache.map(t => [t._cacheId, t]));
+
+  for (const t of newTrades) {
+    const ts = t.cTime || t.ts || t.timestamp || t.fillTime || 0;
+    const id = t.orderId || t.ordId || t.id || '';
+    const cacheId = id + '_' + ts;
+    if (!existing.has(cacheId)) {
+      existing.set(cacheId, {
+        _cacheId: cacheId,
+        date: ts ? new Date(Number(ts)).toISOString() : new Date().toISOString(),
+        timestamp: Number(ts) || Date.now(),
+        instrument: t.instId || t.symbol || '',
+        side: t.side || t.posSide || '',
+        size: t.sz || t.size || t.fillSz || '',
+        entryPrice: t.avgPx || t.px || t.fillPx || t.price || '',
+        fee: t.fee || '0',
+        pnl: t.pnl || t.realizedPnl || t.profit || '0',
+        status: t.state || t.status || 'filled',
+        orderId: id,
+        leverage: t.lever || t.leverage || '',
+        marginMode: t.mgnMode || t.marginMode || '',
+      });
+    }
+  }
+
+  const merged = Array.from(existing.values()).sort((a, b) => b.timestamp - a.timestamp);
+  saveTaxCache(merged);
+  updateTaxUI();
+  return merged;
+}
+
+function updateTaxUI() {
+  const cache = getTaxCache();
+  const countEl = document.getElementById('taxCachedCount');
+  if (countEl) countEl.textContent = cache.length;
+
+  // Populate month dropdown
+  const sel = document.getElementById('taxMonth');
+  if (!sel) return;
+  const months = new Set();
+  months.add('all');
+  for (const t of cache) {
+    const d = new Date(t.timestamp);
+    months.add(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
+  }
+  // Add current month even if no trades
+  const now = new Date();
+  months.add(now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'));
+
+  const sorted = Array.from(months).filter(m => m !== 'all').sort().reverse();
+  const prev = sel.value;
+  sel.innerHTML = '<option value="all">All Time</option>' +
+    sorted.map(m => {
+      const [y, mo] = m.split('-');
+      const label = new Date(y, mo - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      return `<option value="${m}">${label}</option>`;
+    }).join('');
+  if (prev) sel.value = prev;
+
+  renderTaxPreview();
+}
+
+function getFilteredTaxTrades() {
+  const cache = getTaxCache();
+  const sel = document.getElementById('taxMonth');
+  const month = sel ? sel.value : 'all';
+  if (month === 'all') return cache;
+  const [y, m] = month.split('-').map(Number);
+  return cache.filter(t => {
+    const d = new Date(t.timestamp);
+    return d.getFullYear() === y && d.getMonth() + 1 === m;
+  });
+}
+
+function renderTaxPreview() {
+  const trades = getFilteredTaxTrades();
+  const el = document.getElementById('taxPreviewList');
+  const countEl = document.getElementById('taxMonthCount');
+  const pnlEl = document.getElementById('taxMonthPnl');
+  const feeEl = document.getElementById('taxMonthFees');
+
+  if (countEl) countEl.textContent = trades.length;
+
+  const totalPnl = trades.reduce((s, t) => s + parseFloat(t.pnl || 0), 0);
+  const totalFees = trades.reduce((s, t) => s + Math.abs(parseFloat(t.fee || 0)), 0);
+
+  if (pnlEl) {
+    pnlEl.textContent = (totalPnl >= 0 ? '+$' : '-$') + Math.abs(totalPnl).toFixed(2);
+    pnlEl.style.color = totalPnl >= 0 ? '#00f5a0' : '#ff4d6d';
+  }
+  if (feeEl) {
+    feeEl.textContent = '$' + totalFees.toFixed(2);
+  }
+
+  if (!el) return;
+  if (trades.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:10px">No trades for this period. Click "🔄 Sync BloFin" to fetch trades from exchange.</div>';
+    return;
+  }
+
+  const header = '<div style="display:grid;grid-template-columns:1.5fr 1.2fr 0.7fr 0.8fr 0.9fr 0.8fr 1fr 0.8fr;gap:8px;padding:10px 14px;font-size:8px;color:#5a7a68;font-family:\'Space Mono\',monospace;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.08)"><span>Date/Time (UTC)</span><span>Instrument</span><span>Side</span><span>Size</span><span>Price</span><span>Fee</span><span>Net P&L</span><span>Status</span></div>';
+
+  const rows = trades.map(t => {
+    const d = new Date(t.timestamp);
+    const dateStr = d.toISOString().replace('T', ' ').slice(0, 19);
+    const inst = (t.instrument || '').replace('-USDT', '');
+    const side = t.side || '';
+    const sideColor = side.toLowerCase().includes('buy') || side.toLowerCase().includes('long') ? '#00f5a0' : '#ff4d6d';
+    const sideIcon = side.toLowerCase().includes('buy') || side.toLowerCase().includes('long') ? '▲' : '▼';
+    const price = t.entryPrice && t.entryPrice !== '' ? '$' + parseFloat(t.entryPrice).toLocaleString(undefined, {maximumFractionDigits:4}) : '—';
+    const fee = t.fee ? '$' + Math.abs(parseFloat(t.fee)).toFixed(4) : '—';
+    const pnlNum = parseFloat(t.pnl || 0);
+    const pnlStr = pnlNum !== 0 ? (pnlNum >= 0 ? '+$' : '-$') + Math.abs(pnlNum).toFixed(2) : '—';
+    const pnlColor = pnlNum > 0 ? '#00f5a0' : pnlNum < 0 ? '#ff4d6d' : '#5a7a68';
+    const statusColor = t.status === 'filled' || t.status === 'closed' ? '#00f5a0' : t.status === 'canceled' ? '#ff4d6d' : '#f5c400';
+
+    return '<div style="display:grid;grid-template-columns:1.5fr 1.2fr 0.7fr 0.8fr 0.9fr 0.8fr 1fr 0.8fr;gap:8px;padding:8px 14px;font-size:10px;font-family:\'Space Mono\',monospace;border-bottom:1px solid rgba(255,255,255,0.03);border-left:3px solid ' + sideColor + '44">' +
+      '<span style="color:#888;font-size:9px">' + dateStr + '</span>' +
+      '<span style="color:#e0e0e0;font-weight:700">' + inst + '</span>' +
+      '<span style="color:' + sideColor + '">' + sideIcon + ' ' + side.toUpperCase() + '</span>' +
+      '<span style="color:#aaa">' + (t.size || '—') + '</span>' +
+      '<span style="color:#ddd">' + price + '</span>' +
+      '<span style="color:#ff4d6d;font-size:9px">' + fee + '</span>' +
+      '<span style="color:' + pnlColor + ';font-weight:700">' + pnlStr + '</span>' +
+      '<span style="color:' + statusColor + ';font-size:9px">' + (t.status || '') + '</span>' +
+    '</div>';
+  }).join('');
+
+  el.innerHTML = header + rows;
+}
+
+async function refreshTaxCache() {
+  const btn = event?.target;
+  if (btn) { btn.textContent = '⏳ Syncing...'; btn.disabled = true; }
+
+  try {
+    const [ordersR, fillsR] = await Promise.all([
+      fetch(LIVE_API + '/orders-history?limit=100', { headers: liveHeaders(), signal: AbortSignal.timeout(15000) }).catch(() => null),
+      fetch(LIVE_API + '/fills?limit=100', { headers: liveHeaders(), signal: AbortSignal.timeout(15000) }).catch(() => null),
+    ]);
+
+    let orders = [];
+    let fills = [];
+    if (ordersR?.ok) { const d = await ordersR.json(); orders = d.orders || d.data || []; }
+    if (fillsR?.ok) { const d = await fillsR.json(); fills = d.fills || d.data || []; }
+
+    if (orders.length === 0 && fills.length === 0) {
+      const histR = await fetch(LIVE_API + '/trade-history?limit=100', { headers: liveHeaders(), signal: AbortSignal.timeout(15000) }).catch(() => null);
+      if (histR?.ok) { const d = await histR.json(); orders = d.orders || d.trades || d.data || []; }
+    }
+
+    // Merge orders and fills by orderId
+    const merged = new Map();
+    for (const o of orders) {
+      const id = o.orderId || o.ordId || o.id || Math.random();
+      merged.set(id, { ...o, _source: 'order' });
+    }
+    for (const f of fills) {
+      const id = f.orderId || f.ordId || f.id || Math.random();
+      const existing = merged.get(id) || {};
+      merged.set(id, { ...existing, ...f, _source: 'fill' });
+    }
+
+    const allTrades = Array.from(merged.values());
+    const cached = mergeTradesToCache(allTrades);
+
+    if (typeof toast === 'function') toast('Synced ' + allTrades.length + ' trades from BloFin (' + cached.length + ' total cached)', 'success');
+  } catch(e) {
+    if (typeof toast === 'function') toast('Sync error: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.textContent = '🔄 Sync BloFin'; btn.disabled = false; }
+  }
+}
+
+function exportTaxCSV() {
+  const trades = getFilteredTaxTrades();
+  if (trades.length === 0) {
+    if (typeof toast === 'function') toast('No trades to export for selected period', 'error');
+    return;
+  }
+
+  const sel = document.getElementById('taxMonth');
+  const period = sel?.value || 'all';
+  const headers = ['Date (UTC)', 'Instrument', 'Side', 'Size', 'Entry Price', 'Fee (USDT)', 'Realized P&L (USDT)', 'Net P&L (USDT)', 'Status', 'Order ID', 'Leverage', 'Margin Mode'];
+
+  const rows = trades.map(t => {
+    const d = new Date(t.timestamp).toISOString().replace('T', ' ').slice(0, 19);
+    const fee = Math.abs(parseFloat(t.fee || 0));
+    const grossPnl = parseFloat(t.pnl || 0);
+    const netPnl = grossPnl - fee;
+    return [
+      d,
+      t.instrument || '',
+      (t.side || '').toUpperCase(),
+      t.size || '',
+      t.entryPrice || '',
+      fee.toFixed(4),
+      grossPnl.toFixed(4),
+      netPnl.toFixed(4),
+      t.status || '',
+      t.orderId || '',
+      t.leverage || '',
+      t.marginMode || '',
+    ].map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',');
+  });
+
+  // Summary rows at bottom
+  const totalGrossPnl = trades.reduce((s, t) => s + parseFloat(t.pnl || 0), 0);
+  const totalFees = trades.reduce((s, t) => s + Math.abs(parseFloat(t.fee || 0)), 0);
+  const totalNetPnl = totalGrossPnl - totalFees;
+  rows.push('');
+  rows.push('"SUMMARY"');
+  rows.push('"Total Trades","' + trades.length + '"');
+  rows.push('"Total Gross P&L (USDT)","' + totalGrossPnl.toFixed(4) + '"');
+  rows.push('"Total Fees (USDT)","' + totalFees.toFixed(4) + '"');
+  rows.push('"Total Net P&L (USDT)","' + totalNetPnl.toFixed(4) + '"');
+
+  const csv = headers.join(',') + '\n' + rows.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'blofin_trades_' + period + '_' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  if (typeof toast === 'function') toast('CSV downloaded: ' + trades.length + ' trades', 'success');
+}
+
+function exportTaxPDF() {
+  const trades = getFilteredTaxTrades();
+  if (trades.length === 0) {
+    if (typeof toast === 'function') toast('No trades to export for selected period', 'error');
+    return;
+  }
+
+  const sel = document.getElementById('taxMonth');
+  const period = sel?.value || 'all';
+  const periodLabel = sel?.selectedOptions?.[0]?.textContent || 'All Time';
+
+  const totalGrossPnl = trades.reduce((s, t) => s + parseFloat(t.pnl || 0), 0);
+  const totalFees = trades.reduce((s, t) => s + Math.abs(parseFloat(t.fee || 0)), 0);
+  const totalNetPnl = totalGrossPnl - totalFees;
+  const wins = trades.filter(t => parseFloat(t.pnl || 0) > 0);
+  const losses = trades.filter(t => parseFloat(t.pnl || 0) < 0);
+  const winRate = trades.length > 0 ? ((wins.length / trades.length) * 100).toFixed(1) : '0';
+
+  // Group by instrument
+  const byInst = {};
+  for (const t of trades) {
+    const inst = t.instrument || 'UNKNOWN';
+    if (!byInst[inst]) byInst[inst] = { count: 0, pnl: 0, fees: 0 };
+    byInst[inst].count++;
+    byInst[inst].pnl += parseFloat(t.pnl || 0);
+    byInst[inst].fees += Math.abs(parseFloat(t.fee || 0));
+  }
+
+  const instRows = Object.entries(byInst)
+    .sort((a, b) => b[1].pnl - a[1].pnl)
+    .map(([inst, d]) => `
+      <tr>
+        <td style="padding:6px 10px;border-bottom:1px solid #333;color:#e0e0e0;font-weight:700">${inst.replace('-USDT','')}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #333;text-align:center">${d.count}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #333;text-align:right;color:${d.pnl>=0?'#00c853':'#ff1744'}">${d.pnl>=0?'+':''}$${d.pnl.toFixed(2)}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #333;text-align:right;color:#ff9800">$${d.fees.toFixed(2)}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #333;text-align:right;color:${(d.pnl-d.fees)>=0?'#00c853':'#ff1744'}">${(d.pnl-d.fees)>=0?'+':''}$${(d.pnl-d.fees).toFixed(2)}</td>
+      </tr>
+    `).join('');
+
+  const tradeRows = trades.slice(0, 200).map(t => {
+    const d = new Date(t.timestamp).toISOString().replace('T',' ').slice(0,19);
+    const pnl = parseFloat(t.pnl||0);
+    const fee = Math.abs(parseFloat(t.fee||0));
+    const net = pnl - fee;
+    return `
+      <tr style="font-size:9px">
+        <td style="padding:4px 8px;border-bottom:1px solid #222">${d}</td>
+        <td style="padding:4px 8px;border-bottom:1px solid #222;font-weight:700">${(t.instrument||'').replace('-USDT','')}</td>
+        <td style="padding:4px 8px;border-bottom:1px solid #222;color:${t.side?.toLowerCase().includes('buy')||t.side?.toLowerCase().includes('long')?'#00c853':'#ff1744'}">${(t.side||'').toUpperCase()}</td>
+        <td style="padding:4px 8px;border-bottom:1px solid #222">${t.size||'—'}</td>
+        <td style="padding:4px 8px;border-bottom:1px solid #222">${t.entryPrice?'$'+parseFloat(t.entryPrice).toLocaleString(undefined,{maximumFractionDigits:4}):'—'}</td>
+        <td style="padding:4px 8px;border-bottom:1px solid #222;color:#ff9800">$${fee.toFixed(4)}</td>
+        <td style="padding:4px 8px;border-bottom:1px solid #222;color:${pnl>=0?'#00c853':'#ff1744'};font-weight:700">${pnl>=0?'+':''}$${pnl.toFixed(2)}</td>
+        <td style="padding:4px 8px;border-bottom:1px solid #222;color:${net>=0?'#00c853':'#ff1744'}">${net>=0?'+':''}$${net.toFixed(2)}</td>
+      </tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Trade Report — ${periodLabel}</title>
+    <style>
+      * { margin:0; padding:0; box-sizing:border-box; }
+      body { font-family: 'Courier New', monospace; background:#0a0a0a; color:#ccc; padding:40px; }
+      h1 { color:#a78bfa; font-size:22px; margin-bottom:4px; }
+      h2 { color:#ff6b35; font-size:14px; margin:24px 0 8px; text-transform:uppercase; letter-spacing:1px; }
+      .meta { color:#5a7a68; font-size:11px; margin-bottom:20px; }
+      .summary-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:24px; }
+      .card { background:#111; border:1px solid #333; border-radius:8px; padding:14px; text-align:center; }
+      .card .label { font-size:9px; color:#5a7a68; text-transform:uppercase; }
+      .card .value { font-size:20px; font-weight:700; margin-top:4px; }
+      table { width:100%; border-collapse:collapse; font-size:11px; }
+      th { padding:8px 10px; text-align:left; font-size:9px; color:#5a7a68; text-transform:uppercase; border-bottom:2px solid #333; }
+      .disclaimer { margin-top:30px; padding:12px; background:#111; border:1px solid #333; border-radius:6px; font-size:9px; color:#666; }
+      @media print { body { background:#fff; color:#000; } .card { border-color:#ddd; } th { border-color:#999; color:#666; } td { border-color:#eee !important; } }
+    </style></head><body>
+    <h1>📋 BloFin Trade Report</h1>
+    <div class="meta">Period: ${periodLabel} | Generated: ${new Date().toISOString().slice(0,19).replace('T',' ')} UTC | Trades: ${trades.length}</div>
+
+    <div class="summary-grid">
+      <div class="card"><div class="label">Total Trades</div><div class="value" style="color:#e0e0e0">${trades.length}</div></div>
+      <div class="card"><div class="label">Gross P&L</div><div class="value" style="color:${totalGrossPnl>=0?'#00c853':'#ff1744'}">${totalGrossPnl>=0?'+':''}$${totalGrossPnl.toFixed(2)}</div></div>
+      <div class="card"><div class="label">Total Fees</div><div class="value" style="color:#ff9800">$${totalFees.toFixed(2)}</div></div>
+      <div class="card"><div class="label">Net P&L</div><div class="value" style="color:${totalNetPnl>=0?'#00c853':'#ff1744'}">${totalNetPnl>=0?'+':''}$${totalNetPnl.toFixed(2)}</div></div>
+    </div>
+    <div class="summary-grid">
+      <div class="card"><div class="label">Win Rate</div><div class="value" style="color:${parseFloat(winRate)>=55?'#00c853':'#ff9800'}">${winRate}%</div></div>
+      <div class="card"><div class="label">Wins</div><div class="value" style="color:#00c853">${wins.length}</div></div>
+      <div class="card"><div class="label">Losses</div><div class="value" style="color:#ff1744">${losses.length}</div></div>
+      <div class="card"><div class="label">Avg Net P&L</div><div class="value" style="color:${totalNetPnl>=0?'#00c853':'#ff1744'}">${trades.length>0?((totalNetPnl/trades.length)>=0?'+':'')+'$'+Math.abs(totalNetPnl/trades.length).toFixed(2):'—'}</div></div>
+    </div>
+
+    <h2>Performance by Instrument</h2>
+    <table>
+      <tr><th>Instrument</th><th style="text-align:center">Trades</th><th style="text-align:right">Gross P&L</th><th style="text-align:right">Fees</th><th style="text-align:right">Net P&L</th></tr>
+      ${instRows}
+      <tr style="font-weight:700;border-top:2px solid #555">
+        <td style="padding:8px 10px;color:#a78bfa">TOTAL</td>
+        <td style="padding:8px 10px;text-align:center">${trades.length}</td>
+        <td style="padding:8px 10px;text-align:right;color:${totalGrossPnl>=0?'#00c853':'#ff1744'}">${totalGrossPnl>=0?'+':''}$${totalGrossPnl.toFixed(2)}</td>
+        <td style="padding:8px 10px;text-align:right;color:#ff9800">$${totalFees.toFixed(2)}</td>
+        <td style="padding:8px 10px;text-align:right;color:${totalNetPnl>=0?'#00c853':'#ff1744'}">${totalNetPnl>=0?'+':''}$${totalNetPnl.toFixed(2)}</td>
+      </tr>
+    </table>
+
+    <h2>Trade Details${trades.length>200?' (first 200)':''}</h2>
+    <table>
+      <tr><th>Date (UTC)</th><th>Instrument</th><th>Side</th><th>Size</th><th>Price</th><th>Fee</th><th>Gross P&L</th><th>Net P&L</th></tr>
+      ${tradeRows}
+    </table>
+
+    <div class="disclaimer">
+      <strong>Disclaimer:</strong> This report is generated from BloFin exchange data cached locally. Verify all figures against your exchange statements before filing taxes.
+      Consult a qualified tax professional for advice on cryptocurrency taxation in your jurisdiction. This is not financial or tax advice.
+    </div>
+  </body></html>`;
+
+  const w = window.open('', '_blank');
+  if (w) {
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => w.print(), 500);
+    if (typeof toast === 'function') toast('PDF report opened — use Print > Save as PDF', 'success');
+  } else {
+    if (typeof toast === 'function') toast('Pop-up blocked — allow pop-ups and try again', 'error');
+  }
+}
+
+// Auto-cache trades whenever BloFin History is loaded
+const _origRenderBlofinHistory = typeof renderBlofinHistory === 'function' ? renderBlofinHistory : null;
+
+// Initialize tax UI on page load
+document.addEventListener('DOMContentLoaded', () => { setTimeout(updateTaxUI, 1000); });
 
 function renderRecHistory(recs) {
   _lastRecsList = recs; // store for portfolio calc
