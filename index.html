@@ -2267,7 +2267,7 @@ function switchAuthView(view) {
         <div>
           <div class="intel-section-title" style="margin:0">🌙 Astro Cycles — Market Pattern Analysis</div>
           <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:4px">
-            Backtested BTC price impact around lunar phases, Mercury retrograde, eclipses &amp; planetary events · Pure pattern analysis, no belief required
+            Backtested BTC price impact around lunar phases, Mercury retrograde, eclipses &amp; planetary events · Correlations only — no peer-reviewed evidence supports predictive power · Tracked by some traders as sentiment markers
           </div>
         </div>
         <button onclick="runAstroAnalysis()" id="astroRefreshBtn"
@@ -10583,81 +10583,116 @@ function scoreCoın(coin, global, fg) {
   const vol24h   = coin.total_volume  || 0;
   const volMcap  = mcap > 0 ? vol24h / mcap : 0;
   const mcapRank = coin.market_cap_rank || 999;
-  const devScore = coin.developer_score     || 0;
-  const commScore= coin.community_data?.twitter_followers ? Math.min(100, coin.community_data.twitter_followers / 100000) : 0;
 
-  // ── Momentum (max 30) ─────────────────────────────────
+  // Fear & Greed context — adjusts expectations in bear vs bull markets
+  const fgVal = fg?.data?.[0] ? parseInt(fg.data[0].value) : 50;
+  const isBearEnv = fgVal < 35;
+  const isBullEnv = fgVal > 65;
+
+  // ── Momentum (max 25) ─────────────────────────────────
+  // Relative strength: how is this coin doing vs the market?
   let mom = 0;
-  // 7d momentum — positive but not overextended
-  if      (c7d > 20 && c7d < 80)  mom += 14;
-  else if (c7d > 5  && c7d < 20)  mom += 10;
-  else if (c7d > 0)                mom +=  5;
-  else if (c7d > -10)              mom +=  2;
+  // 7d momentum — context-aware (in bear market, flat is good)
+  if (isBearEnv) {
+    // Bear market: outperforming = positive, not bleeding = decent
+    if      (c7d > 10)               mom += 14;
+    else if (c7d > 0)                mom += 11;
+    else if (c7d > -5)               mom +=  8;  // holding up well
+    else if (c7d > -15)              mom +=  4;
+    else                             mom +=  1;
+  } else {
+    if      (c7d > 20 && c7d < 80)   mom += 14;
+    else if (c7d > 5  && c7d < 20)   mom += 10;
+    else if (c7d > 0)                mom +=  5;
+    else if (c7d > -10)              mom +=  2;
+  }
   // 30d trend
-  if      (c30d > 30)  mom += 10;
-  else if (c30d > 10)  mom +=  7;
-  else if (c30d > 0)   mom +=  4;
-  else if (c30d > -15) mom +=  1;
+  if      (c30d > 30)  mom += 8;
+  else if (c30d > 10)  mom += 6;
+  else if (c30d > 0)   mom += 4;
+  else if (c30d > -20) mom += 2;
   // Volume spike vs mcap
-  if      (volMcap > 0.15) mom += 6;
-  else if (volMcap > 0.05) mom += 3;
-  mom = Math.min(30, mom);
+  if      (volMcap > 0.15) mom += 3;
+  else if (volMcap > 0.05) mom += 2;
+  else if (volMcap > 0.02) mom += 1;
+  mom = Math.min(25, mom);
 
-  // ── Value (max 25) — how much upside is theoretically left ──
+  // ── Value (max 25) — recovery potential + relative activity ──
   let val = 0;
-  // Further from ATH = more theoretical upside (if quality coin)
-  if      (athPct < -90) val += 10;  // down 90%+ = major recovery play
-  else if (athPct < -70) val +=  8;
-  else if (athPct < -50) val +=  6;
-  else if (athPct < -30) val +=  4;
-  else if (athPct < -10) val +=  2;
-  else                   val +=  0;  // near ATH = less upside
-  // Vol/mcap ratio — high activity for market cap
-  if      (volMcap > 0.2)  val += 8;
-  else if (volMcap > 0.08) val += 5;
-  else if (volMcap > 0.03) val += 2;
-  // Market cap tier bonus (smaller = more upside potential)
-  if      (mcapRank > 50)  val += 7;
-  else if (mcapRank > 20)  val += 4;
+  // ATH distance = recovery upside potential
+  if      (athPct < -90) val += 10;
+  else if (athPct < -75) val +=  9;
+  else if (athPct < -60) val +=  7;
+  else if (athPct < -40) val +=  5;
+  else if (athPct < -20) val +=  3;
+  else                   val +=  1;  // near ATH still gets 1 pt
+  // Vol/mcap — shows active interest relative to size
+  if      (volMcap > 0.20) val += 8;
+  else if (volMcap > 0.10) val += 6;
+  else if (volMcap > 0.05) val += 4;
+  else if (volMcap > 0.02) val += 2;
+  // Smaller cap = more upside potential
+  if      (mcapRank > 80)  val += 7;
+  else if (mcapRank > 40)  val += 5;
+  else if (mcapRank > 20)  val += 3;
   else if (mcapRank > 10)  val += 2;
+  else                     val += 1;
   val = Math.min(25, val);
 
-  // ── Quality (max 25) — how good is the asset itself ──────
+  // ── Quality (max 25) — based on available CoinGecko data ──────
+  // Note: /coins/markets doesn't return developer_score or community_data
+  // So we use mcap rank, mcap size, volume consistency, and price stability
   let qual = 0;
-  // Market cap rank proxy for adoption
-  if      (mcapRank <= 5)  qual += 12;
-  else if (mcapRank <= 15) qual += 9;
-  else if (mcapRank <= 30) qual += 6;
-  else if (mcapRank <= 50) qual += 3;
-  // Dev score (CoinGecko)
-  qual += Math.round(devScore / 14);  // max ~7 pts from 100 dev score
-  // Community
-  qual += Math.min(6, Math.round(commScore / 17));
+  // Market cap rank — top coins have survived multiple cycles
+  if      (mcapRank <= 5)  qual += 14;
+  else if (mcapRank <= 10) qual += 12;
+  else if (mcapRank <= 20) qual += 10;
+  else if (mcapRank <= 35) qual +=  7;
+  else if (mcapRank <= 50) qual +=  5;
+  else                     qual +=  2;
+  // Absolute market cap — battle-tested project
+  if      (mcap > 50e9)  qual += 6;
+  else if (mcap > 10e9)  qual += 5;
+  else if (mcap > 2e9)   qual += 4;
+  else if (mcap > 500e6) qual += 2;
+  else                   qual += 1;
+  // Volume consistency — projects with healthy vol/mcap show real usage
+  if      (volMcap > 0.05 && volMcap < 0.5) qual += 5;  // healthy range
+  else if (volMcap > 0.02)                  qual += 3;
+  else                                      qual += 1;
   qual = Math.min(25, qual);
 
-  // ── Risk adjustment (max 20) — lower vol + larger mcap = safer ─
+  // ── Risk/Safety (max 25) — larger + less drawdown = safer ─
   let risk = 0;
-  // Large cap = lower risk = higher score
-  if      (mcap > 100e9)  risk += 10;
-  else if (mcap > 20e9)   risk += 8;
-  else if (mcap > 5e9)    risk += 5;
-  else if (mcap > 1e9)    risk += 3;
+  // Market cap tier
+  if      (mcap > 100e9) risk += 10;
+  else if (mcap > 30e9)  risk += 8;
+  else if (mcap > 10e9)  risk += 6;
+  else if (mcap > 2e9)   risk += 4;
+  else if (mcap > 500e6) risk += 2;
+  else                   risk += 1;
+  // ATH drawdown — less drawdown = currently stronger
+  if      (athPct > -15)  risk += 10;
+  else if (athPct > -35)  risk += 8;
+  else if (athPct > -55)  risk += 5;
+  else if (athPct > -75)  risk += 3;
   else                    risk += 1;
-  // Drawdown — very deep drawdown = higher risk
-  if      (athPct > -20)  risk += 10;
-  else if (athPct > -50)  risk += 7;
-  else if (athPct > -75)  risk += 4;
-  else                    risk += 1;
-  risk = Math.min(20, risk);
+  // 1h stability bonus — not flash crashing
+  if (Math.abs(c1h) < 2)  risk += 3;
+  else if (Math.abs(c1h) < 5)  risk += 2;
+  else                         risk += 0;
+  // Bear market bonus: in extreme fear, quality assets are accumulation plays
+  if (isBearEnv && mcapRank <= 20) risk += 2;
+  risk = Math.min(25, risk);
 
   const rrScore = mom + val + qual + risk;
 
-  // ── Signal ───────────────────────────────────────────────
+  // ── Signal — calibrated so bear markets still differentiate coins ──
   let signal = 'NEUTRAL', signalColor = '#aaa';
-  if (rrScore >= 75) { signal = 'STRONG BUY';  signalColor = '#00f5a0'; }
-  else if (rrScore >= 62) { signal = 'BUY';    signalColor = '#63b3ed'; }
-  else if (rrScore >= 50) { signal = 'WATCH';  signalColor = '#f5c400'; }
-  else if (rrScore >= 38) { signal = 'HOLD';   signalColor = '#aaa'; }
+  if (rrScore >= 72) { signal = 'STRONG BUY';  signalColor = '#00f5a0'; }
+  else if (rrScore >= 58) { signal = 'BUY';    signalColor = '#63b3ed'; }
+  else if (rrScore >= 45) { signal = 'WATCH';  signalColor = '#f5c400'; }
+  else if (rrScore >= 32) { signal = 'HOLD';   signalColor = '#aaa'; }
   else                    { signal = 'AVOID';  signalColor = '#ff4d6d'; }
 
   const sector = COIN_SECTORS[coin.id] || { s:'other', label:'Other', color:'#888' };
@@ -10770,7 +10805,36 @@ function computeCyclePosition(global, coins) {
     ? `ATH→bottom avg 383d → ${fmtD(projBotFromATH)} (currently Day ${daysSinceATH2024} from ATH)`
     : '';
 
-  return { daysSince, cyclePct, phase, phaseColor, nextMilestone, phaseDesc, historicalNote, btcDom, totalMcap, bottomProjection, athBottomNote };
+  // ── Determine cycle DIRECTION (bull vs bear) to match Market Cycle Dashboard ──
+  // Uses ATH drawdown, fear/greed, halving phase, and BTC dominance
+  const btcCoin = Array.isArray(coins) ? coins.find(c => c.id === 'bitcoin') : null;
+  const athDrawdown = btcCoin?.ath_change_percentage || 0; // negative = below ATH
+  const deepDD = athDrawdown < -40;
+  const nearATH = athDrawdown > -20;
+  const postPeakPhase = daysSince >= 560;
+  const preRallyPhase = daysSince < 450;
+
+  const bearSignals = (deepDD ? 1 : 0) + (postPeakPhase ? 1 : 0) + (btcDom > 60 ? 1 : 0);
+  const bullSignals = (nearATH ? 1 : 0) + (preRallyPhase ? 1 : 0) + (btcDom < 50 ? 1 : 0);
+  const isBearMarket = bearSignals >= 2 || (bearSignals >= 1 && bullSignals === 0);
+  const isBullMarket = bullSignals >= 2 || (bullSignals >= 1 && bearSignals === 0);
+  const direction = isBearMarket ? 'bear' : isBullMarket ? 'bull' : 'neutral';
+
+  // Map phase + direction to directional label (matching Market Cycle Dashboard)
+  let dirLabel;
+  if (direction === 'bear') {
+    if (daysSince < 270) dirLabel = 'Early Bear';
+    else if (daysSince < 560) dirLabel = 'Mid Bear';
+    else dirLabel = 'Late Bear';
+  } else if (direction === 'bull') {
+    if (daysSince < 270) dirLabel = 'Early Bull';
+    else if (daysSince < 450) dirLabel = 'Mid Bull';
+    else dirLabel = 'Late Bull';
+  } else {
+    dirLabel = 'Transitional';
+  }
+
+  return { daysSince, cyclePct, phase, phaseColor, nextMilestone, phaseDesc, historicalNote, btcDom, totalMcap, bottomProjection, athBottomNote, direction, dirLabel };
 }
 
 // ── Render overview ────────────────────────────────────────
@@ -10803,14 +10867,32 @@ function renderOverview() {
       <div class="intel-kpi-sub">${k.sub}</div>
     </div>`).join('');
 
-  // Cycle meter
+  // Cycle meter — with directional label matching Market Cycle Dashboard
   $('cycleNeedle').style.left = cycle.cyclePct + '%';
+  const dirColor = cycle.direction === 'bear' ? '#ff4d6d' : cycle.direction === 'bull' ? '#00f5a0' : '#f5c400';
+  const dirIcon = cycle.direction === 'bear' ? '🐻' : cycle.direction === 'bull' ? '🐂' : '⚖️';
   $('cycleSummary').innerHTML = `
-    <span style="color:${cycle.phaseColor};font-weight:700">${cycle.phase}</span><br>
+    <span style="color:${cycle.phaseColor};font-weight:700">${cycle.phase}</span>
+    <span style="margin-left:8px;padding:2px 8px;background:${dirColor}22;border:1px solid ${dirColor}44;border-radius:4px;font-size:8px;color:${dirColor};font-weight:700">${dirIcon} ${cycle.dirLabel}</span><br>
     Day <b>${cycle.daysSince}</b> post-halving (Apr 20, 2024) · ${cycle.nextMilestone}<br>
     <span style="color:#aaa;font-size:8px">${cycle.phaseDesc || ''}</span><br>
     <span style="color:#3a5a48;font-size:7px">${cycle.historicalNote || ''}</span>
     ${cycle.athBottomNote ? `<br><span style="color:#a78bfa;font-size:7px">📐 ${cycle.athBottomNote}</span>` : ''}`;
+
+  // News Sentiment — use Fear & Greed as proxy on overview (backend sentiment updates on News tab)
+  const fgProxy = fg?.data?.[0] ? parseInt(fg.data[0].value) : null;
+  if (fgProxy !== null) {
+    const sentScore = fgProxy - 50; // -50 to +50 range
+    const sentLabel = fgProxy < 25 ? 'Extreme Fear' : fgProxy < 40 ? 'Fear' : fgProxy < 55 ? 'Neutral' : fgProxy < 75 ? 'Greed' : 'Extreme Greed';
+    const sentColor = fgProxy < 25 ? '#ff4d6d' : fgProxy < 40 ? '#ff6b35' : fgProxy < 55 ? '#f5c400' : fgProxy < 75 ? '#63b3ed' : '#00f5a0';
+    const sentEl = $('newsSentimentValue');
+    const sentLbl = $('newsSentimentLabel');
+    if (sentEl) { sentEl.textContent = (sentScore > 0 ? '+' : '') + sentScore; sentEl.style.color = sentColor; }
+    if (sentLbl) { sentLbl.textContent = sentLabel; sentLbl.style.color = sentColor; }
+  } else {
+    const sentLbl = $('newsSentimentLabel');
+    if (sentLbl) { sentLbl.textContent = 'No data'; sentLbl.style.color = '#5a7a68'; }
+  }
 
   // Fear & Greed
   if (fg?.data?.[0]) {
@@ -10878,9 +10960,9 @@ function renderOverview() {
     { label:'Market Sentiment', value: fg?.data?.[0]?.value_classification || '?', color: fgVal2 > 60 ? '#00f5a0' : fgVal2 > 40 ? '#f5c400' : '#ff4d6d' },
     { label:'Best 7d performers', value: topGainers.map(c => `${c.symbol?.toUpperCase()} +${c.c7d?.toFixed(0)}%`).join(', '), color: '#00f5a0' },
     { label:'Worst 7d performers', value: topLosers.map(c => `${c.symbol?.toUpperCase()} ${c.c7d?.toFixed(0)}%`).join(', '), color: '#ff4d6d' },
-    { label:'Cycle tailwind', value: cycle.daysSince < 450 ? '✅ Within historical bull window' : cycle.daysSince < 560 ? '⚠️ Inside historical peak zone (Day 367–548 prior peaks)' : '🔴 Past all historical peak windows — Day 367/526/548', color: cycle.daysSince < 450 ? '#00f5a0' : cycle.daysSince < 560 ? '#ff6b35' : '#ff4d6d' },
-    { label:'ETF / Institutional', value: (ETF_STATE.loaded && ETF_STATE.data) ? (() => { const d = Array.isArray(ETF_STATE.data) ? ETF_STATE.data : []; const last7 = d.slice(-7); const net7 = last7.reduce((s,x) => s + parseFloat(x.totalNetFlow ?? x.netFlow ?? x.value ?? x.flow ?? 0), 0); return net7 > 500 ? '🟢 Strong ETF inflows (7d)' : net7 > 0 ? '🟡 Mild ETF inflows (7d)' : net7 > -300 ? '⚪ Mixed ETF flows (7d)' : '🔴 ETF outflows (7d)'; })() : 'Data not loaded', color: (ETF_STATE.loaded && ETF_STATE.data) ? '#63b3ed' : '#888' },
-    { label:'⚠️ Standing risks', value: 'Macro: Fed policy, geopolitical uncertainty, regulatory (static reminder)', color: '#888' },
+    { label:'Cycle tailwind', value: (cycle.dirLabel ? cycle.dirLabel + ' · ' : '') + (cycle.daysSince < 450 ? '✅ Within historical bull window' : cycle.daysSince < 560 ? '⚠️ Inside historical peak zone (Day 367–548)' : '🔴 Past all historical peak windows'), color: cycle.daysSince < 450 ? '#00f5a0' : cycle.daysSince < 560 ? '#ff6b35' : '#ff4d6d' },
+    { label:'ETF / Institutional', value: (ETF_STATE.loaded && ETF_STATE.data) ? (() => { const d = Array.isArray(ETF_STATE.data) ? ETF_STATE.data : []; const last7 = d.slice(-7); const net7 = last7.reduce((s,x) => s + parseFloat(x.totalNetFlow ?? x.netFlow ?? x.value ?? x.flow ?? 0), 0); return net7 > 500 ? '🟢 Strong ETF inflows (7d)' : net7 > 0 ? '🟡 Mild ETF inflows (7d)' : net7 > -300 ? '⚪ Mixed ETF flows (7d)' : '🔴 ETF outflows (7d)'; })() : 'Add API key in ETF Flows tab to load', color: (ETF_STATE.loaded && ETF_STATE.data) ? '#63b3ed' : '#5a7a68' },
+    { label:'⚠️ Standing risks', value: fgVal2 < 25 ? 'Extreme fear — capitulation risk, potential forced selling' : fgVal2 < 40 ? 'Elevated fear — risk-off environment, potential further downside' : fgVal2 > 75 ? 'Extreme greed — correction risk elevated, consider hedging' : 'Macro: Fed policy, geopolitical uncertainty, regulatory', color: fgVal2 < 25 ? '#ff4d6d' : fgVal2 < 40 ? '#ff6b35' : fgVal2 > 75 ? '#ff6b35' : '#888' },
   ];
   $('macroSignals').innerHTML = macroRows.map(r => `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04);gap:8px">
@@ -13434,51 +13516,69 @@ async function loadEtfFlows() {
   if (msg) msg.textContent = 'Fetching ' + etfCurrentAsset.toUpperCase() + ' ETF flow data...';
 
   try {
-    const url = 'https://api.coinglass.com/api/etf/' + etfCurrentAsset + '/flow-chart';
-    const res = await fetch(url, { headers: { 'accept': 'application/json,*/*' } });
-
     let flowData = null;
-    if (res.ok) {
-      const json = await res.json();
-      if (json?.data) flowData = json.data;
+
+    // Strategy 1: SoSoValue free API (free tier, 20 req/min)
+    const sosoKey = localStorage.getItem('sosovalue_api_key') || '';
+    if (sosoKey) {
+      try {
+        const asset = etfCurrentAsset === 'bitcoin' ? 'btc' : etfCurrentAsset === 'ethereum' ? 'eth' : etfCurrentAsset;
+        const url = `https://openapi.sosovalue.com/soso/v1/etf/${asset}/flows?days=30`;
+        const res = await fetch(url, { headers: { 'x-soso-api-key': sosoKey, 'accept': 'application/json' }, signal: AbortSignal.timeout(8000) });
+        if (res.ok) { const json = await res.json(); if (json?.data) flowData = json.data; }
+      } catch {}
     }
 
-    // Fallback: try allorigins proxy
+    // Strategy 2: CoinGlass open API (requires key)
     if (!flowData) {
-      const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-      const r2 = await fetch(proxy);
-      if (r2.ok) {
-        const j2 = await r2.json();
-        if (j2?.data) flowData = j2.data;
+      const cgKey = localStorage.getItem('coinglass_api_key') || '';
+      if (cgKey) {
+        try {
+          const url = 'https://open-api.coinglass.com/public/v2/etf/' + etfCurrentAsset + '/flow-total';
+          const res = await fetch(url, { headers: { 'coinglassSecret': cgKey, 'accept': 'application/json' }, signal: AbortSignal.timeout(8000) });
+          if (res.ok) { const json = await res.json(); if (json?.data) flowData = json.data; }
+        } catch {}
       }
+    }
+
+    // Strategy 3: Try CORS proxies with CoinGlass web endpoint
+    if (!flowData) {
+      const cgUrl = 'https://www.coinglass.com/api/etf/' + etfCurrentAsset + '/flow-chart';
+      const proxies = [
+        raw => `https://api.allorigins.win/raw?url=${encodeURIComponent(raw)}`,
+        raw => `https://corsproxy.io/?${encodeURIComponent(raw)}`,
+      ];
+      for (const mkProxy of proxies) {
+        if (flowData) break;
+        try {
+          const r = await fetch(mkProxy(cgUrl), { signal: AbortSignal.timeout(8000) });
+          if (r.ok) { const j = await r.json(); if (j?.data) flowData = j.data; }
+        } catch {}
+      }
+    }
+
+    // Strategy 4: Backend proxy (if available)
+    if (!flowData && BACKEND_URL && BACKEND_URL !== 'http://localhost:3001') {
+      try {
+        const token = localStorage.getItem('dash_token') || '';
+        const r = await fetch(BACKEND_URL + '/etf/flows?asset=' + etfCurrentAsset, {
+          headers: { 'Authorization': 'Bearer ' + token },
+          signal: AbortSignal.timeout(8000)
+        });
+        if (r.ok) { const j = await r.json(); if (j?.data) flowData = j.data; }
+      } catch {}
     }
 
     if (flowData) {
       ETF_STATE.data   = flowData;
       ETF_STATE.loaded = true;
       renderEtfFlows(flowData);
-    } else if (etfCurrentAsset === 'bitcoin') {
-      renderEtfFlowsFallback();
     } else {
-      // No data available for this asset
-      const msgEl = $('etfChartMsg');
-      if (msgEl) { msgEl.style.display = 'flex'; msgEl.innerHTML = '<span style="color:#f5c400">⚠️ No ETF data available for ' + etfCurrentAsset.toUpperCase() + ' yet. <a href="https://www.coinglass.com/' + etfCurrentAsset + '-etf" target="_blank" style="color:#63b3ed">Check CoinGlass ↗</a></span>'; }
-      $('etfToday')?.replaceChildren(document.createTextNode('—'));
-      $('etf7d')?.replaceChildren(document.createTextNode('—'));
-      $('etf30d')?.replaceChildren(document.createTextNode('—'));
-      $('etfSignal')?.replaceChildren(document.createTextNode('—'));
-      const issuerEl = $('etfIssuerBreakdown');
-      if (issuerEl) issuerEl.innerHTML = '<div style="text-align:center;padding:16px;color:#5a7a68">No issuer data available for ' + etfCurrentAsset.toUpperCase() + ' ETFs</div>';
-      if (ETF_STATE.chart) { try { ETF_STATE.chart.destroy(); } catch {} ETF_STATE.chart = null; }
+      renderEtfFlowsFallback();
     }
   } catch (e) {
     console.warn('[ETF] Fetch failed:', e.message);
-    if (etfCurrentAsset === 'bitcoin') {
-      renderEtfFlowsFallback();
-    } else {
-      const msgEl = $('etfChartMsg');
-      if (msgEl) { msgEl.style.display = 'flex'; msgEl.textContent = 'Failed to load ' + etfCurrentAsset.toUpperCase() + ' ETF data.'; }
-    }
+    renderEtfFlowsFallback();
   } finally {
     ETF_STATE.loading = false;
     if (btn) { btn.textContent = '🔄'; btn.disabled = false; }
@@ -13513,24 +13613,46 @@ function renderEtfFlows(data) {
 }
 
 function renderEtfFlowsFallback() {
-  // Show clear error state instead of fake data when API is unavailable
   const todayEl = $('etfToday'), d7El = $('etf7d'), d30El = $('etf30d'), sigEl = $('etfSignal');
   if (todayEl) { todayEl.textContent = '—'; todayEl.style.color = '#5a7a68'; }
   if (d7El)    { d7El.textContent = '—';    d7El.style.color = '#5a7a68'; }
   if (d30El)   { d30El.textContent = '—';   d30El.style.color = '#5a7a68'; }
-  if (sigEl)   { sigEl.textContent = 'Data unavailable'; sigEl.style.color = '#888'; }
+  if (sigEl)   { sigEl.textContent = 'See sources below'; sigEl.style.color = '#888'; }
 
   const msg = $('etfChartMsg');
   if (msg) {
     msg.style.display = 'flex';
-    msg.innerHTML = '<span style="color:#ff6b35">⚠️ Unable to load ETF flow data. CoinGlass API may require an API key. <a href="https://www.coinglass.com/btc-etf" target="_blank" style="color:#63b3ed">View on CoinGlass ↗</a></span>';
+    msg.style.flexDirection = 'column';
+    msg.style.gap = '10px';
+    msg.style.alignItems = 'center';
+    const savedKey = localStorage.getItem('coinglass_api_key') || '';
+    msg.innerHTML = `
+      <span style="color:#ff6b35;font-size:9px">⚠️ ETF flow APIs require authentication. Add a free API key below to load live data.</span>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <input id="sosoApiKeyInput" type="text" placeholder="SoSoValue API key (recommended, free)" value="${localStorage.getItem('sosovalue_api_key')||''}"
+          style="font-size:8px;font-family:'Space Mono',monospace;padding:4px 8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#aaa;border-radius:4px;width:200px">
+        <button onclick="localStorage.setItem('sosovalue_api_key',document.getElementById('sosoApiKeyInput').value);ETF_STATE.loaded=false;loadEtfFlows()"
+          style="font-size:8px;font-family:'Space Mono',monospace;padding:4px 10px;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:4px;cursor:pointer;white-space:nowrap">Save & Load</button>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <input id="cgApiKeyInput" type="text" placeholder="CoinGlass API key (alternative)" value="${savedKey}"
+          style="font-size:8px;font-family:'Space Mono',monospace;padding:4px 8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#aaa;border-radius:4px;width:200px">
+        <button onclick="localStorage.setItem('coinglass_api_key',document.getElementById('cgApiKeyInput').value);ETF_STATE.loaded=false;loadEtfFlows()"
+          style="font-size:8px;font-family:'Space Mono',monospace;padding:4px 10px;background:rgba(99,179,237,0.15);border:1px solid rgba(99,179,237,0.3);color:#63b3ed;border-radius:4px;cursor:pointer;white-space:nowrap">Save & Load</button>
+      </div>
+      <div style="display:flex;gap:12px;font-size:8px">
+        <a href="https://sosovalue.com/assets/etf/us-btc-spot" target="_blank" style="color:#63b3ed">SoSoValue ETF ↗</a>
+        <a href="https://www.coinglass.com/bitcoin-etf" target="_blank" style="color:#63b3ed">CoinGlass BTC ETF ↗</a>
+        <a href="https://farside.co.uk/btc/" target="_blank" style="color:#63b3ed">Farside Investors ↗</a>
+        <a href="https://openapi.sosovalue.com" target="_blank" style="color:#5a7a68">Get SoSoValue key (free) ↗</a>
+        <a href="https://docs.coinglass.com" target="_blank" style="color:#5a7a68">Get CoinGlass key ↗</a>
+      </div>`;
   }
 
-  // Destroy old chart if exists
   if (ETF_STATE.chart) { try { ETF_STATE.chart.destroy(); } catch {} ETF_STATE.chart = null; }
 
   const issuerEl = $('etfIssuerBreakdown');
-  if (issuerEl) issuerEl.innerHTML = '<div style="text-align:center;padding:16px;color:#5a7a68">ETF issuer data unavailable</div>';
+  if (issuerEl) issuerEl.innerHTML = '<div style="text-align:center;padding:16px;color:#5a7a68">Add a CoinGlass API key above to load issuer data</div>';
 }
 
 function updateEtfSummary(series) {
