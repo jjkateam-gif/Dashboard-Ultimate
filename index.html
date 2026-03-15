@@ -2700,6 +2700,18 @@ function switchAuthView(view) {
         </div>
       </div>
 
+      <!-- Per-Timeframe Rules -->
+      <details id="tfRulesDetails" style="margin-bottom:14px">
+        <summary style="cursor:pointer;font-size:10px;color:#a78bfa;font-family:'Space Mono',monospace;font-weight:700;margin-bottom:8px;user-select:none">
+          ⚙️ PER-TIMEFRAME RULES <span style="color:#5a7a68;font-weight:400">— customize min prob & quality per TF</span>
+        </summary>
+        <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:8px">
+          Override global settings for specific timeframes. Unchecked TFs use global defaults above. Disabled TFs won't auto-trade.
+        </div>
+        <div id="tfRulesGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px">
+        </div>
+      </details>
+
       <!-- Confirm Button -->
       <button id="autoTradeConfirmBtn" onclick="confirmAutoTradeSettings()" style="width:100%;font-size:12px;padding:10px 20px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;transition:all 0.2s" onmouseenter="this.style.background='rgba(255,107,53,0.25)'" onmouseleave="this.style.background='rgba(255,107,53,0.15)'">
         ✅ Save & Apply Settings
@@ -14296,19 +14308,36 @@ function _renderCalibrationChart(stats, activeTF) {
   const chartEl = document.getElementById('scanCalibrationChart');
   if (!chartEl) return;
 
-  // Get buckets — either filtered by TF or all
-  const buckets = activeTF ? _getBucketsForTF(activeTF) : stats.buckets;
+  // Get buckets — filtered by TF, regime, or quality
+  let buckets = activeTF ? _getBucketsForTF(activeTF) : stats.buckets;
+  if (window._calActiveRegime || window._calActiveMQ) {
+    buckets = _getBucketsFiltered(window._calActiveRegime, window._calActiveMQ, activeTF);
+  }
   const bars = _buildBucketBars(buckets);
-  const filterLabel = activeTF ? `<span style="color:#ff6b35"> (${activeTF} only)</span>` : ' <span style="color:#5a7a68">(all timeframes)</span>';
+  const filters = [];
+  if (activeTF) filters.push(activeTF);
+  if (window._calActiveRegime) filters.push(window._calActiveRegime);
+  if (window._calActiveMQ) filters.push('Grade ' + window._calActiveMQ);
+  const filterLabel = filters.length > 0 ? `<span style="color:#ff6b35"> (${filters.join(' · ')})</span>` : ' <span style="color:#5a7a68">(all timeframes)</span>';
+  const hasAnyFilter = activeTF || window._calActiveRegime || window._calActiveMQ;
 
-  // Breakdown rows for regime, MQ
-  const regimeRows = Object.entries(stats.byRegime).map(([regime, d]) =>
-    `<span style="color:${regime === 'bull' ? '#00f5a0' : regime === 'bear' ? '#ff4d6d' : '#f5c400'}">${regime}: ${(d.wins/d.total*100).toFixed(0)}% (${d.total})</span>`
-  ).join(' · ');
+  // Breakdown rows for regime, MQ (clickable)
+  const activeRegime = window._calActiveRegime || null;
+  const activeMQ = window._calActiveMQ || null;
 
-  const mqRows = Object.entries(stats.byMQ).sort((a,b) => a[0].localeCompare(b[0])).map(([mq, d]) =>
-    `<span style="color:${mq === 'A' ? '#00f5a0' : mq === 'B' ? '#f5c400' : '#ff8c69'}">${mq}: ${(d.wins/d.total*100).toFixed(0)}% (${d.total})</span>`
-  ).join(' · ');
+  const regimeRows = Object.entries(stats.byRegime).map(([regime, d]) => {
+    const isActive = activeRegime === regime;
+    const color = regime === 'bull' ? '#00f5a0' : regime === 'bear' ? '#ff4d6d' : '#f5c400';
+    const border = isActive ? `border-bottom:2px solid ${color};padding-bottom:2px` : 'border-bottom:2px solid transparent;padding-bottom:2px';
+    return `<span onclick="_filterCalibrationByRegime('${regime}')" style="color:${color};cursor:pointer;${border};font-weight:${isActive ? '800' : '400'};transition:all 0.2s" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">${regime}: ${(d.wins/d.total*100).toFixed(0)}% (${d.total})</span>`;
+  }).join(' · ');
+
+  const mqRows = Object.entries(stats.byMQ).sort((a,b) => a[0].localeCompare(b[0])).map(([mq, d]) => {
+    const isActive = activeMQ === mq;
+    const color = mq === 'A' ? '#00f5a0' : mq === 'B' ? '#f5c400' : '#ff8c69';
+    const border = isActive ? `border-bottom:2px solid ${color};padding-bottom:2px` : 'border-bottom:2px solid transparent;padding-bottom:2px';
+    return `<span onclick="_filterCalibrationByMQ('${mq}')" style="color:${color};cursor:pointer;${border};font-weight:${isActive ? '800' : '400'};transition:all 0.2s" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">${mq}: ${(d.wins/d.total*100).toFixed(0)}% (${d.total})</span>`;
+  }).join(' · ');
 
   // Build TF breakdown grid (clickable cards)
   const allTFs = ['5m', '15m', '30m', '1h', '4h', '1d'];
@@ -14343,7 +14372,7 @@ function _renderCalibrationChart(stats, activeTF) {
           <div style="font-size:11px;font-weight:700;color:#a78bfa;font-family:'Space Mono',monospace">📊 CALIBRATION: PREDICTED vs ACTUAL WIN RATE${filterLabel}</div>
           <div style="font-size:8px;color:#3a5a48;font-family:'Space Mono',monospace;margin-top:2px">✓ = well-calibrated (actual within ±10% of predicted) · ⚠ = miscalibrated</div>
         </div>
-        ${activeTF ? '<button onclick="_filterCalibrationByTF(null)" style="font-size:8px;padding:4px 10px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:4px;cursor:pointer;font-family:\'Space Mono\',monospace;font-weight:700;width:auto;margin:0">Show All</button>' : ''}
+        ${hasAnyFilter ? '<button onclick="_clearCalibrationFilters()" style="font-size:8px;padding:4px 10px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:4px;cursor:pointer;font-family:\'Space Mono\',monospace;font-weight:700;width:auto;margin:0">Clear Filters</button>' : ''}
       </div>
       <div style="display:flex;gap:8px;align-items:flex-end;padding:12px 0;min-height:80px">${bars}</div>
       <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:12px;margin-top:10px">
@@ -14351,8 +14380,8 @@ function _renderCalibrationChart(stats, activeTF) {
         <div data-tf-grid style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px">${tfCards}</div>
       </div>
       <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:8px;font-size:9px;font-family:'Space Mono',monospace">
-        <div style="margin-bottom:4px"><span style="color:#5a7a68">By Regime:</span> ${regimeRows || '<span style="color:#3a5a48">No data</span>'}</div>
-        <div><span style="color:#5a7a68">By Quality:</span> ${mqRows || '<span style="color:#3a5a48">No data</span>'}</div>
+        <div style="margin-bottom:4px"><span style="color:#5a7a68">By Regime:</span> ${regimeRows || '<span style="color:#3a5a48">No data</span>'} <span style="color:#3a5a48;font-size:7px">— click to filter</span></div>
+        <div><span style="color:#5a7a68">By Quality:</span> ${mqRows || '<span style="color:#3a5a48">No data</span>'} <span style="color:#3a5a48;font-size:7px">— click to filter</span></div>
       </div>
     </div>
   `;
@@ -14365,6 +14394,50 @@ function _filterCalibrationByTF(tf) {
   _renderCalibrationChart(window._calStats, window._calActiveTF);
   // Also fetch server data for this TF
   _fetchAndMergeServerTFStats(window._calStats);
+}
+
+// Click handler: filter calibration bars by regime
+function _filterCalibrationByRegime(regime) {
+  if (!window._calStats) return;
+  window._calActiveRegime = (regime === window._calActiveRegime) ? null : regime;
+  _renderCalibrationChart(window._calStats, window._calActiveTF);
+}
+
+// Click handler: filter calibration bars by quality grade
+function _filterCalibrationByMQ(mq) {
+  if (!window._calStats) return;
+  window._calActiveMQ = (mq === window._calActiveMQ) ? null : mq;
+  _renderCalibrationChart(window._calStats, window._calActiveTF);
+}
+
+// Clear all calibration filters
+function _clearCalibrationFilters() {
+  window._calActiveTF = null;
+  window._calActiveRegime = null;
+  window._calActiveMQ = null;
+  if (window._calStats) _renderCalibrationChart(window._calStats, null);
+}
+
+// Get filtered buckets by regime and/or quality grade (and optionally TF)
+function _getBucketsFiltered(regime, mq, tf) {
+  try {
+    const log = JSON.parse(localStorage.getItem('dash_scanLog') || '[]');
+    const resolved = log.filter(e => e.outcome === 'win' || e.outcome === 'loss');
+    const buckets = {};
+    for (const e of resolved) {
+      if (tf && e.timeframe !== tf) continue;
+      if (regime && e.regime !== regime) continue;
+      if (mq && e.marketQuality !== mq) continue;
+      const prob = e.probability || e.winProb;
+      if (!prob) continue;
+      const bucket = Math.floor(prob / 10) * 10;
+      const key = bucket + '-' + (bucket + 10);
+      if (!buckets[key]) buckets[key] = { predicted: bucket + 5, total: 0, wins: 0 };
+      buckets[key].total++;
+      if (e.outcome === 'win') buckets[key].wins++;
+    }
+    return buckets;
+  } catch { return {}; }
 }
 
 // Render scan history UI
@@ -14410,6 +14483,8 @@ function renderScanHistory() {
   // Store stats globally for TF filtering
   window._calStats = stats;
   window._calActiveTF = null;
+  window._calActiveRegime = null;
+  window._calActiveMQ = null;
 
   // Calibration chart — probability bucket accuracy
   const chartEl = document.getElementById('scanCalibrationChart');
@@ -16731,6 +16806,75 @@ function toggleAutoTrade() {
   }
 }
 
+// Render per-TF rules grid
+function renderTFRulesGrid(savedRules) {
+  const grid = document.getElementById('tfRulesGrid');
+  if (!grid) return;
+  const rules = savedRules || {};
+  const allTFs = ['5m', '15m', '30m', '1h', '4h', '1d'];
+  const globalMin = parseInt($('autoTradeMinProb')?.value || 70);
+
+  grid.innerHTML = allTFs.map(tf => {
+    const rule = rules[tf] || {};
+    const hasRule = rule.enabled !== undefined || rule.minProb || rule.minQuality;
+    const isEnabled = rule.enabled !== false; // default: enabled
+    const minProb = rule.minProb || globalMin;
+    const minQuality = rule.minQuality || '';
+    const borderColor = !isEnabled ? 'rgba(255,77,109,0.3)' : hasRule ? 'rgba(167,139,250,0.4)' : 'rgba(255,255,255,0.08)';
+    const bgColor = !isEnabled ? 'rgba(255,77,109,0.04)' : hasRule ? 'rgba(167,139,250,0.04)' : 'rgba(0,0,0,0.3)';
+
+    return `<div style="background:${bgColor};border:1px solid ${borderColor};border-radius:6px;padding:10px;font-family:'Space Mono',monospace">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-weight:700;color:#ff6b35;font-size:12px">${tf}</span>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:8px;color:${isEnabled ? '#00f5a0' : '#ff4d6d'}">
+          <input type="checkbox" data-tf-enabled="${tf}" ${isEnabled ? 'checked' : ''} style="accent-color:#00f5a0;width:14px;height:14px" onchange="this.closest('div').querySelector('[data-tf-enabled]').checked ? this.parentElement.style.color='#00f5a0' : this.parentElement.style.color='#ff4d6d'">
+          ${isEnabled ? 'ON' : 'OFF'}
+        </label>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div>
+          <label style="font-size:7px;color:#5a7a68;display:block;margin-bottom:2px">MIN PROB %</label>
+          <input type="number" data-tf-prob="${tf}" value="${minProb}" min="25" max="95" step="5"
+            style="width:100%;font-size:11px;padding:5px 6px;background:#0a1a10;border:1px solid rgba(167,139,250,0.2);color:#a78bfa;border-radius:4px;font-family:'Space Mono',monospace;box-sizing:border-box;font-weight:700">
+        </div>
+        <div>
+          <label style="font-size:7px;color:#5a7a68;display:block;margin-bottom:2px">MIN QUALITY</label>
+          <select data-tf-quality="${tf}" style="width:100%;font-size:11px;padding:5px 6px;background:#0a1a10;border:1px solid rgba(167,139,250,0.2);color:#a78bfa;border-radius:4px;font-family:'Space Mono',monospace;box-sizing:border-box;font-weight:700">
+            <option value="" ${minQuality === '' ? 'selected' : ''}>Any</option>
+            <option value="C" ${minQuality === 'C' ? 'selected' : ''}>C+</option>
+            <option value="B" ${minQuality === 'B' ? 'selected' : ''}>B+</option>
+            <option value="A" ${minQuality === 'A' ? 'selected' : ''}>A only</option>
+          </select>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Collect per-TF rules from the UI
+function collectTFRules() {
+  const allTFs = ['5m', '15m', '30m', '1h', '4h', '1d'];
+  const rules = {};
+  for (const tf of allTFs) {
+    const enabledEl = document.querySelector(`[data-tf-enabled="${tf}"]`);
+    const probEl = document.querySelector(`[data-tf-prob="${tf}"]`);
+    const qualityEl = document.querySelector(`[data-tf-quality="${tf}"]`);
+    if (!enabledEl) continue; // grid not rendered yet
+
+    const enabled = enabledEl.checked;
+    const minProb = parseInt(probEl?.value || 70);
+    const minQuality = qualityEl?.value || '';
+
+    // Only store if it differs from defaults or is explicitly disabled
+    if (!enabled || minProb || minQuality) {
+      rules[tf] = { enabled };
+      if (minProb) rules[tf].minProb = minProb;
+      if (minQuality) rules[tf].minQuality = minQuality;
+    }
+  }
+  return rules;
+}
+
 // Confirm & save auto-trade settings
 function confirmAutoTradeSettings() {
   const on = $('autoTradeEnabled')?.checked;
@@ -16739,8 +16883,11 @@ function confirmAutoTradeSettings() {
   const size = $('autoTradeSize')?.value || 100;
   const maxOpen = $('autoTradeMaxOpen')?.value || 3;
 
+  // Collect per-TF rules
+  const tfRules = collectTFRules();
+
   // Save to localStorage
-  localStorage.setItem('dash_autoTrade', JSON.stringify({ on, mode, minProb, size, maxOpen }));
+  localStorage.setItem('dash_autoTrade', JSON.stringify({ on, mode, minProb, size, maxOpen, tfRules }));
 
   // Sync to backend server-side scanner (runs 24/7 even when browser is closed)
   const tf = $('probeTimeframe')?.value || '4h';
@@ -16748,7 +16895,7 @@ function confirmAutoTradeSettings() {
   fetch((window.CBP_BACKEND || 'http://localhost:3001') + '/best-trades/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('dash_token') },
-    body: JSON.stringify({ enabled: on, mode, timeframe: tf, minProb: parseInt(minProb), tradeSizeUsd: parseFloat(size), maxOpen: parseInt(maxOpen), leverage: lev }),
+    body: JSON.stringify({ enabled: on, mode, timeframe: tf, minProb: parseInt(minProb), tradeSizeUsd: parseFloat(size), maxOpen: parseInt(maxOpen), leverage: lev, tfRules }),
   }).then(r => r.json()).then(d => {
     if (d.success) console.log('[AutoTrade] Settings synced to server — scanner runs 24/7');
     else console.warn('[AutoTrade] Server sync failed:', d.error);
@@ -16790,11 +16937,26 @@ function loadAutoTradeSettings() {
     if (saved.minProb && $('autoTradeMinProb')) $('autoTradeMinProb').value = saved.minProb;
     if (saved.size && $('autoTradeSize')) $('autoTradeSize').value = saved.size;
     if (saved.maxOpen && $('autoTradeMaxOpen')) $('autoTradeMaxOpen').value = saved.maxOpen;
+    // Load per-TF rules grid
+    if (saved.tfRules && typeof saved.tfRules === 'object') {
+      renderTFRulesGrid(saved.tfRules);
+    } else {
+      renderTFRulesGrid({});
+    }
     toggleAutoTrade();
     // Auto-start background scan if auto-trade was previously enabled
     if (saved.on) {
       setTimeout(() => startAutoScanTimer(), 5000); // 5s delay to let page finish loading
     }
+    // Also try to load server-side settings (which may have tfRules set by another session)
+    fetch((window.CBP_BACKEND || 'http://localhost:3001') + '/best-trades/settings', {
+      headers: { 'Authorization': 'Bearer ' + localStorage.getItem('dash_token') },
+    }).then(r => r.json()).then(d => {
+      const serverRules = d && (d.tfRules || d.tf_rules);
+      if (serverRules && typeof serverRules === 'object' && Object.keys(serverRules).length > 0) {
+        renderTFRulesGrid(serverRules);
+      }
+    }).catch(() => {});
   } catch (e) {}
 }
 

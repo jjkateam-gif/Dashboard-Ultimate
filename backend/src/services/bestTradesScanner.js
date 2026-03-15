@@ -48,6 +48,9 @@ const ALL_TIMEFRAMES = ['5m', '15m', '30m', '1h', '4h', '1d'];
 
 const TRADING_FEE_PCT = 0.06; // BloFin taker fee per side
 
+// Quality grade ordering for per-TF min quality filters
+const QUALITY_ORDER = { 'A': 3, 'B': 2, 'C': 1, 'No-Trade': 0 };
+
 // ══════════════════════════════════════════════════════════════
 // INDICATOR HELPERS (ported from frontend)
 // ══════════════════════════════════════════════════════════════
@@ -498,6 +501,7 @@ class BestTradesScanner {
       tradeSizeUsd: 100,
       maxOpen: 3,
       leverage: 1,
+      tfRules: {},  // Per-TF overrides: { "5m": { enabled: true, minProb: 60, minQuality: "B" }, ... }
     };
     this.scanTimers = {};       // { '5m': timer, '15m': timer, ... }
     this.lastResults = [];      // combined results across all TFs
@@ -724,6 +728,18 @@ class BestTradesScanner {
   async _processAutoTrades(results, tf) {
     if (this.settings.mode !== 'auto') return;
 
+    // Check per-TF rule: if this TF is explicitly disabled, skip
+    const tfRule = this.settings.tfRules[tf];
+    if (tfRule && tfRule.enabled === false) {
+      console.log(`[BestTrades] Auto-trade: ${tf} disabled by per-TF rule — skipping`);
+      return;
+    }
+
+    // Per-TF thresholds (fallback to global settings)
+    const minProb = (tfRule && tfRule.minProb) || this.settings.minProb;
+    const minQuality = (tfRule && tfRule.minQuality) || null;
+    const minConfidence = (tfRule && tfRule.minConfidence) || null;
+
     // Clean stale trade dedup keys (expire after 30 min for short TFs, 4h for long TFs)
     const dedupeExpiry = ['5m', '15m', '30m'].includes(tf) ? 30 * 60_000 : 4 * 60 * 60_000;
     const now = Date.now();
@@ -732,11 +748,19 @@ class BestTradesScanner {
       if (ts && now - parseInt(ts) > dedupeExpiry) this.recentTrades.delete(key);
     }
 
-    // Filter qualifying setups
+    // Filter qualifying setups using per-TF rules
     const qualifying = results.filter(r => {
-      if (r.prob < this.settings.minProb) return false;
+      if (r.prob < minProb) return false;
       if (r.marketQuality === 'No-Trade') return false;
-      if (r.confidence === 'Low') return false;
+      // Per-TF minimum quality grade filter
+      if (minQuality && (QUALITY_ORDER[r.marketQuality] || 0) < (QUALITY_ORDER[minQuality] || 0)) return false;
+      // Confidence filter: per-TF or global (default: skip Low)
+      if (minConfidence) {
+        const confOrder = { 'High': 3, 'Medium': 2, 'Low': 1 };
+        if ((confOrder[r.confidence] || 0) < (confOrder[minConfidence] || 0)) return false;
+      } else {
+        if (r.confidence === 'Low') return false;
+      }
       if (r.entryEfficiency === 'Chasing') return false;
       if (r.ev <= 0) return false;
 
@@ -901,7 +925,8 @@ class BestTradesScanner {
         this.settings.tradeSizeUsd = parseFloat(row.trade_size_usd) || 100;
         this.settings.maxOpen = row.max_open || 3;
         this.settings.leverage = row.leverage || 1;
-        console.log(`[BestTrades] Settings loaded from DB: enabled=${this.settings.enabled}, tf=${this.settings.timeframe}`);
+        this.settings.tfRules = row.tf_rules || {};
+        console.log(`[BestTrades] Settings loaded from DB: enabled=${this.settings.enabled}, tf=${this.settings.timeframe}, tfRules=${JSON.stringify(this.settings.tfRules)}`);
       }
     } catch (e) {
       console.warn('[BestTrades] Settings load error:', e.message);
@@ -912,13 +937,14 @@ class BestTradesScanner {
     if (!pool) return;
     try {
       await pool.query(
-        `INSERT INTO best_trades_settings (id, enabled, mode, timeframe, min_prob, trade_size_usd, max_open, leverage, updated_at)
-         VALUES (1, $1, $2, $3, $4, $5, $6, $7, NOW())
+        `INSERT INTO best_trades_settings (id, enabled, mode, timeframe, min_prob, trade_size_usd, max_open, leverage, tf_rules, updated_at)
+         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, NOW())
          ON CONFLICT (id) DO UPDATE SET
            enabled=$1, mode=$2, timeframe=$3, min_prob=$4,
-           trade_size_usd=$5, max_open=$6, leverage=$7, updated_at=NOW()`,
+           trade_size_usd=$5, max_open=$6, leverage=$7, tf_rules=$8, updated_at=NOW()`,
         [this.settings.enabled, this.settings.mode, this.settings.timeframe,
-         this.settings.minProb, this.settings.tradeSizeUsd, this.settings.maxOpen, this.settings.leverage]
+         this.settings.minProb, this.settings.tradeSizeUsd, this.settings.maxOpen, this.settings.leverage,
+         JSON.stringify(this.settings.tfRules || {})]
       );
     } catch (e) {
       console.warn('[BestTrades] Settings save error:', e.message);

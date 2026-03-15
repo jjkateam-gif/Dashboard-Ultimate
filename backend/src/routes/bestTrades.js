@@ -18,7 +18,7 @@ router.get('/settings', async (req, res) => {
 // POST /best-trades/settings — update settings (syncs from frontend)
 router.post('/settings', async (req, res) => {
   try {
-    const { enabled, mode, timeframe, minProb, tradeSizeUsd, maxOpen, leverage } = req.body;
+    const { enabled, mode, timeframe, minProb, tradeSizeUsd, maxOpen, leverage, tfRules } = req.body;
     const update = {};
     if (enabled !== undefined) update.enabled = !!enabled;
     if (mode && ['confirm', 'auto'].includes(mode)) update.mode = mode;
@@ -27,6 +27,7 @@ router.post('/settings', async (req, res) => {
     if (tradeSizeUsd) update.tradeSizeUsd = parseFloat(tradeSizeUsd);
     if (maxOpen) update.maxOpen = parseInt(maxOpen);
     if (leverage) update.leverage = parseInt(leverage);
+    if (tfRules && typeof tfRules === 'object') update.tfRules = tfRules;
 
     const settings = await scanner.updateSettings(update);
     res.json({ success: true, settings });
