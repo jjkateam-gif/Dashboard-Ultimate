@@ -61,7 +61,7 @@ router.get('/results', (req, res) => {
   });
 });
 
-// GET /best-trades/stats — win rates broken down by timeframe, confidence, quality, regime
+// GET /best-trades/stats — win rates broken down by timeframe, confidence, quality, regime + Sharpe
 router.get('/stats', async (req, res) => {
   try {
     const filters = {};
@@ -69,6 +69,9 @@ router.get('/stats', async (req, res) => {
     if (req.query.regime) filters.regime = req.query.regime;
     if (req.query.market_quality) filters.market_quality = req.query.market_quality;
     const stats = await scanner.getStats(filters);
+    // Attach leverage risk / Sharpe data from scanner status
+    const status = scanner.getStatus();
+    stats.leverageRisk = status.leverageRisk || {};
     res.json(stats);
   } catch (err) {
     console.error('[BestTrades] Stats error:', err);
@@ -111,6 +114,30 @@ router.get('/history', async (req, res) => {
       total: parseInt(countResult.rows[0].total),
       limit, offset,
     });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /best-trades/history-all — fetch ALL history for distribution chart (#25 fix)
+// Returns only outcome/probability/pnl for lightweight full-dataset queries
+router.get('/history-all', async (req, res) => {
+  try {
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+    if (req.query.outcome === 'pending') { conditions.push('outcome IS NULL'); }
+    else if (req.query.outcome === 'win' || req.query.outcome === 'loss') { conditions.push(`outcome = $${idx++}`); params.push(req.query.outcome); }
+    else if (req.query.outcome === 'all') { /* no filter */ }
+    const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+    const result = await pool.query(
+      `SELECT id, asset, direction, probability, confidence, market_quality, rr_ratio, regime, timeframe,
+              outcome, pnl, entry_price, stop_price, target_price, stop_pct, target_pct, executed, created_at, resolved_at
+       FROM best_trades_log ${where}
+       ORDER BY created_at DESC LIMIT 5000`,
+      params
+    );
+    res.json({ history: result.rows, total: result.rows.length });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }

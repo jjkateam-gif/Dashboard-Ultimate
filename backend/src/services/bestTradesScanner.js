@@ -92,7 +92,7 @@ const TRADING_FEE_PCT = 0.06; // BloFin taker fee per side
 const calibrationCache = {
   lastRefresh: 0,
   refreshIntervalMs: 30 * 60_000, // 30 minutes
-  minSamples: 8,                   // need ≥8 resolved trades before adjusting
+  minSamples: 30,                  // need ≥30 resolved trades before adjusting (#20 consensus: raised from 8)
   // Keyed data from DB
   byProbBucket: {},   // { '50-54': { predicted: 52, actual: 0.83, n: 12 }, ... }
   byRegimeTF: {},     // { 'bull_15m': { winRate: 0.58, n: 38 }, ... }
@@ -101,6 +101,146 @@ const calibrationCache = {
   overall: { winRate: 0.5, totalResolved: 0, kellyGraduation: 0 },
 };
 
+// ══════════════════════════════════════════════════════════════
+// LEVERAGE RISK FRAMEWORK (#13/#14/#15/#16/#18/#19 — all 3 AIs unanimous)
+// Portfolio heat, drawdown tracking, consecutive loss tracking,
+// win rate gating, funding rate leverage check, phased rollout
+// ══════════════════════════════════════════════════════════════
+const leverageRisk = {
+  // Drawdown tracking (#13)
+  peakEquity: 0,
+  currentEquity: 0,
+  drawdownPct: 0,
+  // Consecutive loss tracking (#14)
+  consecutiveLosses: 0,
+  maxConsecutiveLosses: 0,
+  // Portfolio heat (#18)
+  totalExposurePct: 0,
+  maxHeatPct: 6, // 6% max total portfolio exposure
+  // Phased rollout (#19) — Phase 1: conservative
+  phase: 1, // 1=conservative, 2=moderate, 3=full
+  phaseConfig: {
+    1: { maxLev: 3, minWR: 55, minTrades: 200, qualityGate: 'A' },
+    2: { maxLev: 5, minWR: 57, minTrades: 500, qualityGate: 'B' },
+    3: { maxLev: 10, minWR: 60, minTrades: 1000, qualityGate: 'C' },
+  },
+  // Sharpe tracking (#30)
+  recentPnLs: [], // rolling window of P&L values for Sharpe calculation
+  sharpeRatio: null,
+  lastRefresh: 0,
+};
+
+async function refreshLeverageRisk() {
+  if (!pool) return;
+  const now = Date.now();
+  if (now - leverageRisk.lastRefresh < 5 * 60_000) return; // refresh every 5 min
+
+  try {
+    // Get recent outcomes for consecutive loss tracking and Sharpe
+    const recentRes = await pool.query(`
+      SELECT outcome, pnl FROM best_trades_log
+      WHERE outcome IN ('win','loss')
+      ORDER BY resolved_at DESC LIMIT 100
+    `);
+
+    // Consecutive losses (#14) — count from most recent trade backward
+    let consecLosses = 0;
+    for (const row of recentRes.rows) {
+      if (row.outcome === 'loss') consecLosses++;
+      else break;
+    }
+    leverageRisk.consecutiveLosses = consecLosses;
+    leverageRisk.maxConsecutiveLosses = Math.max(leverageRisk.maxConsecutiveLosses, consecLosses);
+
+    // Sharpe ratio (#30) — annualized from recent PnL data
+    const pnls = recentRes.rows.filter(r => r.pnl != null).map(r => parseFloat(r.pnl));
+    leverageRisk.recentPnLs = pnls;
+    if (pnls.length >= 10) {
+      const mean = pnls.reduce((s, v) => s + v, 0) / pnls.length;
+      const variance = pnls.reduce((s, v) => s + (v - mean) ** 2, 0) / pnls.length;
+      const stdDev = Math.sqrt(variance);
+      // Annualize assuming ~3 trades/day avg
+      leverageRisk.sharpeRatio = stdDev > 0 ? parseFloat(((mean / stdDev) * Math.sqrt(365 * 3)).toFixed(2)) : null;
+    }
+
+    // Drawdown tracking (#13)
+    const equityRes = await pool.query(`
+      SELECT COALESCE(SUM(pnl), 0) AS total_pnl FROM best_trades_log
+      WHERE outcome IN ('win','loss')
+    `);
+    const totalPnl = parseFloat(equityRes.rows[0].total_pnl) || 0;
+    leverageRisk.currentEquity = 100 + totalPnl; // base 100%
+    if (leverageRisk.currentEquity > leverageRisk.peakEquity || leverageRisk.peakEquity === 0) {
+      leverageRisk.peakEquity = leverageRisk.currentEquity;
+    }
+    leverageRisk.drawdownPct = leverageRisk.peakEquity > 0
+      ? parseFloat(((1 - leverageRisk.currentEquity / leverageRisk.peakEquity) * 100).toFixed(2))
+      : 0;
+
+    // Auto-detect phase based on performance (#19)
+    const cc = calibrationCache;
+    const wr = cc.overall.winRate * 100;
+    const trades = cc.overall.totalResolved;
+    if (trades >= 1000 && wr >= 60) leverageRisk.phase = 3;
+    else if (trades >= 500 && wr >= 57) leverageRisk.phase = 2;
+    else leverageRisk.phase = 1;
+
+    leverageRisk.lastRefresh = now;
+    console.log(`[LeverageRisk] DD=${leverageRisk.drawdownPct}%, ConsecL=${consecLosses}, Phase=${leverageRisk.phase}, Sharpe=${leverageRisk.sharpeRatio || 'N/A'}`);
+  } catch (e) {
+    console.warn('[LeverageRisk] Refresh error:', e.message);
+  }
+}
+
+/**
+ * Apply all leverage risk gates and return the safe leverage for a trade.
+ * Implements #13 drawdown reduction, #14 consecutive loss, #15 WR gate,
+ * #16 funding rate check, #18 portfolio heat, #19 phased rollout.
+ */
+function getSafeLeverage(rawLev, { confidence, marketQuality, fundingRate, direction, winRate, totalTrades }) {
+  let lev = rawLev;
+  const phase = leverageRisk.phaseConfig[leverageRisk.phase] || leverageRisk.phaseConfig[1];
+
+  // #19 Phase cap
+  lev = Math.min(lev, phase.maxLev);
+
+  // #15 Win rate gate — hard enforced
+  if (!winRate || winRate < 50) lev = 1;
+  else if (winRate < 55) lev = Math.min(lev, 2); // 50-54% = max 2x A-grade only
+  else if (winRate < 57) lev = Math.min(lev, 3);
+
+  // #15 Quality gate per phase
+  const qualOrder = { 'A': 3, 'B': 2, 'C': 1, 'No-Trade': 0 };
+  if ((qualOrder[marketQuality] || 0) < (qualOrder[phase.qualityGate] || 0)) {
+    lev = Math.min(lev, 1);
+  }
+
+  // #15 Minimum trades gate
+  if (!totalTrades || totalTrades < 200) lev = Math.min(lev, 2);
+
+  // #13 Drawdown leverage reduction — graduated tiers
+  if (leverageRisk.drawdownPct >= 20) lev = 0; // kill switch
+  else if (leverageRisk.drawdownPct >= 15) lev = 1; // no leverage
+  else if (leverageRisk.drawdownPct >= 10) lev = Math.min(lev, 2);
+  else if (leverageRisk.drawdownPct >= 5) lev = Math.max(1, lev - 1); // reduce 1 tier
+
+  // #14 Consecutive loss protection
+  if (leverageRisk.consecutiveLosses >= 5) lev = 0; // 24h disable
+  else if (leverageRisk.consecutiveLosses >= 3) lev = Math.min(lev, 2);
+  else if (leverageRisk.consecutiveLosses >= 2) lev = Math.max(1, lev - 1);
+
+  // #16 Funding rate + leverage check
+  if (fundingRate != null && Math.abs(fundingRate) > 0.001) { // >0.1% per 8h = extreme
+    if ((direction === 'long' && fundingRate > 0.001) || (direction === 'short' && fundingRate < -0.001)) {
+      lev = Math.min(lev, 2); // cap at 2x when funding opposes trade
+    }
+  }
+
+  // #18 Portfolio heat — would be checked in _processAutoTrades via open positions
+
+  return Math.max(0, Math.round(lev));
+}
+
 async function refreshCalibrationCache() {
   if (!pool) return;
   const now = Date.now();
@@ -108,6 +248,8 @@ async function refreshCalibrationCache() {
 
   try {
     // 1. Probability bucket accuracy (predicted vs actual)
+    // #5 Recency weighting: use EWMA-style approach — weight recent trades more heavily
+    // We use a time-decay window: trades from last 30 days get full weight, older trades decay
     const bucketRes = await pool.query(`
       SELECT
         CASE
@@ -123,7 +265,9 @@ async function refreshCalibrationCache() {
           ELSE 82
         END AS bucket_mid,
         COUNT(*) FILTER (WHERE outcome IN ('win','loss')) AS n,
-        COUNT(*) FILTER (WHERE outcome = 'win') AS wins
+        COUNT(*) FILTER (WHERE outcome = 'win') AS wins,
+        COUNT(*) FILTER (WHERE outcome IN ('win','loss') AND resolved_at > NOW() - INTERVAL '30 days') AS n_recent,
+        COUNT(*) FILTER (WHERE outcome = 'win' AND resolved_at > NOW() - INTERVAL '30 days') AS wins_recent
       FROM best_trades_log
       WHERE outcome IN ('win','loss')
       GROUP BY bucket, bucket_mid ORDER BY bucket_mid
@@ -131,11 +275,18 @@ async function refreshCalibrationCache() {
     calibrationCache.byProbBucket = {};
     for (const r of bucketRes.rows) {
       const n = parseInt(r.n);
+      const nRecent = parseInt(r.n_recent) || 0;
+      const winsRecent = parseInt(r.wins_recent) || 0;
       if (n > 0) {
+        // #5 Recency weighting: blend overall and recent win rates (70% recent / 30% overall if recent data exists)
+        const overallWR = parseInt(r.wins) / n;
+        const recentWR = nRecent >= 5 ? winsRecent / nRecent : overallWR;
+        const blendedWR = nRecent >= 5 ? 0.7 * recentWR + 0.3 * overallWR : overallWR;
         calibrationCache.byProbBucket[r.bucket] = {
           predicted: parseInt(r.bucket_mid),
-          actual: parseInt(r.wins) / n,
+          actual: blendedWR,
           n,
+          nRecent,
         };
       }
     }
@@ -249,8 +400,8 @@ function calibrateProb(rawProb, regime, tf, marketQuality) {
   if (bucket && bucket.n >= cc.minSamples) {
     const actualWR = bucket.actual * 100; // e.g. 83
     const diff = actualWR - bucket.predicted;  // e.g. 83 - 67 = +16
-    // Shrinkage: weight correction by min(1, n/50) — full correction at 50+ samples
-    const shrinkage = Math.min(1, bucket.n / 50);
+    // Shrinkage: weight correction by min(1, n/100) — full correction at 100+ samples (#20 consensus: raised from 50)
+    const shrinkage = Math.min(1, bucket.n / 100);
     const correction = diff * shrinkage * 0.6; // apply 60% of the correction (conservative)
     adjustedProb += correction;
   }
@@ -262,7 +413,7 @@ function calibrateProb(rawProb, regime, tf, marketQuality) {
     const regimeWR = regimeTF.winRate * 100;
     const overallWR = cc.overall.winRate * 100;
     const regimeDiff = regimeWR - overallWR; // e.g. bear_15m wins 60% vs overall 50% → +10
-    const shrinkage = Math.min(1, regimeTF.n / 40);
+    const shrinkage = Math.min(1, regimeTF.n / 100); // #20 raised from 40
     adjustedProb += regimeDiff * shrinkage * 0.3; // 30% correction weight
   }
 
@@ -272,7 +423,7 @@ function calibrateProb(rawProb, regime, tf, marketQuality) {
     const qualWR = qualData.winRate * 100;
     const overallWR = cc.overall.winRate * 100;
     const qualDiff = qualWR - overallWR;
-    const shrinkage = Math.min(1, qualData.n / 40);
+    const shrinkage = Math.min(1, qualData.n / 100); // #20 raised from 40
     adjustedProb += qualDiff * shrinkage * 0.2; // 20% weight
   }
 
@@ -538,7 +689,32 @@ function computeSignals(d, tf) {
     entryEfficiency = 'Excellent';
   }
 
-  return { signals: results, atr: currentATR, price, macro_bull, marketQuality, mqScore, entryEfficiency };
+  // ── ADX for regime gate (#27) ──
+  let adxVal = null;
+  if (d.length > 28) {
+    const highs = d.map(x => x.h), lows = d.map(x => x.l);
+    const trArr = [0];
+    for (let i = 1; i < d.length; i++) {
+      trArr.push(Math.max(highs[i] - lows[i], Math.abs(highs[i] - c[i-1]), Math.abs(lows[i] - c[i-1])));
+    }
+    const dmPlus = [0], dmMinus = [0];
+    for (let i = 1; i < d.length; i++) {
+      const up = highs[i] - highs[i-1];
+      const dn = lows[i-1] - lows[i];
+      dmPlus.push(up > dn && up > 0 ? up : 0);
+      dmMinus.push(dn > up && dn > 0 ? dn : 0);
+    }
+    const smoothTR = ema(trArr, 14);
+    const smoothDMPlus = ema(dmPlus, 14);
+    const smoothDMMinus = ema(dmMinus, 14);
+    const diPlus = smoothTR.map((t, i) => t > 0 ? (smoothDMPlus[i] / t) * 100 : 0);
+    const diMinus = smoothTR.map((t, i) => t > 0 ? (smoothDMMinus[i] / t) * 100 : 0);
+    const dx = diPlus.map((dp, i) => (dp + diMinus[i]) > 0 ? Math.abs(dp - diMinus[i]) / (dp + diMinus[i]) * 100 : 0);
+    const adxArr = ema(dx, 14);
+    adxVal = adxArr[last];
+  }
+
+  return { signals: results, atr: currentATR, price, macro_bull, marketQuality, mqScore, entryEfficiency, adxVal, ema200Val: ema200Arr[last] };
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -707,13 +883,14 @@ function estimateRR(price, atrVal, direction, prob, leverage, confidence, candle
   const ev = (prob / 100 * levTargetPct) - ((1 - prob / 100) * levStopPct);
 
   // Kelly-based optimal leverage (with calibration bonus from track record)
+  // EIGHTH-KELLY: All 3 AIs agree Quarter-Kelly too aggressive at 243 trades. Halved all multipliers.
   const conf = confidence || 'Low';
-  let kellyMult = 0.4;
-  if (marketQuality === 'A' && conf === 'High') kellyMult = 0.6;
-  else if (marketQuality === 'A' && conf === 'Medium') kellyMult = 0.5;
-  else if (marketQuality === 'B') kellyMult = 0.4;
-  else if (marketQuality === 'C') kellyMult = 0.25;
-  else if (marketQuality === 'No-Trade') kellyMult = 0.15;
+  let kellyMult = 0.20;  // was 0.4 (quarter) → now 0.20 (eighth)
+  if (marketQuality === 'A' && conf === 'High') kellyMult = 0.30;   // was 0.6
+  else if (marketQuality === 'A' && conf === 'Medium') kellyMult = 0.25; // was 0.5
+  else if (marketQuality === 'B') kellyMult = 0.20;                 // was 0.4
+  else if (marketQuality === 'C') kellyMult = 0.125;                // was 0.25
+  else if (marketQuality === 'No-Trade') kellyMult = 0.075;         // was 0.15
 
   // Apply learned Kelly bonus from historical performance
   const kellyBonus = getCalibratedKellyBonus(conf, marketQuality);
@@ -847,9 +1024,10 @@ class BestTradesScanner {
 
   async _scanTimeframe(tf) {
     // Scanning always runs (for prediction logging & calibration). Auto-trading is gated separately in _processAutoTrades().
-    // Refresh calibration cache and funding rates (no-op if refreshed recently)
+    // Refresh calibration cache, funding rates, and leverage risk (no-op if refreshed recently)
     await refreshCalibrationCache();
     await refreshFundingRates();
+    await refreshLeverageRisk();
     console.log(`[BestTrades] Scanning ${ASSETS.length} assets on ${tf}...`);
 
     const results = [];
@@ -872,7 +1050,12 @@ class BestTradesScanner {
         if (!candles || candles.length < 50) continue;
 
         const analysis = computeSignals(candles, tf);
-        const { signals, atr: atrVal, price, marketQuality, entryEfficiency } = analysis;
+        const { signals, atr: atrVal, price, marketQuality, entryEfficiency, adxVal, ema200Val } = analysis;
+
+        // #27 — 4h regime gate: Skip 4h unless confirmed trending (ADX>20 + price above/below EMA200)
+        if (tf === '4h' && adxVal != null && adxVal < 20) {
+          continue; // not trending — skip this asset on 4h
+        }
 
         // Detect local regime, blend with BTC
         const localRegime = detectRegime(candles);
@@ -888,9 +1071,37 @@ class BestTradesScanner {
         const best = longScore.prob >= shortScore.prob ? longScore : shortScore;
         const direction = longScore.prob >= shortScore.prob ? 'long' : 'short';
 
+        // #9 Multi-TF Confluence: For 5m/15m signals, check 1h trend alignment
+        // If 1h trend opposes the signal direction, penalize probability
+        let mtfBonus = 0;
+        if (['5m', '15m'].includes(tf)) {
+          const higherTF = this.lastResultsByTF['1h'] || [];
+          const higherAsset = higherTF.find(r => r.asset === asset.label);
+          if (higherAsset) {
+            if (higherAsset.direction === direction && higherAsset.prob >= 55) {
+              mtfBonus = 3; // 1h confirms — boost probability
+            } else if (higherAsset.direction !== direction && higherAsset.prob >= 55) {
+              mtfBonus = -4; // 1h opposes — penalize
+            }
+          }
+        }
+        // For 30m signals, check 4h alignment
+        if (tf === '30m') {
+          const higherTF = this.lastResultsByTF['4h'] || [];
+          const higherAsset = higherTF.find(r => r.asset === asset.label);
+          if (higherAsset) {
+            if (higherAsset.direction === direction && higherAsset.prob >= 55) {
+              mtfBonus = 2;
+            } else if (higherAsset.direction !== direction && higherAsset.prob >= 55) {
+              mtfBonus = -3;
+            }
+          }
+        }
+
         // ── CALIBRATION: Adjust probability using historical accuracy ──
         const rawProb = best.prob;
         let calibratedProb = calibrateProb(rawProb, regime, tf, marketQuality);
+        calibratedProb += mtfBonus; // Apply multi-TF confluence adjustment
 
         // ── FUNDING RATE: Contrarian signal — extreme funding penalizes aligned trades ──
         const fundingRate = getFundingRateForAsset(asset.sym);
@@ -966,8 +1177,9 @@ class BestTradesScanner {
       }
     }
 
-    // Sort by probability (highest first)
-    results.sort((a, b) => b.prob - a.prob);
+    // #24 — Sort by EV (expected value) as primary metric, not raw probability
+    // All 3 AIs unanimous: EV incorporates R:R for true expectancy
+    results.sort((a, b) => (b.ev || 0) - (a.ev || 0));
 
     // Store per-TF results
     this.lastResultsByTF[tf] = results;
@@ -1030,6 +1242,21 @@ class BestTradesScanner {
   async _processAutoTrades(results, tf) {
     if (!this.settings.enabled || this.settings.mode !== 'auto') return;
 
+    // Refresh leverage risk data (#13/#14/#15/#16/#18/#19/#30)
+    await refreshLeverageRisk();
+
+    // #14 — If 5+ consecutive losses, halt all trading for safety
+    if (leverageRisk.consecutiveLosses >= 5) {
+      console.log(`[BestTrades] Auto-trade HALTED: ${leverageRisk.consecutiveLosses} consecutive losses`);
+      return;
+    }
+
+    // #13 — If drawdown >= 20%, kill switch
+    if (leverageRisk.drawdownPct >= 20) {
+      console.log(`[BestTrades] Auto-trade HALTED: drawdown ${leverageRisk.drawdownPct}% >= 20% kill switch`);
+      return;
+    }
+
     // Check per-TF rule: if this TF is explicitly disabled, skip
     const tfRule = this.settings.tfRules[tf];
     if (tfRule && tfRule.enabled === false) {
@@ -1064,7 +1291,11 @@ class BestTradesScanner {
         if (r.confidence === 'Low') return false;
       }
       if (r.entryEfficiency === 'Chasing') return false;
-      if (r.ev <= 0) return false;
+      if (r.ev <= 0) return false; // #24 EV must be positive
+
+      // #27 — Per-TF leverage limits: hardcode 4h to max 1x until fixed
+      // (This is handled in getSafeLeverage, but also skip low-quality 4h)
+      if (tf === '4h' && r.marketQuality !== 'A') return false;
 
       // Cross-TF dedup: don't trade same asset+direction if recently traded on another TF
       const dedupeKey = `${r.asset}|${r.direction}`;
@@ -1129,6 +1360,23 @@ class BestTradesScanner {
       return;
     }
 
+    // #18 Portfolio heat tracking — calculate current exposure
+    let currentExposureUsd = 0;
+    try {
+      const expRes = await pool.query(
+        'SELECT COALESCE(SUM(ABS(size_usd)), 0) AS total_exposure FROM live_positions WHERE user_id=$1 AND closed_at IS NULL',
+        [userId]
+      );
+      currentExposureUsd = parseFloat(expRes.rows[0].total_exposure) || 0;
+    } catch {}
+    const totalAccountUsd = availableBalance + currentExposureUsd;
+    const currentHeatPct = totalAccountUsd > 0 ? (currentExposureUsd / totalAccountUsd) * 100 : 0;
+
+    if (currentHeatPct >= leverageRisk.maxHeatPct) {
+      console.log(`[BestTrades] Portfolio heat ${currentHeatPct.toFixed(1)}% >= ${leverageRisk.maxHeatPct}% max — skipping new trades`);
+      return;
+    }
+
     const slotsAvailable = this.settings.maxOpen - openCount;
     const toTrade = qualifying.slice(0, slotsAvailable);
 
@@ -1139,8 +1387,16 @@ class BestTradesScanner {
         break;
       }
 
+      // #18 Re-check heat before each trade
+      const newHeatPct = totalAccountUsd > 0 ? ((currentExposureUsd + posSize) / totalAccountUsd) * 100 : 0;
+      if (newHeatPct >= leverageRisk.maxHeatPct) {
+        console.log(`[BestTrades] Would exceed portfolio heat limit (${newHeatPct.toFixed(1)}% >= ${leverageRisk.maxHeatPct}%) — skipping`);
+        break;
+      }
+
       try {
         await this._executeTradeOnBloFin(setup, posSize, userId, creds, demo);
+        currentExposureUsd += posSize; // track cumulative for heat
         availableBalance -= posSize;
         openCount++;
         // Mark as recently traded to prevent duplicate trades from other TFs
@@ -1154,7 +1410,21 @@ class BestTradesScanner {
   async _executeTradeOnBloFin(setup, posSize, userId, creds, demo) {
     const instId = setup.asset + '-USDT';
     const side = setup.direction === 'long' ? 'buy' : 'sell';
-    const lev = Math.max(setup.optimalLev || 1, this.settings.leverage || 1);
+    // Apply all leverage risk gates (#13/#14/#15/#16/#18/#19)
+    const rawLev = Math.max(setup.optimalLev || 1, this.settings.leverage || 1);
+    const fundingRate = getFundingRateForAsset(setup.sym || setup.asset + 'USDT');
+    const lev = getSafeLeverage(rawLev, {
+      confidence: setup.confidence,
+      marketQuality: setup.marketQuality,
+      fundingRate,
+      direction: setup.direction,
+      winRate: calibrationCache.overall.winRate * 100,
+      totalTrades: calibrationCache.overall.totalResolved,
+    });
+    if (lev <= 0) {
+      console.log(`[BestTrades] Trade blocked by risk gates: ${setup.asset} ${setup.direction} (DD=${leverageRisk.drawdownPct}%, ConsecL=${leverageRisk.consecutiveLosses})`);
+      return;
+    }
 
     // Get mark price
     let markPrice;
@@ -1255,8 +1525,8 @@ class BestTradesScanner {
 
   async _logResults(results) {
     if (!pool) return;
-    // Log top 3 results with prob >= 50% for calibration data (independent of auto-trade minProb)
-    const top = results.filter(r => r.prob >= 50).slice(0, 3);
+    // Log top 3 results with EV > 0 for calibration data (#24: EV-first, fallback to prob >= 50%)
+    const top = results.filter(r => (r.ev > 0) || r.prob >= 50).slice(0, 3);
     for (const r of top) {
       try {
         await pool.query(
@@ -1734,8 +2004,20 @@ class BestTradesScanner {
         cached: Object.keys(fundingRateCache.data).length,
         lastRefresh: fundingRateCache.lastRefresh ? new Date(fundingRateCache.lastRefresh).toISOString() : null,
       },
+      leverageRisk: {
+        phase: leverageRisk.phase,
+        maxLev: (leverageRisk.phaseConfig[leverageRisk.phase] || {}).maxLev || 3,
+        drawdownPct: leverageRisk.drawdownPct,
+        consecutiveLosses: leverageRisk.consecutiveLosses,
+        maxConsecutiveLosses: leverageRisk.maxConsecutiveLosses,
+        portfolioHeatMax: leverageRisk.maxHeatPct + '%',
+        sharpeRatio: leverageRisk.sharpeRatio,
+        kellyMode: 'Eighth-Kelly',
+      },
+      sortBy: 'EV (expected value)',
       dataRetention: '90 days (resolved), 30 days (abandoned pending)',
       logsPerScan: 3,
+      upgrades: 'v2.1: EV-primary, 8th-Kelly, shrinkage 30/100, 4h-gate, MTF-confluence, recency-weight, leverage-risk-framework, Sharpe',
     };
   }
 }

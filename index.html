@@ -14110,6 +14110,25 @@ function _renderUnifiedUI(stats, history) {
         <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">AVG WIN / LOSS PNL</div>
       </div>
     `;
+
+    // #30 Sharpe ratio + leverage risk display
+    const lr = stats.leverageRisk || {};
+    const sharpeVal = lr.sharpeRatio != null ? lr.sharpeRatio.toFixed(2) : 'N/A';
+    const sharpeColor = sharpeVal === 'N/A' ? '#5a7a68' : lr.sharpeRatio >= 1.5 ? '#00f5a0' : lr.sharpeRatio >= 0.5 ? '#f5c400' : '#ff4d6d';
+    const ddColor = (lr.drawdownPct || 0) >= 10 ? '#ff4d6d' : (lr.drawdownPct || 0) >= 5 ? '#f5c400' : '#00f5a0';
+    summaryEl.innerHTML += `
+      <div style="background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:14px;font-weight:800;color:${sharpeColor};font-family:'Space Mono',monospace">${sharpeVal}</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">SHARPE RATIO</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:11px;font-weight:800;font-family:'Space Mono',monospace">
+          <span style="color:${ddColor}">${(lr.drawdownPct || 0).toFixed(1)}%</span> DD
+          <span style="color:#5a7a68;font-size:9px"> | P${lr.phase || 1} ${lr.kellyMode || '8th-K'}</span>
+        </div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">DRAWDOWN | PHASE | KELLY</div>
+      </div>
+    `;
   }
 
   // Store globally for filters
@@ -14344,9 +14363,36 @@ function _clearCalibrationFilters() {
   window._calActiveOutcome = null;
   _refetchWithFilters();
 }
-function _filterByOutcome(outcome) {
+async function _filterByOutcome(outcome) {
   window._calActiveOutcome = (outcome === window._calActiveOutcome) ? null : outcome;
-  // Outcome filter is client-side — just re-render with cached data
+  // #25 Fix: Fetch ALL matching records from server when filtering by outcome
+  // Previously only filtered client-side on 200-row cache, showing 9 of 102 wins
+  const token = localStorage.getItem('dash_token');
+  const backend = window.CBP_BACKEND || 'http://localhost:3001';
+  if (token && window._calActiveOutcome) {
+    try {
+      const resp = await fetch(`${backend}/best-trades/history-all?outcome=${window._calActiveOutcome}`, {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      const data = await resp.json();
+      if (data.history) {
+        window._serverHistory = data.history.map(_mapDbRow);
+      }
+    } catch (e) {
+      console.warn('[ScanHistory] Full history fetch error:', e.message);
+    }
+  } else if (token && !window._calActiveOutcome) {
+    // Reset to standard 200-row fetch
+    try {
+      const resp = await fetch(`${backend}/best-trades/history?limit=200`, {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      const data = await resp.json();
+      if (data.history) {
+        window._serverHistory = data.history.map(_mapDbRow);
+      }
+    } catch {}
+  }
   if (window._serverStats && window._serverHistory) {
     _renderUnifiedUI(window._serverStats, window._serverHistory);
   }
