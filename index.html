@@ -2830,6 +2830,8 @@ function switchAuthView(view) {
         <div style="text-align:center"><div style="font-size:7px;color:#5a7a68;text-transform:uppercase">Max Pos</div><div id="pfMaxPos" style="font-size:14px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">10</div></div>
       </div>
     </div>
+    <!-- Calibration Chart for Trade Log -->
+    <div id="recCalibrationChart" style="margin-bottom:12px"></div>
     <div id="recSummaryCards" style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px">
       <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Total</div><div id="recTotal" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#e0e0e0">0</div></div>
       <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Win Rate</div><div id="recWinRate" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">&mdash;</div></div>
@@ -15891,6 +15893,90 @@ function renderRecSummary(s) {
     }
   } else if (tfPanel) {
     tfPanel.style.display = 'none';
+  }
+
+  // Render calibration chart in Trade Log section (from server stats)
+  _renderRecCalibrationChart();
+}
+
+// Render calibration bar chart inside Trade Log & Track Record section
+async function _renderRecCalibrationChart() {
+  const el = document.getElementById('recCalibrationChart');
+  if (!el) return;
+  try {
+    const token = localStorage.getItem('dash_token');
+    if (!token) return;
+    const resp = await fetch((window.CBP_BACKEND || 'http://localhost:3001') + '/best-trades/stats', {
+      headers: { 'Authorization': 'Bearer ' + token },
+    });
+    const stats = await resp.json();
+    if (stats.error) return;
+
+    const bucketData = stats.byProbBucket || [];
+    if (bucketData.length === 0) {
+      el.innerHTML = '';
+      return;
+    }
+
+    // Build bars
+    const maxHeight = 70;
+    const maxN = Math.max(...bucketData.map(b => b.total), 1);
+    const bars = bucketData.map(b => {
+      const actualWR = b.total > 0 ? (b.wins / b.total * 100) : 0;
+      const predicted = b.bucketMid;
+      const barH = Math.max(8, (b.total / maxN) * maxHeight);
+      const barColor = actualWR >= 55 ? '#00f5a0' : actualWR >= 45 ? '#f5c400' : '#ff4d6d';
+      const calibrated = Math.abs(actualWR - predicted) <= 10;
+      const icon = calibrated ? '✓' : '⚠';
+      const iconColor = calibrated ? '#00f5a0' : '#f5c400';
+      return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:50px">
+        <div style="font-size:9px;font-weight:700;color:${barColor};margin-bottom:3px">${actualWR.toFixed(0)}%</div>
+        <div style="width:100%;max-width:40px;height:${barH}px;background:${barColor};border-radius:4px 4px 0 0;transition:height 0.5s"></div>
+        <div style="font-size:7px;color:#5a7a68;margin-top:3px;text-align:center">${b.bucket}%</div>
+        <div style="font-size:7px;color:#5a7a68">n=${b.total}</div>
+        <div style="font-size:8px;color:${iconColor}">${icon}</div>
+      </div>`;
+    }).join('');
+
+    // Overall stats
+    const o = stats.overall || {};
+    const totalWL = (o.wins || 0) + (o.losses || 0);
+    const overallWR = totalWL > 0 ? (o.wins / totalWL * 100).toFixed(1) : 'N/A';
+    const wrColor = o.winRate >= 55 ? '#00f5a0' : o.winRate >= 45 ? '#f5c400' : '#ff4d6d';
+
+    // Regime summary
+    const regimeSummary = (stats.byRegime || []).map(r => {
+      const color = r.regime === 'bull' ? '#00f5a0' : r.regime === 'bear' ? '#ff4d6d' : '#f5c400';
+      return `<span style="color:${color}">${r.regime}: ${r.total > 0 ? r.winRate.toFixed(0) + '%' : '—'} (${r.total})</span>`;
+    }).join(' · ');
+
+    // Quality summary
+    const qualSummary = (stats.byQuality || []).map(q => {
+      const color = q.quality === 'A' ? '#00f5a0' : q.quality === 'B' ? '#f5c400' : '#ff8c69';
+      return `<span style="color:${color}">${q.quality}: ${q.total > 0 ? q.winRate.toFixed(0) + '%' : '—'} (${q.total})</span>`;
+    }).join(' · ');
+
+    el.innerHTML = `
+      <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-radius:8px;padding:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:#a78bfa;font-family:'Space Mono',monospace">📊 CALIBRATION: PREDICTED vs ACTUAL WIN RATE</div>
+            <div style="font-size:8px;color:#3a5a48;font-family:'Space Mono',monospace;margin-top:2px">✓ = well-calibrated (within ±10%) · ⚠ = miscalibrated · Server learns from this data every 30 min</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:14px;font-weight:800;color:${wrColor};font-family:'Space Mono',monospace">${overallWR}%</div>
+            <div style="font-size:7px;color:#5a7a68">OVERALL WR (${totalWL} resolved)</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-end;padding:12px 0;min-height:80px">${bars}</div>
+        <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:8px;font-size:9px;font-family:'Space Mono',monospace">
+          <div style="margin-bottom:4px"><span style="color:#5a7a68">By Regime:</span> ${regimeSummary || '<span style="color:#3a5a48">No data</span>'}</div>
+          <div><span style="color:#5a7a68">By Quality:</span> ${qualSummary || '<span style="color:#3a5a48">No data</span>'}</div>
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    console.warn('[RecCalibration] Error:', e.message);
   }
 }
 

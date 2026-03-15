@@ -48,6 +48,228 @@ const ALL_TIMEFRAMES = ['5m', '15m', '30m', '1h', '4h', '1d'];
 
 const TRADING_FEE_PCT = 0.06; // BloFin taker fee per side
 
+// ══════════════════════════════════════════════════════════════
+// CALIBRATION CACHE — learns from historical outcomes
+// Refreshed every 30 min, used to adjust prob & Kelly in real-time
+// ══════════════════════════════════════════════════════════════
+const calibrationCache = {
+  lastRefresh: 0,
+  refreshIntervalMs: 30 * 60_000, // 30 minutes
+  minSamples: 8,                   // need ≥8 resolved trades before adjusting
+  // Keyed data from DB
+  byProbBucket: {},   // { '50-54': { predicted: 52, actual: 0.83, n: 12 }, ... }
+  byRegimeTF: {},     // { 'bull_15m': { winRate: 0.58, n: 38 }, ... }
+  byQuality: {},      // { 'A': { winRate: 0.65, avgPnl: 1.2, n: 20 }, ... }
+  byConfidence: {},   // { 'High': { winRate: 0.62, n: 30 }, ... }
+  overall: { winRate: 0.5, totalResolved: 0, kellyGraduation: 0 },
+};
+
+async function refreshCalibrationCache() {
+  if (!pool) return;
+  const now = Date.now();
+  if (now - calibrationCache.lastRefresh < calibrationCache.refreshIntervalMs) return;
+
+  try {
+    // 1. Probability bucket accuracy (predicted vs actual)
+    const bucketRes = await pool.query(`
+      SELECT
+        CASE
+          WHEN probability < 55 THEN '50-54' WHEN probability < 60 THEN '55-59'
+          WHEN probability < 65 THEN '60-64' WHEN probability < 70 THEN '65-69'
+          WHEN probability < 75 THEN '70-74' WHEN probability < 80 THEN '75-79'
+          ELSE '80+'
+        END AS bucket,
+        CASE
+          WHEN probability < 55 THEN 52 WHEN probability < 60 THEN 57
+          WHEN probability < 65 THEN 62 WHEN probability < 70 THEN 67
+          WHEN probability < 75 THEN 72 WHEN probability < 80 THEN 77
+          ELSE 82
+        END AS bucket_mid,
+        COUNT(*) FILTER (WHERE outcome IN ('win','loss')) AS n,
+        COUNT(*) FILTER (WHERE outcome = 'win') AS wins
+      FROM best_trades_log
+      WHERE outcome IN ('win','loss')
+      GROUP BY bucket, bucket_mid ORDER BY bucket_mid
+    `);
+    calibrationCache.byProbBucket = {};
+    for (const r of bucketRes.rows) {
+      const n = parseInt(r.n);
+      if (n > 0) {
+        calibrationCache.byProbBucket[r.bucket] = {
+          predicted: parseInt(r.bucket_mid),
+          actual: parseInt(r.wins) / n,
+          n,
+        };
+      }
+    }
+
+    // 2. Win rate by regime + timeframe combo
+    const regimeTFRes = await pool.query(`
+      SELECT regime, timeframe,
+        COUNT(*) FILTER (WHERE outcome IN ('win','loss')) AS n,
+        COUNT(*) FILTER (WHERE outcome = 'win') AS wins
+      FROM best_trades_log
+      WHERE outcome IN ('win','loss') AND regime IS NOT NULL
+      GROUP BY regime, timeframe
+    `);
+    calibrationCache.byRegimeTF = {};
+    for (const r of regimeTFRes.rows) {
+      const n = parseInt(r.n);
+      if (n > 0) {
+        const key = `${r.regime}_${r.timeframe}`;
+        calibrationCache.byRegimeTF[key] = { winRate: parseInt(r.wins) / n, n };
+      }
+    }
+
+    // 3. Win rate by market quality
+    const qualRes = await pool.query(`
+      SELECT market_quality,
+        COUNT(*) FILTER (WHERE outcome IN ('win','loss')) AS n,
+        COUNT(*) FILTER (WHERE outcome = 'win') AS wins,
+        ROUND(AVG(pnl) FILTER (WHERE outcome IN ('win','loss')), 4) AS avg_pnl
+      FROM best_trades_log
+      WHERE outcome IN ('win','loss') AND market_quality IS NOT NULL
+      GROUP BY market_quality
+    `);
+    calibrationCache.byQuality = {};
+    for (const r of qualRes.rows) {
+      const n = parseInt(r.n);
+      if (n > 0) {
+        calibrationCache.byQuality[r.market_quality] = {
+          winRate: parseInt(r.wins) / n, n,
+          avgPnl: parseFloat(r.avg_pnl) || 0,
+        };
+      }
+    }
+
+    // 4. Win rate by confidence level
+    const confRes = await pool.query(`
+      SELECT confidence,
+        COUNT(*) FILTER (WHERE outcome IN ('win','loss')) AS n,
+        COUNT(*) FILTER (WHERE outcome = 'win') AS wins
+      FROM best_trades_log
+      WHERE outcome IN ('win','loss') AND confidence IS NOT NULL
+      GROUP BY confidence
+    `);
+    calibrationCache.byConfidence = {};
+    for (const r of confRes.rows) {
+      const n = parseInt(r.n);
+      if (n > 0) {
+        calibrationCache.byConfidence[r.confidence] = { winRate: parseInt(r.wins) / n, n };
+      }
+    }
+
+    // 5. Overall stats for Kelly graduation
+    const overallRes = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE outcome IN ('win','loss')) AS total_resolved,
+        COUNT(*) FILTER (WHERE outcome = 'win') AS wins
+      FROM best_trades_log
+    `);
+    const totalResolved = parseInt(overallRes.rows[0].total_resolved);
+    const overallWR = totalResolved > 0 ? parseInt(overallRes.rows[0].wins) / totalResolved : 0.5;
+
+    // Kelly graduation: increase multiplier based on proven accuracy
+    // Calculate mean absolute calibration error across prob buckets
+    let calError = 0, calCount = 0;
+    for (const [, b] of Object.entries(calibrationCache.byProbBucket)) {
+      if (b.n >= 5) {
+        calError += Math.abs(b.actual - b.predicted / 100);
+        calCount++;
+      }
+    }
+    const avgCalError = calCount > 0 ? calError / calCount : 1;
+    let kellyGraduation = 0;
+    if (totalResolved >= 200 && avgCalError <= 0.03) kellyGraduation = 0.20;
+    else if (totalResolved >= 100 && avgCalError <= 0.05) kellyGraduation = 0.10;
+    else if (totalResolved >= 50 && avgCalError <= 0.08) kellyGraduation = 0.05;
+
+    calibrationCache.overall = { winRate: overallWR, totalResolved, kellyGraduation, avgCalError };
+    calibrationCache.lastRefresh = now;
+
+    console.log(`[Calibration] Cache refreshed: ${totalResolved} resolved trades, WR=${(overallWR*100).toFixed(1)}%, calError=${(avgCalError*100).toFixed(1)}%, kellyGrad=+${(kellyGraduation*100).toFixed(0)}%`);
+  } catch (err) {
+    console.error('[Calibration] Cache refresh error:', err.message);
+  }
+}
+
+/**
+ * Calibrate a raw probability score using historical accuracy data.
+ * Uses Bayesian shrinkage: blends predicted prob toward actual win rate,
+ * weighted by sample size. More data = more correction.
+ */
+function calibrateProb(rawProb, regime, tf, marketQuality) {
+  const cc = calibrationCache;
+  if (cc.overall.totalResolved < cc.minSamples) return rawProb; // not enough data
+
+  let adjustedProb = rawProb;
+
+  // 1. Probability bucket calibration (most important)
+  // If we predicted 65% but actual is 83%, nudge upward
+  const bucketKey = rawProb < 55 ? '50-54' : rawProb < 60 ? '55-59' : rawProb < 65 ? '60-64'
+    : rawProb < 70 ? '65-69' : rawProb < 75 ? '70-74' : rawProb < 80 ? '75-79' : '80+';
+  const bucket = cc.byProbBucket[bucketKey];
+  if (bucket && bucket.n >= cc.minSamples) {
+    const actualWR = bucket.actual * 100; // e.g. 83
+    const diff = actualWR - bucket.predicted;  // e.g. 83 - 67 = +16
+    // Shrinkage: weight correction by min(1, n/50) — full correction at 50+ samples
+    const shrinkage = Math.min(1, bucket.n / 50);
+    const correction = diff * shrinkage * 0.6; // apply 60% of the correction (conservative)
+    adjustedProb += correction;
+  }
+
+  // 2. Regime + TF adjustment
+  const regimeTFKey = `${regime}_${tf}`;
+  const regimeTF = cc.byRegimeTF[regimeTFKey];
+  if (regimeTF && regimeTF.n >= cc.minSamples) {
+    const regimeWR = regimeTF.winRate * 100;
+    const overallWR = cc.overall.winRate * 100;
+    const regimeDiff = regimeWR - overallWR; // e.g. bear_15m wins 60% vs overall 50% → +10
+    const shrinkage = Math.min(1, regimeTF.n / 40);
+    adjustedProb += regimeDiff * shrinkage * 0.3; // 30% correction weight
+  }
+
+  // 3. Market quality adjustment
+  const qualData = cc.byQuality[marketQuality];
+  if (qualData && qualData.n >= cc.minSamples) {
+    const qualWR = qualData.winRate * 100;
+    const overallWR = cc.overall.winRate * 100;
+    const qualDiff = qualWR - overallWR;
+    const shrinkage = Math.min(1, qualData.n / 40);
+    adjustedProb += qualDiff * shrinkage * 0.2; // 20% weight
+  }
+
+  // Clamp to valid range
+  adjustedProb = Math.max(25, Math.min(85, Math.round(adjustedProb)));
+
+  return adjustedProb;
+}
+
+/**
+ * Get calibrated Kelly multiplier based on historical performance.
+ * Returns an additive bonus to the base Kelly multiplier.
+ */
+function getCalibratedKellyBonus(confidence, marketQuality) {
+  const cc = calibrationCache;
+  let bonus = cc.overall.kellyGraduation || 0;
+
+  // Additional bonus/penalty from confidence-level accuracy
+  const confData = cc.byConfidence[confidence];
+  if (confData && confData.n >= cc.minSamples) {
+    if (confData.winRate > 0.60) bonus += 0.05;      // High confidence actually wins >60%
+    else if (confData.winRate < 0.45) bonus -= 0.10;  // High confidence actually wins <45% → penalize
+  }
+
+  // Quality-level adjustment
+  const qualData = cc.byQuality[marketQuality];
+  if (qualData && qualData.n >= cc.minSamples) {
+    if (qualData.avgPnl > 1.0) bonus += 0.05;        // This quality grade is profitable
+    else if (qualData.avgPnl < -0.5) bonus -= 0.10;   // This quality grade loses money
+  }
+
+  return Math.max(-0.15, Math.min(0.25, bonus)); // clamp bonus to [-15%, +25%]
+}
+
 // Quality grade ordering for per-TF min quality filters
 const QUALITY_ORDER = { 'A': 3, 'B': 2, 'C': 1, 'No-Trade': 0 };
 
@@ -447,7 +669,7 @@ function estimateRR(price, atrVal, direction, prob, leverage, confidence, candle
   const rr = levStopPct > 0 ? parseFloat((levTargetPct / levStopPct).toFixed(1)) : 0;
   const ev = (prob / 100 * levTargetPct) - ((1 - prob / 100) * levStopPct);
 
-  // Kelly-based optimal leverage
+  // Kelly-based optimal leverage (with calibration bonus from track record)
   const conf = confidence || 'Low';
   let kellyMult = 0.4;
   if (marketQuality === 'A' && conf === 'High') kellyMult = 0.6;
@@ -455,6 +677,10 @@ function estimateRR(price, atrVal, direction, prob, leverage, confidence, candle
   else if (marketQuality === 'B') kellyMult = 0.4;
   else if (marketQuality === 'C') kellyMult = 0.25;
   else if (marketQuality === 'No-Trade') kellyMult = 0.15;
+
+  // Apply learned Kelly bonus from historical performance
+  const kellyBonus = getCalibratedKellyBonus(conf, marketQuality);
+  kellyMult = Math.max(0.10, Math.min(0.85, kellyMult + kellyBonus));
 
   const kellyFrac = rr > 0 ? ((prob / 100) * rr - (1 - prob / 100)) / rr : 0;
   const safeKelly = Math.max(0, kellyFrac * kellyMult);
@@ -589,6 +815,8 @@ class BestTradesScanner {
 
   async _scanTimeframe(tf) {
     if (!this.settings.enabled) return [];
+    // Refresh calibration cache (no-op if refreshed recently)
+    await refreshCalibrationCache();
     console.log(`[BestTrades] Scanning ${ASSETS.length} assets on ${tf}...`);
 
     const results = [];
@@ -627,8 +855,12 @@ class BestTradesScanner {
         const best = longScore.prob >= shortScore.prob ? longScore : shortScore;
         const direction = longScore.prob >= shortScore.prob ? 'long' : 'short';
 
-        // Estimate R/R
-        const rrData = estimateRR(price, atrVal, direction, best.prob, this.settings.leverage,
+        // ── CALIBRATION: Adjust probability using historical accuracy ──
+        const rawProb = best.prob;
+        const calibratedProb = calibrateProb(rawProb, regime, tf, marketQuality);
+
+        // Estimate R/R using calibrated probability
+        const rrData = estimateRR(price, atrVal, direction, calibratedProb, this.settings.leverage,
           best.confidence, candles, marketQuality);
 
         results.push({
@@ -636,7 +868,8 @@ class BestTradesScanner {
           sym: asset.sym,
           timeframe: tf,
           direction,
-          prob: best.prob,
+          prob: calibratedProb,
+          rawProb,
           longProb: longScore.prob,
           shortProb: shortScore.prob,
           confidence: best.confidence,
@@ -1383,6 +1616,14 @@ class BestTradesScanner {
       topSetup: this.lastResults[0] || null,
       tfStatus,
       scanInterval: 'multi-TF',
+      calibration: {
+        totalResolved: calibrationCache.overall.totalResolved,
+        overallWR: (calibrationCache.overall.winRate * 100).toFixed(1),
+        avgCalError: calibrationCache.overall.avgCalError != null ? (calibrationCache.overall.avgCalError * 100).toFixed(1) + '%' : 'N/A',
+        kellyGraduation: '+' + ((calibrationCache.overall.kellyGraduation || 0) * 100).toFixed(0) + '%',
+        lastRefresh: calibrationCache.lastRefresh ? new Date(calibrationCache.lastRefresh).toISOString() : null,
+        bucketCount: Object.keys(calibrationCache.byProbBucket).length,
+      },
     };
   }
 }
