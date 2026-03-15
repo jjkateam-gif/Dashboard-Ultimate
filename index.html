@@ -14420,24 +14420,33 @@ function _clearCalibrationFilters() {
   window._calActiveTF = null;
   window._calActiveRegime = null;
   window._calActiveMQ = null;
+  window._calActiveOutcome = null;
   if (window._calStats) _renderCalibrationChart(window._calStats, null);
+  renderScanHistory();
+}
+
+// Filter scan history table by outcome (win/loss/pending/all)
+function _filterByOutcome(outcome) {
+  if (!window._calStats) return;
+  window._calActiveOutcome = (outcome === window._calActiveOutcome) ? null : outcome;
+  renderScanHistory();
 }
 
 // Get filtered buckets by regime and/or quality grade (and optionally TF)
 function _getBucketsFiltered(regime, mq, tf) {
   try {
-    const log = JSON.parse(localStorage.getItem('dash_scanLog') || '[]');
-    const resolved = log.filter(e => e.outcome === 'win' || e.outcome === 'loss');
+    const log = JSON.parse(localStorage.getItem('bestTradesScanLog_v1') || '[]');
+    const resolved = log.filter(e => e.resolved && e.outcome !== 'expired');
     const buckets = {};
     for (const e of resolved) {
-      if (tf && e.timeframe !== tf) continue;
-      if (regime && e.regime !== regime) continue;
+      if (tf && e.tf !== tf) continue;
+      if (regime && (e.regime || 'unknown').split('_')[0] !== regime) continue;
       if (mq && e.marketQuality !== mq) continue;
-      const prob = e.probability || e.winProb;
+      const prob = e.prob;
       if (!prob) continue;
-      const bucket = Math.floor(prob / 10) * 10;
-      const key = bucket + '-' + (bucket + 10);
-      if (!buckets[key]) buckets[key] = { predicted: bucket + 5, total: 0, wins: 0 };
+      const bucket = Math.floor(prob / 5) * 5;
+      const key = `${bucket}-${bucket + 5}%`;
+      if (!buckets[key]) buckets[key] = { total: 0, wins: 0, bucket };
       buckets[key].total++;
       if (e.outcome === 'win') buckets[key].wins++;
     }
@@ -14451,31 +14460,28 @@ function renderScanHistory() {
   // Also fetch server-side stats and merge TF data
   _fetchAndMergeServerTFStats(stats);
 
-  // Summary cards
+  // Summary cards (clickable to filter scan history table)
   const summaryEl = document.getElementById('scanAccuracySummary');
+  const activeOutcome = window._calActiveOutcome || null;
   if (summaryEl) {
     const wrColor = stats.winRate === 'N/A' ? '#5a7a68' : parseFloat(stats.winRate) >= 55 ? '#00f5a0' : parseFloat(stats.winRate) >= 45 ? '#f5c400' : '#ff4d6d';
+    const _sc = (filter, bg, border, color, value, label) => {
+      const isActive = activeOutcome === filter;
+      const activeBorder = isActive ? `border:2px solid ${color}` : `border:1px solid ${border}`;
+      const activeBg = isActive ? bg.replace('0.06', '0.15').replace('0.03', '0.1') : bg;
+      const cursor = filter ? 'cursor:pointer' : '';
+      const onclick = filter ? `onclick="_filterByOutcome('${filter}')"` : '';
+      return `<div ${onclick} style="background:${activeBg};${activeBorder};border-radius:8px;padding:10px;text-align:center;${cursor};transition:all 0.2s" ${filter ? `onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"` : ''}>
+        <div style="font-size:18px;font-weight:800;color:${color};font-family:'Space Mono',monospace">${value}</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">${label}${isActive ? ' ✕' : ''}</div>
+      </div>`;
+    };
     summaryEl.innerHTML = `
-      <div style="background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:18px;font-weight:800;color:${wrColor};font-family:'Space Mono',monospace">${stats.winRate}${stats.winRate !== 'N/A' ? '%' : ''}</div>
-        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">WIN RATE</div>
-      </div>
-      <div style="background:rgba(0,245,160,0.06);border:1px solid rgba(0,245,160,0.12);border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:18px;font-weight:800;color:#00f5a0;font-family:'Space Mono',monospace">${stats.wins}</div>
-        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">WINS</div>
-      </div>
-      <div style="background:rgba(255,77,109,0.06);border:1px solid rgba(255,77,109,0.12);border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:18px;font-weight:800;color:#ff4d6d;font-family:'Space Mono',monospace">${stats.losses}</div>
-        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">LOSSES</div>
-      </div>
-      <div style="background:rgba(245,196,0,0.06);border:1px solid rgba(245,196,0,0.12);border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:18px;font-weight:800;color:#f5c400;font-family:'Space Mono',monospace">${stats.pending}</div>
-        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">PENDING</div>
-      </div>
-      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:18px;font-weight:800;color:#aaa;font-family:'Space Mono',monospace">${stats.total}</div>
-        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">TOTAL LOGGED</div>
-      </div>
+      ${_sc(null, 'rgba(167,139,250,0.06)', 'rgba(167,139,250,0.15)', wrColor, stats.winRate + (stats.winRate !== 'N/A' ? '%' : ''), 'WIN RATE')}
+      ${_sc('win', 'rgba(0,245,160,0.06)', 'rgba(0,245,160,0.12)', '#00f5a0', stats.wins, 'WINS')}
+      ${_sc('loss', 'rgba(255,77,109,0.06)', 'rgba(255,77,109,0.12)', '#ff4d6d', stats.losses, 'LOSSES')}
+      ${_sc('pending', 'rgba(245,196,0,0.06)', 'rgba(245,196,0,0.12)', '#f5c400', stats.pending, 'PENDING')}
+      ${_sc('all', 'rgba(255,255,255,0.03)', 'rgba(255,255,255,0.08)', '#aaa', stats.total, 'TOTAL LOGGED')}
       <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;text-align:center">
         <div style="font-size:14px;font-weight:800;font-family:'Space Mono',monospace">
           <span style="color:#00f5a0">+${stats.avgMFE}%</span> / <span style="color:#ff4d6d">-${stats.avgMAE}%</span>
@@ -14485,11 +14491,12 @@ function renderScanHistory() {
     `;
   }
 
-  // Store stats globally for TF filtering
+  // Store stats globally for TF filtering (preserve active filters if already set)
   window._calStats = stats;
-  window._calActiveTF = null;
-  window._calActiveRegime = null;
-  window._calActiveMQ = null;
+  if (window._calActiveTF === undefined) window._calActiveTF = null;
+  if (window._calActiveRegime === undefined) window._calActiveRegime = null;
+  if (window._calActiveMQ === undefined) window._calActiveMQ = null;
+  if (window._calActiveOutcome === undefined) window._calActiveOutcome = null;
 
   // Calibration chart — probability bucket accuracy
   const chartEl = document.getElementById('scanCalibrationChart');
@@ -14507,7 +14514,15 @@ function renderScanHistory() {
       return;
     }
 
-    const rows = stats.recentEntries.map(e => {
+    // Apply outcome filter
+    const outcomeFilter = window._calActiveOutcome || null;
+    let filteredEntries = stats.recentEntries;
+    if (outcomeFilter === 'win') filteredEntries = filteredEntries.filter(e => e.outcome === 'win');
+    else if (outcomeFilter === 'loss') filteredEntries = filteredEntries.filter(e => e.outcome === 'loss');
+    else if (outcomeFilter === 'pending') filteredEntries = filteredEntries.filter(e => !e.resolved);
+    // 'all' shows everything (no filter)
+
+    const rows = filteredEntries.map(e => {
       const dirColor = e.direction === 'long' ? '#00f5a0' : '#ff4d6d';
       const dirArrow = e.direction === 'long' ? '▲' : '▼';
       const probColor = e.prob >= 70 ? '#00f5a0' : e.prob >= 60 ? '#f5c400' : e.prob >= 50 ? '#ff8c69' : '#5a7a68';
@@ -14537,7 +14552,13 @@ function renderScanHistory() {
       </tr>`;
     }).join('');
 
+    const filterBanner = outcomeFilter ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;margin-bottom:6px;background:rgba(255,107,53,0.08);border:1px solid rgba(255,107,53,0.2);border-radius:6px;font-family:'Space Mono',monospace;font-size:9px">
+      <span style="color:#ff6b35">Showing: <strong>${outcomeFilter === 'pending' ? 'Pending' : outcomeFilter === 'win' ? 'Wins' : outcomeFilter === 'loss' ? 'Losses' : 'All'}</strong> (${filteredEntries.length} entries)</span>
+      <button onclick="_filterByOutcome(null);renderScanHistory()" style="font-size:8px;padding:3px 8px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">Clear</button>
+    </div>` : '';
+
     tableEl.innerHTML = `
+      ${filterBanner}
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-family:'Space Mono',monospace;font-size:8px">
           <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
