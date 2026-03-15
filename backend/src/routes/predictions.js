@@ -6,7 +6,8 @@ router.use(authenticate);
 
 // GET /predictions/markets
 router.get('/markets', (req, res) => {
-  res.json({ markets: predictionEngine.getMarkets(), total: predictionEngine.getMarkets().length });
+  const markets = predictionEngine.getMarkets();
+  res.json({ markets, total: markets.length });
 });
 
 // GET /predictions/signals
@@ -16,7 +17,7 @@ router.get('/signals', (req, res) => {
 
 // GET /predictions/performance
 router.get('/performance', (req, res) => {
-  res.json({ performance: predictionEngine.getPerformance(), config: predictionEngine.getConfig() });
+  res.json(predictionEngine.getAllPerformance());
 });
 
 // GET /predictions/stream — SSE
@@ -39,10 +40,20 @@ router.post('/config', (req, res) => {
   res.json({ success: true, config: predictionEngine.getConfig() });
 });
 
+// POST /predictions/mode — switch paper/real
+router.post('/mode', (req, res) => {
+  const { mode } = req.body;
+  if (!mode || !['paper', 'real'].includes(mode)) {
+    return res.status(400).json({ error: 'Mode must be "paper" or "real"' });
+  }
+  predictionEngine.setConfig({ mode });
+  res.json({ success: true, mode: predictionEngine.getMode() });
+});
+
 // POST /predictions/start
 router.post('/start', (req, res) => {
   predictionEngine.startBot();
-  res.json({ success: true, running: true });
+  res.json({ success: true, running: true, mode: predictionEngine.getMode() });
 });
 
 // POST /predictions/stop
@@ -51,11 +62,23 @@ router.post('/stop', (req, res) => {
   res.json({ success: true, running: false });
 });
 
-// POST /predictions/price — update price cache (called from frontend or BloFin WS)
+// POST /predictions/price — update price cache
 router.post('/price', (req, res) => {
   const { symbol, price } = req.body;
   if (symbol && price) predictionEngine.updatePrice(symbol, price);
   res.json({ success: true });
+});
+
+// GET /predictions/status — full status snapshot
+router.get('/status', (req, res) => {
+  res.json({
+    running: predictionEngine.isRunning(),
+    mode: predictionEngine.getMode(),
+    config: predictionEngine.getConfig(),
+    marketsCount: predictionEngine.getMarkets().length,
+    signalsCount: predictionEngine.getSignals().length,
+    stats: predictionEngine.getAllPerformance(),
+  });
 });
 
 module.exports = router;

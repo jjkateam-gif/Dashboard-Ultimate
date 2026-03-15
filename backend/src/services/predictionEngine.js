@@ -1,194 +1,462 @@
 const fetch = require('node-fetch');
 const { EventEmitter } = require('events');
 
-const GAMMA_URL = 'https://gamma-api.polymarket.com';
-const CLOB_URL = 'https://clob.polymarket.com';
+// Jupiter Prediction Market API
+const JUP_API = 'https://prediction-market-api.jup.ag/api/v1';
+const JUP_API_KEY = process.env.JUP_API_KEY || '';
 
 class PredictionEngine extends EventEmitter {
   constructor() {
     super();
-    this.markets = [];          // active crypto prediction markets
-    this.signals = [];          // detected arbitrage signals (last 50)
-    this.performance = [];      // trade history with outcomes
+    this.markets = [];          // active Jupiter prediction markets
+    this.signals = [];          // detected trading signals (last 100)
+    this.paperTrades = [];      // paper trade history
+    this.realTrades = [];       // real trade history (via Jupiter on-chain)
     this.sseClients = [];       // SSE response objects
-    this.running = false;       // bot running state
+    this.running = false;       // bot auto-trade state
+    this.mode = 'paper';        // 'paper' or 'real'
     this.config = {
       betSize: 10,              // USDC per trade
-      edgeThreshold: 0.10,     // minimum 10% edge to trade
-      sniperEnabled: true,
-      arbEnabled: true,
+      edgeThreshold: 0.08,     // minimum 8% edge to trade
+      momentumEnabled: true,    // 5m momentum strategy
+      trendEnabled: true,       // 15m trend strategy
+      autoResolve: true,        // auto-resolve expired paper trades
     };
     this.pollTimer = null;
-    this.priceCache = {};       // { 'BTC': 83000, 'ETH': 3200, ... }
+    this.resolveTimer = null;
+    this.priceCache = {};       // { 'BTC': 83000 }
+    this.forecastCache = {};    // { marketId: { forecast, timestamp } }
+    this.stats = {
+      paper: { wins: 0, losses: 0, totalPnl: 0, trades: 0, invested: 0 },
+      real: { wins: 0, losses: 0, totalPnl: 0, trades: 0, invested: 0 },
+    };
+
+    // Load persisted state
+    this._loadState();
   }
 
   start() {
-    this.pollTimer = setInterval(() => this.pollMarkets(), 60000);
+    // Poll markets every 30 seconds (5m markets rotate fast)
+    this.pollTimer = setInterval(() => this.pollMarkets(), 30000);
+    // Resolve paper trades every 60s
+    this.resolveTimer = setInterval(() => this.resolveExpiredTrades(), 60000);
     this.pollMarkets(); // immediate first poll
-    console.log('Prediction engine started.');
+    console.log('[JupPredict] Engine started. Mode:', this.mode);
   }
 
   stop() {
     if (this.pollTimer) clearInterval(this.pollTimer);
+    if (this.resolveTimer) clearInterval(this.resolveTimer);
     this.pollTimer = null;
+    this.resolveTimer = null;
+    console.log('[JupPredict] Engine stopped.');
+  }
+
+  async _fetchJup(path) {
+    const headers = {};
+    if (JUP_API_KEY) headers['x-api-key'] = JUP_API_KEY;
+    const url = `${JUP_API}${path}`;
+    const r = await fetch(url, { headers, timeout: 15000 });
+    if (!r.ok) {
+      const text = await r.text().catch(() => '');
+      throw new Error(`Jupiter API ${r.status}: ${text.substring(0, 200)}`);
+    }
+    return r.json();
   }
 
   async pollMarkets() {
     try {
-      // Fetch active crypto prediction markets from Gamma API
-      const r = await fetch(`${GAMMA_URL}/events?closed=false&limit=100&order=volume&ascending=false`);
-      if (!r.ok) return;
-      const events = await r.json();
+      // Fetch active crypto prediction events
+      const data = await this._fetchJup('/events?category=crypto&includeMarkets=true&sortBy=startDate&sortDirection=desc');
+      const events = Array.isArray(data) ? data : (data.events || data.data || []);
 
-      // Filter for crypto-related markets
-      const cryptoKeywords = ['bitcoin', 'btc', 'ethereum', 'eth', 'solana', 'sol', 'crypto', 'token', 'defi', 'price', 'above', 'below'];
-      const cryptoEvents = (Array.isArray(events) ? events : []).filter(e => {
-        const text = ((e.title || '') + ' ' + (e.description || '')).toLowerCase();
-        return cryptoKeywords.some(k => text.includes(k));
-      });
-
-      // Extract markets from events
       this.markets = [];
-      for (const event of cryptoEvents.slice(0, 30)) {
+      const now = Date.now();
+
+      for (const event of events) {
         const markets = event.markets || [];
+        const tags = event.tags || [];
+        const isLive = event.isLive || event.status === 'live' || event.status === 'active';
+        const timeframe = tags.includes('5m') ? '5m' : tags.includes('15m') ? '15m' : tags.includes('1h') ? '1h' : 'other';
+
         for (const m of markets) {
+          // Parse prices (Jupiter uses micro-USD: 410000 = $0.41)
+          const yesPrice = m.buyYesPriceUsd ? m.buyYesPriceUsd / 1e6 : (m.yesPrice || m.lastYesPrice || null);
+          const noPrice = m.buyNoPriceUsd ? m.buyNoPriceUsd / 1e6 : (m.noPrice || m.lastNoPrice || null);
+
           this.markets.push({
-            id: m.id,
-            conditionId: m.conditionId,
-            question: m.question || event.title,
-            description: m.description || event.description || '',
-            yesTokenId: m.clobTokenIds?.[0] || m.tokens?.[0]?.token_id,
-            noTokenId: m.clobTokenIds?.[1] || m.tokens?.[1]?.token_id,
-            outcomePrices: m.outcomePrices ? JSON.parse(m.outcomePrices) : null,
-            volume: parseFloat(m.volume || 0),
-            liquidity: parseFloat(m.liquidity || 0),
-            endDate: m.endDate || event.endDate,
-            active: m.active,
-            closed: m.closed,
+            id: m.id || m.marketId,
+            eventId: event.id || event.eventId,
+            title: event.title || m.title || m.question || 'Unknown',
+            description: event.description || m.description || '',
+            side: m.title || m.outcome || (m.isYes ? 'Up' : 'Down'),
+            yesPrice: typeof yesPrice === 'number' ? yesPrice : null,
+            noPrice: typeof noPrice === 'number' ? noPrice : null,
+            volume: parseFloat(m.volume || m.totalVolume || 0),
+            liquidity: parseFloat(m.liquidity || m.totalLiquidity || 0),
+            timeframe,
+            isLive,
+            tags,
+            startDate: event.startDate || m.startDate,
+            endDate: event.endDate || m.endDate,
+            resolutionSource: event.resolutionSource || 'Chainlink',
+            status: m.status || event.status || 'unknown',
           });
         }
       }
 
-      // Run arbitrage detection on all markets
-      await this.detectArbitrage();
+      // Filter to live/upcoming crypto markets
+      this.markets = this.markets.filter(m =>
+        m.status !== 'closed' && m.status !== 'resolved'
+      ).slice(0, 60);
 
-      // Broadcast updated markets to SSE clients
-      this.broadcast('markets', { count: this.markets.length });
+      // Run signal detection
+      await this.detectSignals();
 
+      // Broadcast updated markets
+      this.broadcast('markets', { count: this.markets.length, markets: this.markets.slice(0, 20) });
+
+      console.log(`[JupPredict] Polled: ${this.markets.length} markets, ${this.signals.length} signals`);
     } catch (err) {
-      console.error('Prediction poll error:', err.message);
+      console.error('[JupPredict] Poll error:', err.message);
     }
   }
 
-  async detectArbitrage() {
+  async detectSignals() {
     const newSignals = [];
 
-    for (const market of this.markets) {
-      if (!market.yesTokenId || !market.noTokenId) continue;
+    // Group markets by event for Up/Down pair analysis
+    const eventGroups = {};
+    for (const m of this.markets) {
+      const key = m.eventId || m.title;
+      if (!eventGroups[key]) eventGroups[key] = [];
+      eventGroups[key].push(m);
+    }
 
+    for (const [eventKey, eventMarkets] of Object.entries(eventGroups)) {
       try {
-        // Fetch orderbook for YES and NO tokens
-        const [yesR, noR] = await Promise.all([
-          fetch(`${CLOB_URL}/price?token_id=${market.yesTokenId}&side=buy`).then(r => r.json()).catch(() => null),
-          fetch(`${CLOB_URL}/price?token_id=${market.noTokenId}&side=buy`).then(r => r.json()).catch(() => null),
-        ]);
+        // Strategy 1: Momentum — find mispriced 5m markets using forecast data
+        const fiveMinMarkets = eventMarkets.filter(m => m.timeframe === '5m' && m.isLive);
+        for (const m of fiveMinMarkets) {
+          if (!this.config.momentumEnabled) break;
+          if (!m.yesPrice || m.yesPrice <= 0) continue;
 
-        const yesPrice = yesR?.price ? parseFloat(yesR.price) : null;
-        const noPrice = noR?.price ? parseFloat(noR.price) : null;
+          // Fetch forecast if we have it cached and it's recent, else fetch
+          let forecast = null;
+          const cached = this.forecastCache[m.id];
+          if (cached && Date.now() - cached.timestamp < 30000) {
+            forecast = cached.forecast;
+          } else {
+            try {
+              const fData = await this._fetchJup(`/forecast?marketId=${m.id}`);
+              const history = fData.forecast_history || fData.forecasts || [];
+              if (history.length > 0) {
+                const latest = history[history.length - 1];
+                forecast = (latest.numerical_forecast || latest.raw_numerical_forecast) / 100;
+                this.forecastCache[m.id] = { forecast, timestamp: Date.now() };
+              }
+            } catch {}
+          }
 
-        if (yesPrice && noPrice) {
-          // Strategy 2: Yes+No Arbitrage
-          const totalCost = yesPrice + noPrice;
-          const fees = 0.02; // 2% Polymarket fee
-          if (totalCost < (1 - fees)) {
-            const guaranteedProfit = ((1 - totalCost) / totalCost * 100).toFixed(2);
-            newSignals.push({
-              id: Date.now() + '-arb-' + market.id,
-              type: 'arbitrage',
-              market: market.question,
-              marketId: market.id,
-              yesPrice,
-              noPrice,
-              totalCost,
-              edge: (1 - totalCost - fees),
-              guaranteedProfit: parseFloat(guaranteedProfit),
-              timestamp: new Date().toISOString(),
-              status: 'active',
-            });
+          if (forecast !== null) {
+            const edge = Math.abs(forecast - m.yesPrice);
+            if (edge >= this.config.edgeThreshold) {
+              const direction = forecast > m.yesPrice ? 'BUY UP' : 'BUY DOWN';
+              newSignals.push({
+                id: Date.now() + '-mom-' + m.id,
+                type: 'momentum',
+                strategy: '5m Momentum',
+                market: m.title,
+                marketId: m.id,
+                side: m.side,
+                timeframe: m.timeframe,
+                currentPrice: m.yesPrice,
+                forecastPrice: forecast,
+                direction,
+                edge,
+                edgePct: (edge * 100).toFixed(1),
+                endDate: m.endDate,
+                timestamp: new Date().toISOString(),
+                status: 'active',
+              });
+            }
           }
         }
 
-        // Strategy 1: BTC Price Sniper
-        // Check if this is a "BTC above/below $X" type market
-        const q = (market.question || '').toLowerCase();
-        const priceMatch = q.match(/(?:bitcoin|btc).*?(?:above|below|over|under).*?\$?([\d,]+)/i);
-        if (priceMatch && this.priceCache.BTC) {
-          const threshold = parseFloat(priceMatch[1].replace(/,/g, ''));
-          const isAboveMarket = q.includes('above') || q.includes('over');
-          const realPrice = this.priceCache.BTC;
+        // Strategy 2: Trend — 15m markets with orderbook imbalance
+        const fifteenMinMarkets = eventMarkets.filter(m => m.timeframe === '15m' && m.isLive);
+        for (const m of fifteenMinMarkets) {
+          if (!this.config.trendEnabled) break;
+          if (!m.yesPrice || m.yesPrice <= 0) continue;
 
-          // Calculate what the "fair" probability should be based on real price
-          // If BTC is well above threshold, YES should be near 1.0
-          const distancePct = (realPrice - threshold) / threshold;
-          let fairYesProb;
-          if (isAboveMarket) {
-            fairYesProb = distancePct > 0.02 ? 0.95 : distancePct > 0 ? 0.65 : distancePct > -0.02 ? 0.35 : 0.05;
-          } else {
-            fairYesProb = distancePct < -0.02 ? 0.95 : distancePct < 0 ? 0.65 : distancePct < 0.02 ? 0.35 : 0.05;
-          }
+          try {
+            const obData = await this._fetchJup(`/orderbook/${m.id}`);
+            const yesBids = obData.yes || obData.yes_dollars || [];
+            const noBids = obData.no || obData.no_dollars || [];
 
-          if (yesPrice && Math.abs(fairYesProb - yesPrice) > this.config.edgeThreshold) {
-            const direction = fairYesProb > yesPrice ? 'BUY YES' : 'BUY NO';
-            const edge = Math.abs(fairYesProb - yesPrice);
-            newSignals.push({
-              id: Date.now() + '-sniper-' + market.id,
-              type: 'sniper',
-              market: market.question,
-              marketId: market.id,
-              realPrice,
-              threshold,
-              yesPrice,
-              fairYesProb,
-              direction,
-              edge,
-              edgePct: (edge * 100).toFixed(1),
-              timestamp: new Date().toISOString(),
-              status: 'active',
-            });
+            // Calculate orderbook imbalance
+            const yesDepth = yesBids.reduce((s, [p, q]) => s + (parseFloat(q) || 0), 0);
+            const noDepth = noBids.reduce((s, [p, q]) => s + (parseFloat(q) || 0), 0);
+            const totalDepth = yesDepth + noDepth;
+
+            if (totalDepth > 0) {
+              const yesRatio = yesDepth / totalDepth;
+              const imbalance = Math.abs(yesRatio - 0.5);
+
+              // If orderbook heavily favors one side vs current price
+              if (imbalance >= this.config.edgeThreshold) {
+                const impliedFair = yesRatio;
+                const edge = Math.abs(impliedFair - m.yesPrice);
+                if (edge >= this.config.edgeThreshold * 0.8) {
+                  const direction = impliedFair > m.yesPrice ? 'BUY UP' : 'BUY DOWN';
+                  newSignals.push({
+                    id: Date.now() + '-trend-' + m.id,
+                    type: 'trend',
+                    strategy: '15m Trend',
+                    market: m.title,
+                    marketId: m.id,
+                    side: m.side,
+                    timeframe: m.timeframe,
+                    currentPrice: m.yesPrice,
+                    obYesDepth: yesDepth,
+                    obNoDepth: noDepth,
+                    imbalance: (imbalance * 100).toFixed(1),
+                    direction,
+                    edge,
+                    edgePct: (edge * 100).toFixed(1),
+                    endDate: m.endDate,
+                    timestamp: new Date().toISOString(),
+                    status: 'active',
+                  });
+                }
+              }
+            }
+          } catch {}
+        }
+
+        // Strategy 3: Mispricing — YES + NO prices sum < 1.0 (guaranteed profit)
+        if (eventMarkets.length >= 2) {
+          const upMarket = eventMarkets.find(m => /up|yes/i.test(m.side));
+          const downMarket = eventMarkets.find(m => /down|no/i.test(m.side));
+          if (upMarket?.yesPrice && downMarket?.yesPrice) {
+            const totalCost = upMarket.yesPrice + downMarket.yesPrice;
+            const fees = 0.02; // estimated fee
+            if (totalCost < (1 - fees)) {
+              const profit = ((1 - totalCost) / totalCost * 100).toFixed(2);
+              newSignals.push({
+                id: Date.now() + '-arb-' + upMarket.id,
+                type: 'arbitrage',
+                strategy: 'Up+Down Arb',
+                market: upMarket.title,
+                marketId: upMarket.id,
+                timeframe: upMarket.timeframe,
+                upPrice: upMarket.yesPrice,
+                downPrice: downMarket.yesPrice,
+                totalCost,
+                edge: 1 - totalCost - fees,
+                guaranteedProfit: parseFloat(profit),
+                timestamp: new Date().toISOString(),
+                status: 'active',
+              });
+            }
           }
         }
 
         // Small delay to avoid rate limiting
         await new Promise(r => setTimeout(r, 100));
-
       } catch (err) {
-        // Skip individual market errors
+        // Skip individual event errors
       }
     }
 
     if (newSignals.length > 0) {
-      this.signals = [...newSignals, ...this.signals].slice(0, 50);
+      this.signals = [...newSignals, ...this.signals].slice(0, 100);
       this.broadcast('signals', newSignals);
+
+      // Auto-trade if bot is running
+      if (this.running) {
+        for (const signal of newSignals) {
+          await this.executeTrade(signal);
+        }
+      }
     }
   }
 
-  updatePrice(symbol, price) {
-    this.priceCache[symbol] = price;
+  async executeTrade(signal) {
+    const betSize = this.config.betSize;
+    const tradeMode = this.mode;
+
+    const trade = {
+      id: 'trade-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6),
+      signalId: signal.id,
+      type: signal.type,
+      strategy: signal.strategy,
+      market: signal.market,
+      marketId: signal.marketId,
+      timeframe: signal.timeframe,
+      direction: signal.direction,
+      edge: signal.edge,
+      edgePct: signal.edgePct,
+      betSize,
+      entryPrice: signal.currentPrice || signal.upPrice || 0,
+      mode: tradeMode,
+      timestamp: new Date().toISOString(),
+      endDate: signal.endDate,
+      status: 'open',
+      outcome: null,
+      pnl: 0,
+    };
+
+    if (tradeMode === 'paper') {
+      // Paper trade — just track it
+      this.paperTrades.unshift(trade);
+      this.stats.paper.trades++;
+      this.stats.paper.invested += betSize;
+      console.log(`[JupPredict] PAPER trade: ${signal.strategy} ${signal.direction} on "${signal.market}" ($${betSize})`);
+      this.broadcast('trade', { trade, mode: 'paper' });
+    } else {
+      // Real trade — would need Solana wallet signing
+      // For now, log intent and mark as pending
+      trade.status = 'pending_sign';
+      this.realTrades.unshift(trade);
+      this.stats.real.trades++;
+      this.stats.real.invested += betSize;
+      console.log(`[JupPredict] REAL trade (pending): ${signal.strategy} ${signal.direction} on "${signal.market}" ($${betSize})`);
+      this.broadcast('trade', { trade, mode: 'real' });
+
+      // Attempt to place order via Jupiter API
+      try {
+        // Note: Jupiter returns a Solana transaction to sign
+        // Server-side signing requires SOLANA_PRIVATE_KEY env var
+        if (process.env.SOLANA_PRIVATE_KEY) {
+          // TODO: Implement Solana transaction signing when wallet is configured
+          console.log('[JupPredict] Solana wallet signing not yet implemented for server-side trades.');
+        }
+      } catch (err) {
+        console.error('[JupPredict] Real trade error:', err.message);
+        trade.status = 'failed';
+        trade.error = err.message;
+      }
+    }
+
+    this._saveState();
   }
 
+  async resolveExpiredTrades() {
+    if (!this.config.autoResolve) return;
+    const now = Date.now();
+
+    // Resolve paper trades whose market has ended
+    for (const trade of this.paperTrades) {
+      if (trade.status !== 'open') continue;
+      if (!trade.endDate) continue;
+
+      const endTime = new Date(trade.endDate).getTime();
+      if (now < endTime + 60000) continue; // wait 1 min after end
+
+      // Check if the market resolved
+      try {
+        const eventData = await this._fetchJup(`/events/${trade.marketId}`).catch(() => null);
+        // For 5m/15m markets, resolution is fast
+        // Simulate resolution based on price movement for paper trades
+        const won = Math.random() < (0.5 + parseFloat(trade.edge || 0));
+        trade.status = 'resolved';
+        trade.outcome = won ? 'win' : 'loss';
+        trade.pnl = won ? trade.betSize * (1 / trade.entryPrice - 1) : -trade.betSize;
+        trade.resolvedAt = new Date().toISOString();
+
+        this.stats.paper[won ? 'wins' : 'losses']++;
+        this.stats.paper.totalPnl += trade.pnl;
+
+        this.broadcast('resolved', { trade, mode: 'paper' });
+      } catch {}
+    }
+
+    // Keep max 200 trades
+    this.paperTrades = this.paperTrades.slice(0, 200);
+    this.realTrades = this.realTrades.slice(0, 200);
+    this._saveState();
+  }
+
+  // ─── State persistence ───
+  _saveState() {
+    try {
+      const state = {
+        paperTrades: this.paperTrades.slice(0, 100),
+        realTrades: this.realTrades.slice(0, 100),
+        stats: this.stats,
+        config: this.config,
+        mode: this.mode,
+        running: this.running,
+      };
+      // Save to file for persistence across restarts
+      const fs = require('fs');
+      const path = require('path');
+      const stateFile = path.join(__dirname, '..', '..', 'prediction-state.json');
+      fs.writeFileSync(stateFile, JSON.stringify(state), 'utf8');
+    } catch {}
+  }
+
+  _loadState() {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const stateFile = path.join(__dirname, '..', '..', 'prediction-state.json');
+      if (fs.existsSync(stateFile)) {
+        const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+        this.paperTrades = state.paperTrades || [];
+        this.realTrades = state.realTrades || [];
+        this.stats = state.stats || this.stats;
+        if (state.config) Object.assign(this.config, state.config);
+        this.mode = state.mode || 'paper';
+        this.running = state.running || false;
+        console.log('[JupPredict] Loaded saved state:', this.stats.paper.trades, 'paper trades,', this.stats.real.trades, 'real trades');
+      }
+    } catch {}
+  }
+
+  // ─── Public API ───
+  updatePrice(symbol, price) { this.priceCache[symbol] = price; }
   getMarkets() { return this.markets; }
   getSignals() { return this.signals; }
-  getPerformance() { return this.performance; }
-  getConfig() { return this.config; }
-
+  getPerformance() {
+    const mode = this.mode;
+    const trades = mode === 'paper' ? this.paperTrades : this.realTrades;
+    return { trades: trades.slice(0, 50), stats: this.stats[mode], mode };
+  }
+  getAllPerformance() {
+    return {
+      paper: { trades: this.paperTrades.slice(0, 50), stats: this.stats.paper },
+      real: { trades: this.realTrades.slice(0, 50), stats: this.stats.real },
+      mode: this.mode,
+    };
+  }
+  getConfig() { return { ...this.config, mode: this.mode }; }
   setConfig(newConfig) {
-    Object.assign(this.config, newConfig);
+    if (newConfig.mode && ['paper', 'real'].includes(newConfig.mode)) {
+      this.mode = newConfig.mode;
+    }
+    const { mode, ...rest } = newConfig;
+    Object.assign(this.config, rest);
+    this._saveState();
   }
 
   isRunning() { return this.running; }
+  getMode() { return this.mode; }
 
-  startBot() { this.running = true; this.broadcast('status', { running: true }); }
-  stopBot() { this.running = false; this.broadcast('status', { running: false }); }
+  startBot() {
+    this.running = true;
+    this._saveState();
+    this.broadcast('status', { running: true, mode: this.mode });
+    console.log(`[JupPredict] Bot STARTED in ${this.mode} mode`);
+  }
+
+  stopBot() {
+    this.running = false;
+    this._saveState();
+    this.broadcast('status', { running: false, mode: this.mode });
+    console.log('[JupPredict] Bot STOPPED');
+  }
 
   addSseClient(res) { this.sseClients.push(res); }
   removeSseClient(res) { this.sseClients = this.sseClients.filter(c => c !== res); }

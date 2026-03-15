@@ -1049,10 +1049,19 @@ function switchAuthView(view) {
     <div>
       <!-- Bot Status -->
       <div class="card" style="margin-bottom:12px">
-        <div class="card-title" style="color:#a855f7">⚡ BOT STATUS</div>
+        <div class="card-title" style="color:#a855f7">⚡ JUPITER PREDICTION BOT</div>
+        <!-- Mode Toggle -->
+        <div style="display:flex;gap:0;margin:10px 0;border-radius:6px;overflow:hidden;border:1px solid rgba(168,85,247,0.3)">
+          <button id="predModePaper" onclick="setPredictionMode('paper')" style="flex:1;font-family:'Space Mono',monospace;font-size:10px;padding:8px;background:rgba(0,245,160,0.2);border:none;color:#00f5a0;cursor:pointer;font-weight:700">PAPER</button>
+          <button id="predModeReal" onclick="setPredictionMode('real')" style="flex:1;font-family:'Space Mono',monospace;font-size:10px;padding:8px;background:rgba(0,0,0,0.3);border:none;color:#5a7a68;cursor:pointer">REAL</button>
+        </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0">
           <span style="font-family:'Space Mono',monospace;font-size:10px;color:#5a7a68">Engine:</span>
           <span id="predBotStatus" style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:#ff4d6d">Stopped</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0">
+          <span style="font-family:'Space Mono',monospace;font-size:10px;color:#5a7a68">Mode:</span>
+          <span id="predModeLabel" style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:#00f5a0">PAPER</span>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0">
           <span style="font-family:'Space Mono',monospace;font-size:10px;color:#5a7a68">Markets Tracked:</span>
@@ -1066,6 +1075,7 @@ function switchAuthView(view) {
           <button onclick="startPredictionBot()" style="flex:1;font-family:'Space Mono',monospace;font-size:9px;padding:8px;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:6px;cursor:pointer">▶ Start Bot</button>
           <button onclick="stopPredictionBot()" style="flex:1;font-family:'Space Mono',monospace;font-size:9px;padding:8px;background:rgba(255,77,109,0.15);border:1px solid rgba(255,77,109,0.3);color:#ff4d6d;border-radius:6px;cursor:pointer">⏹ Stop Bot</button>
         </div>
+        <div style="font-family:'Space Mono',monospace;font-size:8px;color:#5a7a68;margin-top:8px;text-align:center">Powered by Jupiter Prediction Market API</div>
       </div>
 
       <!-- Strategy Config -->
@@ -1077,18 +1087,18 @@ function switchAuthView(view) {
         </div>
         <div style="margin:8px 0">
           <label style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;display:block;margin-bottom:4px">Edge Threshold (%)</label>
-          <input id="predEdgeThreshold" type="number" value="10" min="1" max="50" style="width:100%;font-family:'Space Mono',monospace;font-size:11px;padding:6px 8px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#e0e0e0;border-radius:4px">
+          <input id="predEdgeThreshold" type="number" value="8" min="1" max="50" style="width:100%;font-family:'Space Mono',monospace;font-size:11px;padding:6px 8px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#e0e0e0;border-radius:4px">
         </div>
-        <div style="display:flex;gap:8px;margin:10px 0">
-          <label style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;display:flex;align-items:center;gap:4px"><input type="checkbox" id="predSniperEnabled" checked> BTC Sniper</label>
-          <label style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;display:flex;align-items:center;gap:4px"><input type="checkbox" id="predArbEnabled" checked> Yes/No Arb</label>
+        <div style="display:flex;flex-direction:column;gap:6px;margin:10px 0">
+          <label style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;display:flex;align-items:center;gap:4px"><input type="checkbox" id="predMomentumEnabled" checked> 5m Momentum</label>
+          <label style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;display:flex;align-items:center;gap:4px"><input type="checkbox" id="predTrendEnabled" checked> 15m Trend</label>
         </div>
         <button onclick="savePredictionConfig()" style="width:100%;font-family:'Space Mono',monospace;font-size:9px;padding:8px;background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.3);color:#a855f7;border-radius:6px;cursor:pointer;margin-top:4px">💾 Save Config</button>
       </div>
 
       <!-- Performance Summary -->
       <div class="card">
-        <div class="card-title" style="color:#a855f7">📊 PERFORMANCE</div>
+        <div class="card-title" style="color:#a855f7">📊 PERFORMANCE <span id="predPerfModeLabel" style="font-size:9px;color:#00f5a0">(PAPER)</span></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
           <div style="text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Win Rate</div><div id="predWinRate" style="font-size:22px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">—</div></div>
           <div style="text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Total P&L</div><div id="predTotalPnl" style="font-size:22px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">$0</div></div>
@@ -1103,11 +1113,19 @@ function switchAuthView(view) {
       <!-- Active Markets -->
       <div class="card" style="margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <div class="card-title" style="color:#a855f7">🎲 ACTIVE POLYMARKET MARKETS</div>
-          <button onclick="loadPredictionMarkets()" style="font-family:'Space Mono',monospace;font-size:9px;padding:5px 12px;background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.3);color:#a855f7;border-radius:6px;cursor:pointer">↻ Refresh</button>
+          <div class="card-title" style="color:#a855f7">🎲 JUPITER PREDICTION MARKETS</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select id="predTimeFilter" onchange="filterPredictionMarkets()" style="font-family:'Space Mono',monospace;font-size:9px;padding:4px 8px;background:rgba(0,0,0,0.3);border:1px solid rgba(168,85,247,0.3);color:#a855f7;border-radius:4px">
+              <option value="all">All</option>
+              <option value="5m">5m</option>
+              <option value="15m">15m</option>
+              <option value="1h">1h</option>
+            </select>
+            <button onclick="loadPredictionMarkets()" style="font-family:'Space Mono',monospace;font-size:9px;padding:5px 12px;background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.3);color:#a855f7;border-radius:6px;cursor:pointer">↻ Refresh</button>
+          </div>
         </div>
         <div id="predMarketsList" style="max-height:300px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 transparent">
-          <div style="text-align:center;padding:30px;color:#5a7a68;font-family:'Space Mono',monospace;font-size:10px">Loading prediction markets...</div>
+          <div style="text-align:center;padding:30px;color:#5a7a68;font-family:'Space Mono',monospace;font-size:10px">Loading Jupiter prediction markets...</div>
         </div>
       </div>
 
@@ -1124,7 +1142,13 @@ function switchAuthView(view) {
 
       <!-- Trade Log -->
       <div class="card">
-        <div class="card-title" style="color:#a855f7">📋 TRADE LOG</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div class="card-title" style="color:#a855f7">📋 TRADE LOG</div>
+          <div style="display:flex;gap:6px">
+            <button id="predLogPaperBtn" onclick="switchPredTradeLog('paper')" style="font-family:'Space Mono',monospace;font-size:8px;padding:3px 8px;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:4px;cursor:pointer;font-weight:700">Paper</button>
+            <button id="predLogRealBtn" onclick="switchPredTradeLog('real')" style="font-family:'Space Mono',monospace;font-size:8px;padding:3px 8px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);color:#5a7a68;border-radius:4px;cursor:pointer">Real</button>
+          </div>
+        </div>
         <div id="predTradeLog" style="max-height:200px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 transparent">
           <div style="text-align:center;padding:20px;color:#5a7a68;font-family:'Space Mono',monospace;font-size:10px">No trades yet</div>
         </div>
@@ -23072,9 +23096,9 @@ let liveAutoRefreshTimer = null;
 
 
 // ════════════════════════════════════════════════════════════════
-// 🎲 POLYMARKET PREDICTION ENGINE
+// 🎲 JUPITER PREDICTION ENGINE
 // ════════════════════════════════════════════════════════════════
-const PRED_STATE = { marketsLoaded: false, loading: false, sseConnected: false };
+const PRED_STATE = { marketsLoaded: false, loading: false, sseConnected: false, mode: 'paper', allMarkets: [], tradeLogView: 'paper' };
 let _predSSE = null;
 
 async function loadPredictionMarkets() {
@@ -23090,7 +23114,8 @@ async function loadPredictionMarkets() {
     ]);
     if (marketsR.ok) {
       const data = await marketsR.json();
-      renderPredictionMarkets(data.markets || []);
+      PRED_STATE.allMarkets = data.markets || [];
+      renderPredictionMarkets(PRED_STATE.allMarkets);
       const countEl = document.getElementById('predMarketCount');
       if (countEl) countEl.textContent = data.total || 0;
     }
@@ -23109,7 +23134,7 @@ async function loadPredictionMarkets() {
   } catch (e) {
     console.error('Prediction load error:', e);
     const mkEl = document.getElementById('predMarketsList');
-    if (mkEl) mkEl.innerHTML = '<div style="text-align:center;padding:30px;color:#ff4d6d;font-family:\'Space Mono\',monospace;font-size:10px">⚠️ Failed to load markets: ' + (e.message.includes('Failed to fetch') || e.message.includes('NetworkError') ? 'Backend not connected. Make sure the server is running.' : e.message) + '</div>';
+    if (mkEl) mkEl.innerHTML = '<div style="text-align:center;padding:30px;color:#ff4d6d;font-family:\'Space Mono\',monospace;font-size:10px">Failed to load markets: ' + (e.message.includes('Failed to fetch') || e.message.includes('NetworkError') ? 'Backend not connected. Make sure the server is running.' : e.message) + '</div>';
     toast('Prediction markets failed to load', 'error');
   } finally {
     PRED_STATE.loading = false;
@@ -23138,6 +23163,10 @@ function connectPredictionStream() {
         const data = JSON.parse(e.data);
         const countEl = document.getElementById('predMarketCount');
         if (countEl) countEl.textContent = data.count || 0;
+        if (data.markets) {
+          PRED_STATE.allMarkets = data.markets;
+          renderPredictionMarkets(data.markets);
+        }
       } catch {}
     });
     _predSSE.addEventListener('status', (e) => {
@@ -23145,6 +23174,22 @@ function connectPredictionStream() {
         const data = JSON.parse(e.data);
         const el = document.getElementById('predBotStatus');
         if (el) { el.textContent = data.running ? 'Running' : 'Stopped'; el.style.color = data.running ? '#00f5a0' : '#ff4d6d'; }
+        if (data.mode) updatePredModeUI(data.mode);
+      } catch {}
+    });
+    _predSSE.addEventListener('trade', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        toast((data.mode === 'paper' ? '📝' : '💰') + ' ' + data.trade.strategy + ': ' + data.trade.direction + ' $' + data.trade.betSize);
+        loadPredictionMarkets(); // refresh performance
+      } catch {}
+    });
+    _predSSE.addEventListener('resolved', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        const icon = data.trade.outcome === 'win' ? '✅' : '❌';
+        toast(icon + ' Trade resolved: ' + (data.trade.pnl > 0 ? '+' : '') + '$' + data.trade.pnl.toFixed(2));
+        loadPredictionMarkets();
       } catch {}
     });
     _predSSE.onerror = () => {
@@ -23156,26 +23201,38 @@ function connectPredictionStream() {
   } catch {}
 }
 
+function filterPredictionMarkets() {
+  renderPredictionMarkets(PRED_STATE.allMarkets);
+}
+
 function renderPredictionMarkets(markets) {
   const el = document.getElementById('predMarketsList');
   if (!el) return;
-  if (markets.length === 0) {
-    el.innerHTML = '<div style="text-align:center;padding:30px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:10px">No crypto prediction markets found</div>';
+  // Apply timeframe filter
+  const tf = document.getElementById('predTimeFilter')?.value || 'all';
+  const filtered = tf === 'all' ? markets : markets.filter(m => m.timeframe === tf);
+  if (filtered.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:10px">No ' + (tf === 'all' ? '' : tf + ' ') + 'prediction markets found</div>';
     return;
   }
-  el.innerHTML = markets.slice(0, 30).map(m => {
-    const prices = m.outcomePrices || [];
-    const yesP = prices[0] ? (parseFloat(prices[0]) * 100).toFixed(1) : '\u2014';
-    const noP = prices[1] ? (parseFloat(prices[1]) * 100).toFixed(1) : '\u2014';
-    const vol = m.volume >= 1000000 ? '$' + (m.volume / 1000000).toFixed(1) + 'M' : m.volume >= 1000 ? '$' + (m.volume / 1000).toFixed(1) + 'K' : '$' + m.volume.toFixed(0);
-    const endDate = m.endDate ? new Date(m.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-    return '<div style="padding:8px 10px;background:rgba(0,0,0,0.2);border-radius:6px;margin-bottom:4px;border-left:3px solid rgba(168,85,247,0.4)">' +
-      '<div style="font-family:\'Space Mono\',monospace;font-size:10px;color:#e0e0e0;line-height:1.3;margin-bottom:4px">' + (m.question || 'Unknown market').substring(0, 120) + '</div>' +
+  el.innerHTML = filtered.slice(0, 30).map(m => {
+    const yesP = m.yesPrice != null ? (m.yesPrice * 100).toFixed(1) : '\u2014';
+    const noP = m.noPrice != null ? (m.noPrice * 100).toFixed(1) : '\u2014';
+    const vol = m.volume >= 1000000 ? '$' + (m.volume / 1000000).toFixed(1) + 'M' : m.volume >= 1000 ? '$' + (m.volume / 1000).toFixed(1) + 'K' : '$' + (m.volume || 0).toFixed(0);
+    const tfBadge = m.timeframe && m.timeframe !== 'other' ? '<span style="background:rgba(168,85,247,0.25);color:#a855f7;padding:1px 5px;border-radius:3px;font-size:8px;font-weight:700">' + m.timeframe + '</span>' : '';
+    const liveBadge = m.isLive ? '<span style="background:rgba(0,245,160,0.2);color:#00f5a0;padding:1px 5px;border-radius:3px;font-size:8px">LIVE</span>' : '';
+    const endTime = m.endDate ? new Date(m.endDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '';
+    return '<div style="padding:8px 10px;background:rgba(0,0,0,0.2);border-radius:6px;margin-bottom:4px;border-left:3px solid ' + (m.isLive ? 'rgba(0,245,160,0.4)' : 'rgba(168,85,247,0.4)') + '">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
+        '<div style="font-family:\'Space Mono\',monospace;font-size:10px;color:#e0e0e0;line-height:1.3;flex:1">' + (m.title || 'Unknown market').substring(0, 100) + '</div>' +
+        '<div style="display:flex;gap:4px;margin-left:8px">' + tfBadge + liveBadge + '</div>' +
+      '</div>' +
       '<div style="display:flex;gap:12px;font-family:\'Space Mono\',monospace;font-size:9px">' +
-        '<span style="color:#00f5a0">YES ' + yesP + '%</span>' +
-        '<span style="color:#ff4d6d">NO ' + noP + '%</span>' +
+        '<span style="color:#00f5a0">UP ' + yesP + '%</span>' +
+        '<span style="color:#ff4d6d">DOWN ' + noP + '%</span>' +
         '<span style="color:#5a7a68">Vol: ' + vol + '</span>' +
-        (endDate ? '<span style="color:#555">Ends: ' + endDate + '</span>' : '') +
+        (endTime ? '<span style="color:#555">Ends: ' + endTime + '</span>' : '') +
+        '<span style="color:#444">' + (m.resolutionSource || '') + '</span>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -23187,20 +23244,28 @@ function renderPredictionSignals(signals) {
   const countEl = document.getElementById('predSignalCount');
   if (countEl) countEl.textContent = signals.length;
   if (signals.length === 0) {
-    el.innerHTML = '<div style="text-align:center;padding:30px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:10px">No active signals \u2014 monitoring markets...</div>';
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:10px">No active signals — scanning Jupiter markets...</div>';
     return;
   }
   el.innerHTML = signals.map(s => {
-    const isSniper = s.type === 'sniper';
-    const borderColor = isSniper ? '#ffd60a' : '#00f5a0';
-    const typeLabel = isSniper ? '\ud83c\udfaf SNIPER' : '\u267b\ufe0f ARBITRAGE';
-    const detail = isSniper
-      ? '<span style="color:#ffd60a">Edge: ' + s.edgePct + '% | Direction: ' + s.direction + '</span> <span style="color:#5a7a68">| Real: $' + (s.realPrice||0).toLocaleString() + ' vs Threshold: $' + (s.threshold||0).toLocaleString() + '</span>'
-      : '<span style="color:#00f5a0">Profit: +' + s.guaranteedProfit + '% | YES: $' + (s.yesPrice||0).toFixed(3) + ' + NO: $' + (s.noPrice||0).toFixed(3) + ' = $' + (s.totalCost||0).toFixed(3) + '</span>';
+    const colors = { momentum: '#ffd60a', trend: '#00b4d8', arbitrage: '#00f5a0' };
+    const icons = { momentum: '⚡', trend: '📈', arbitrage: '♻️' };
+    const borderColor = colors[s.type] || '#a855f7';
+    const icon = icons[s.type] || '🎯';
+    const typeLabel = icon + ' ' + (s.strategy || s.type).toUpperCase();
+    let detail = '';
+    if (s.type === 'momentum') {
+      detail = '<span style="color:#ffd60a">Edge: ' + s.edgePct + '% | ' + s.direction + '</span> <span style="color:#5a7a68">| Price: ' + ((s.currentPrice||0)*100).toFixed(1) + '% vs Forecast: ' + ((s.forecastPrice||0)*100).toFixed(1) + '%</span>';
+    } else if (s.type === 'trend') {
+      detail = '<span style="color:#00b4d8">Edge: ' + s.edgePct + '% | ' + s.direction + '</span> <span style="color:#5a7a68">| OB Imbalance: ' + (s.imbalance||0) + '%</span>';
+    } else if (s.type === 'arbitrage') {
+      detail = '<span style="color:#00f5a0">Profit: +' + (s.guaranteedProfit||0) + '% | UP: $' + (s.upPrice||0).toFixed(3) + ' + DOWN: $' + (s.downPrice||0).toFixed(3) + ' = $' + (s.totalCost||0).toFixed(3) + '</span>';
+    }
     const timeAgo = formatNewsTimeAgo(s.timestamp);
+    const tfBadge = s.timeframe ? '<span style="background:rgba(168,85,247,0.2);color:#a855f7;padding:0 4px;border-radius:2px;font-size:7px;margin-left:6px">' + s.timeframe + '</span>' : '';
     return '<div style="padding:8px 10px;background:rgba(0,0,0,0.25);border-radius:6px;margin-bottom:4px;border-left:3px solid ' + borderColor + '">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
-        '<span style="font-family:\'Space Mono\',monospace;font-size:9px;font-weight:700;color:' + borderColor + '">' + typeLabel + '</span>' +
+        '<span style="font-family:\'Space Mono\',monospace;font-size:9px;font-weight:700;color:' + borderColor + '">' + typeLabel + tfBadge + '</span>' +
         '<span style="font-family:\'Space Mono\',monospace;font-size:8px;color:#555">' + timeAgo + '</span>' +
       '</div>' +
       '<div style="font-family:\'Space Mono\',monospace;font-size:10px;color:#e0e0e0;margin-bottom:3px">' + (s.market || '').substring(0, 100) + '</div>' +
@@ -23210,37 +23275,118 @@ function renderPredictionSignals(signals) {
 }
 
 function renderPredictionPerformance(data) {
-  const perf = data.performance || [];
-  const config = data.config || {};
+  const mode = data.mode || 'paper';
+  PRED_STATE.mode = mode;
+  updatePredModeUI(mode);
+
+  const config = (data.paper && data.paper.stats) ? {} : (data.config || {});
+  // Load config into form
   const bs = document.getElementById('predBetSize'); if (bs && config.betSize) bs.value = config.betSize;
   const et = document.getElementById('predEdgeThreshold'); if (et && config.edgeThreshold) et.value = (config.edgeThreshold * 100);
-  const se = document.getElementById('predSniperEnabled'); if (se) se.checked = config.sniperEnabled !== false;
-  const ae = document.getElementById('predArbEnabled'); if (ae) ae.checked = config.arbEnabled !== false;
+  const me = document.getElementById('predMomentumEnabled'); if (me) me.checked = config.momentumEnabled !== false;
+  const te = document.getElementById('predTrendEnabled'); if (te) te.checked = config.trendEnabled !== false;
 
-  const wins = perf.filter(p => p.outcome === 'win').length;
-  const losses = perf.filter(p => p.outcome === 'loss').length;
+  // Show stats for current mode
+  const modeData = data[mode] || data;
+  const stats = modeData.stats || {};
+  const trades = modeData.trades || [];
+
+  const wins = stats.wins || 0;
+  const losses = stats.losses || 0;
   const total = wins + losses;
   const winRate = total > 0 ? ((wins / total) * 100).toFixed(1) + '%' : '\u2014';
-  const totalPnl = perf.reduce((s, p) => s + (p.pnl || 0), 0);
+  const totalPnl = stats.totalPnl || 0;
+  const invested = stats.invested || 0;
+  const roi = invested > 0 ? ((totalPnl / invested) * 100).toFixed(1) + '%' : '\u2014';
+
+  const perfLabel = document.getElementById('predPerfModeLabel');
+  if (perfLabel) { perfLabel.textContent = '(' + mode.toUpperCase() + ')'; perfLabel.style.color = mode === 'paper' ? '#00f5a0' : '#ffd60a'; }
 
   const wrEl = document.getElementById('predWinRate');
   if (wrEl) { wrEl.textContent = winRate; wrEl.style.color = total > 0 && wins/total >= 0.55 ? '#00f5a0' : total > 0 ? '#ff4d6d' : '#5a7a68'; }
   const plEl = document.getElementById('predTotalPnl');
   if (plEl) { plEl.textContent = '$' + totalPnl.toFixed(2); plEl.style.color = totalPnl > 0 ? '#00f5a0' : totalPnl < 0 ? '#ff4d6d' : '#5a7a68'; }
-  const tcEl = document.getElementById('predTradeCount'); if (tcEl) tcEl.textContent = total;
+  const tcEl = document.getElementById('predTradeCount'); if (tcEl) tcEl.textContent = stats.trades || 0;
+  const roiEl = document.getElementById('predROI');
+  if (roiEl) { roiEl.textContent = roi; roiEl.style.color = totalPnl > 0 ? '#00f5a0' : totalPnl < 0 ? '#ff4d6d' : '#5a7a68'; }
 
+  // Render trade log for current view
+  renderPredTradeLog(trades);
+
+  // Store both for log switching
+  PRED_STATE.paperTrades = (data.paper?.trades) || [];
+  PRED_STATE.realTrades = (data.real?.trades) || [];
+}
+
+function renderPredTradeLog(trades) {
   const logEl = document.getElementById('predTradeLog');
-  if (logEl && perf.length > 0) {
-    logEl.innerHTML = perf.slice(0, 20).map(p => {
-      const icon = p.outcome === 'win' ? '\u2705' : p.outcome === 'loss' ? '\u274c' : '\u23f3';
-      const pnlColor = (p.pnl || 0) > 0 ? '#00f5a0' : (p.pnl || 0) < 0 ? '#ff4d6d' : '#5a7a68';
-      return '<div style="display:flex;justify-content:space-between;padding:4px 8px;font-family:\'Space Mono\',monospace;font-size:9px;border-bottom:1px solid rgba(255,255,255,0.02)">' +
-        '<span style="color:#888">' + new Date(p.timestamp).toLocaleString() + '</span>' +
-        '<span style="color:#e0e0e0">' + (p.market || '').substring(0, 40) + '</span>' +
-        '<span>' + icon + '</span>' +
-        '<span style="color:' + pnlColor + '">' + (p.pnl > 0 ? '+' : '') + (p.pnl || 0).toFixed(2) + '</span>' +
-      '</div>';
-    }).join('');
+  if (!logEl) return;
+  if (!trades || trades.length === 0) {
+    logEl.innerHTML = '<div style="text-align:center;padding:20px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:10px">No trades yet — start the bot to begin</div>';
+    return;
+  }
+  logEl.innerHTML = trades.slice(0, 30).map(p => {
+    const icon = p.outcome === 'win' ? '✅' : p.outcome === 'loss' ? '❌' : '⏳';
+    const pnlColor = (p.pnl || 0) > 0 ? '#00f5a0' : (p.pnl || 0) < 0 ? '#ff4d6d' : '#5a7a68';
+    const stratColor = { momentum: '#ffd60a', trend: '#00b4d8', arbitrage: '#00f5a0' }[p.type] || '#a855f7';
+    const modeIcon = p.mode === 'paper' ? '📝' : '💰';
+    return '<div style="display:grid;grid-template-columns:auto 1fr auto auto auto;gap:8px;align-items:center;padding:5px 8px;font-family:\'Space Mono\',monospace;font-size:9px;border-bottom:1px solid rgba(255,255,255,0.03)">' +
+      '<span style="color:#555">' + modeIcon + '</span>' +
+      '<span style="color:#e0e0e0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (p.market || '').substring(0, 45) + '</span>' +
+      '<span style="color:' + stratColor + ';font-size:8px">' + (p.strategy || p.type || '') + '</span>' +
+      '<span>' + icon + '</span>' +
+      '<span style="color:' + pnlColor + ';min-width:50px;text-align:right">' + (p.status === 'open' ? 'OPEN' : (p.pnl > 0 ? '+' : '') + '$' + (p.pnl || 0).toFixed(2)) + '</span>' +
+    '</div>';
+  }).join('');
+}
+
+function switchPredTradeLog(view) {
+  PRED_STATE.tradeLogView = view;
+  const paperBtn = document.getElementById('predLogPaperBtn');
+  const realBtn = document.getElementById('predLogRealBtn');
+  if (view === 'paper') {
+    if (paperBtn) { paperBtn.style.background = 'rgba(0,245,160,0.15)'; paperBtn.style.borderColor = 'rgba(0,245,160,0.3)'; paperBtn.style.color = '#00f5a0'; paperBtn.style.fontWeight = '700'; }
+    if (realBtn) { realBtn.style.background = 'rgba(0,0,0,0.2)'; realBtn.style.borderColor = 'rgba(255,255,255,0.1)'; realBtn.style.color = '#5a7a68'; realBtn.style.fontWeight = 'normal'; }
+    renderPredTradeLog(PRED_STATE.paperTrades || []);
+  } else {
+    if (realBtn) { realBtn.style.background = 'rgba(255,214,10,0.15)'; realBtn.style.borderColor = 'rgba(255,214,10,0.3)'; realBtn.style.color = '#ffd60a'; realBtn.style.fontWeight = '700'; }
+    if (paperBtn) { paperBtn.style.background = 'rgba(0,0,0,0.2)'; paperBtn.style.borderColor = 'rgba(255,255,255,0.1)'; paperBtn.style.color = '#5a7a68'; paperBtn.style.fontWeight = 'normal'; }
+    renderPredTradeLog(PRED_STATE.realTrades || []);
+  }
+}
+
+function updatePredModeUI(mode) {
+  PRED_STATE.mode = mode;
+  const paperBtn = document.getElementById('predModePaper');
+  const realBtn = document.getElementById('predModeReal');
+  const modeLabel = document.getElementById('predModeLabel');
+  if (mode === 'paper') {
+    if (paperBtn) { paperBtn.style.background = 'rgba(0,245,160,0.2)'; paperBtn.style.color = '#00f5a0'; paperBtn.style.fontWeight = '700'; }
+    if (realBtn) { realBtn.style.background = 'rgba(0,0,0,0.3)'; realBtn.style.color = '#5a7a68'; realBtn.style.fontWeight = 'normal'; }
+    if (modeLabel) { modeLabel.textContent = 'PAPER'; modeLabel.style.color = '#00f5a0'; }
+  } else {
+    if (realBtn) { realBtn.style.background = 'rgba(255,214,10,0.2)'; realBtn.style.color = '#ffd60a'; realBtn.style.fontWeight = '700'; }
+    if (paperBtn) { paperBtn.style.background = 'rgba(0,0,0,0.3)'; paperBtn.style.color = '#5a7a68'; paperBtn.style.fontWeight = 'normal'; }
+    if (modeLabel) { modeLabel.textContent = 'REAL'; modeLabel.style.color = '#ffd60a'; }
+  }
+}
+
+async function setPredictionMode(mode) {
+  try {
+    const token = localStorage.getItem('dash_token');
+    if (!token) { toast('Login required', 'error'); return; }
+    updatePredModeUI(mode);
+    const r = await fetch(BACKEND_URL + '/predictions/mode', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode }),
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!r.ok) throw new Error('Server returned ' + r.status);
+    toast(mode === 'paper' ? '📝 Paper trading mode' : '💰 REAL trading mode — trades will execute!', mode === 'real' ? 'warning' : 'success');
+    loadPredictionMarkets(); // refresh performance for new mode
+  } catch(e) {
+    toast('Failed to switch mode: ' + e.message, 'error');
   }
 }
 
@@ -23256,8 +23402,9 @@ async function startPredictionBot() {
       signal: AbortSignal.timeout(10000)
     });
     if (!r.ok) throw new Error('Server returned ' + r.status);
+    const data = await r.json();
     if (el) { el.textContent = 'Running'; el.style.color = '#00f5a0'; }
-    toast('🤖 Prediction bot started');
+    toast('🤖 Jupiter prediction bot started (' + (data.mode || PRED_STATE.mode) + ' mode)');
   } catch(e) {
     if (el) { el.textContent = 'Error'; el.style.color = '#ff4d6d'; }
     toast('Failed to start bot: ' + (e.message.includes('timeout') ? 'Backend not responding' : e.message), 'error');
@@ -23277,7 +23424,7 @@ async function stopPredictionBot() {
     });
     if (!r.ok) throw new Error('Server returned ' + r.status);
     if (el) { el.textContent = 'Stopped'; el.style.color = '#ff4d6d'; }
-    toast('🤖 Prediction bot stopped');
+    toast('🤖 Jupiter prediction bot stopped');
   } catch(e) {
     if (el) { el.textContent = 'Error'; el.style.color = '#ff4d6d'; }
     toast('Failed to stop bot: ' + (e.message.includes('timeout') ? 'Backend not responding' : e.message), 'error');
@@ -23290,9 +23437,9 @@ async function savePredictionConfig() {
     if (!token) { toast('Login required', 'error'); return; }
     const config = {
       betSize: parseFloat(document.getElementById('predBetSize')?.value || 10),
-      edgeThreshold: parseFloat(document.getElementById('predEdgeThreshold')?.value || 10) / 100,
-      sniperEnabled: document.getElementById('predSniperEnabled')?.checked ?? true,
-      arbEnabled: document.getElementById('predArbEnabled')?.checked ?? true,
+      edgeThreshold: parseFloat(document.getElementById('predEdgeThreshold')?.value || 8) / 100,
+      momentumEnabled: document.getElementById('predMomentumEnabled')?.checked ?? true,
+      trendEnabled: document.getElementById('predTrendEnabled')?.checked ?? true,
     };
     const r = await fetch(BACKEND_URL + '/predictions/config', {
       method: 'POST',
