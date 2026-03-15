@@ -14246,14 +14246,74 @@ function _fetchAndMergeServerTFStats(localStats) {
 }
 
 function _updateTFCards(byTF) {
+  // Merge server TF data into the global stats object and re-render the whole chart
+  if (window._calStats) {
+    window._calStats.byTF = byTF;
+    _renderCalibrationChart(window._calStats, window._calActiveTF);
+  }
+}
+
+// Build probability bucket bars HTML
+function _buildBucketBars(buckets) {
+  const sortedBuckets = Object.entries(buckets).sort((a, b) => a[1].bucket - b[1].bucket);
+  if (sortedBuckets.length === 0) return '<div style="color:#3a5a48;font-size:10px;padding:12px;text-align:center">No resolved trades for this filter yet</div>';
+
+  return sortedBuckets.map(([label, data]) => {
+    const actualWR = (data.wins / data.total * 100).toFixed(0);
+    const expectedMid = data.bucket + 2.5;
+    const barHeight = Math.max(20, Math.min(120, data.total * 8));
+    const wrColor = parseFloat(actualWR) >= expectedMid ? '#00f5a0' : parseFloat(actualWR) >= expectedMid - 10 ? '#f5c400' : '#ff4d6d';
+    const isCalibrated = Math.abs(parseFloat(actualWR) - expectedMid) <= 10;
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;min-width:55px">
+      <div style="font-size:13px;color:${wrColor};font-weight:800;font-family:'Space Mono',monospace">${actualWR}%</div>
+      <div style="width:100%;max-width:40px;height:${barHeight}px;background:${wrColor};border-radius:4px;opacity:0.8"></div>
+      <div style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;font-weight:700">${label}</div>
+      <div style="font-size:9px;color:#3a5a48;font-family:'Space Mono',monospace">n=${data.total}</div>
+      <div style="font-size:9px;color:${isCalibrated ? '#00f5a0' : '#ff8c69'};font-family:'Space Mono',monospace">${isCalibrated ? '✓' : '⚠'}</div>
+    </div>`;
+  }).join('');
+}
+
+// Filter buckets by timeframe from localStorage scan log
+function _getBucketsForTF(tf) {
+  try {
+    const log = JSON.parse(localStorage.getItem('bestTradesScanLog_v1') || '[]');
+    const resolved = log.filter(e => e.resolved && e.outcome !== 'expired' && e.tf === tf);
+    const buckets = {};
+    for (const e of resolved) {
+      const bucket = Math.floor(e.prob / 5) * 5;
+      const key = `${bucket}-${bucket + 5}%`;
+      if (!buckets[key]) buckets[key] = { total: 0, wins: 0, bucket };
+      buckets[key].total++;
+      if (e.outcome === 'win') buckets[key].wins++;
+    }
+    return buckets;
+  } catch { return {}; }
+}
+
+// Render/re-render the calibration chart (called on initial load + TF click)
+function _renderCalibrationChart(stats, activeTF) {
   const chartEl = document.getElementById('scanCalibrationChart');
   if (!chartEl) return;
-  // Find the TF grid container and update it
-  const tfGrid = chartEl.querySelector('[data-tf-grid]');
-  if (!tfGrid) return;
+
+  // Get buckets — either filtered by TF or all
+  const buckets = activeTF ? _getBucketsForTF(activeTF) : stats.buckets;
+  const bars = _buildBucketBars(buckets);
+  const filterLabel = activeTF ? `<span style="color:#ff6b35"> (${activeTF} only)</span>` : ' <span style="color:#5a7a68">(all timeframes)</span>';
+
+  // Breakdown rows for regime, MQ
+  const regimeRows = Object.entries(stats.byRegime).map(([regime, d]) =>
+    `<span style="color:${regime === 'bull' ? '#00f5a0' : regime === 'bear' ? '#ff4d6d' : '#f5c400'}">${regime}: ${(d.wins/d.total*100).toFixed(0)}% (${d.total})</span>`
+  ).join(' · ');
+
+  const mqRows = Object.entries(stats.byMQ).sort((a,b) => a[0].localeCompare(b[0])).map(([mq, d]) =>
+    `<span style="color:${mq === 'A' ? '#00f5a0' : mq === 'B' ? '#f5c400' : '#ff8c69'}">${mq}: ${(d.wins/d.total*100).toFixed(0)}% (${d.total})</span>`
+  ).join(' · ');
+
+  // Build TF breakdown grid (clickable cards)
   const allTFs = ['5m', '15m', '30m', '1h', '4h', '1d'];
-  tfGrid.innerHTML = allTFs.map(tf => {
-    const d = byTF[tf];
+  const tfCards = allTFs.map(tf => {
+    const d = stats.byTF[tf];
     const total = d ? d.total : 0;
     const wins = d ? d.wins : 0;
     const losses = total - wins;
@@ -14261,17 +14321,50 @@ function _updateTFCards(byTF) {
     const wrLabel = wr !== null ? wr.toFixed(0) + '%' : '—';
     const wrColor = wr === null ? '#3a5a48' : wr >= 55 ? '#00f5a0' : wr >= 45 ? '#f5c400' : '#ff4d6d';
     const barW = wr !== null ? Math.max(5, wr) : 0;
-    return `<div style="background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.12);border-radius:6px;padding:8px;min-width:80px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <span style="font-weight:700;color:#ff6b35;font-size:10px">${tf}</span>
-        <span style="color:${wrColor};font-weight:700;font-size:12px">${wrLabel}</span>
+    const isActive = activeTF === tf;
+    const borderColor = isActive ? 'rgba(255,107,53,0.7)' : 'rgba(167,139,250,0.12)';
+    const bgColor = isActive ? 'rgba(255,107,53,0.1)' : 'rgba(0,0,0,0.3)';
+    return `<div onclick="_filterCalibrationByTF('${tf}')" style="background:${bgColor};border:2px solid ${borderColor};border-radius:6px;padding:10px;min-width:90px;cursor:pointer;transition:all 0.2s" onmouseover="this.style.borderColor='rgba(255,107,53,0.5)'" onmouseout="this.style.borderColor='${borderColor}'">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+        <span style="font-weight:700;color:#ff6b35;font-size:13px">${tf}</span>
+        <span style="color:${wrColor};font-weight:800;font-size:15px">${wrLabel}</span>
       </div>
-      <div style="background:rgba(255,255,255,0.05);border-radius:3px;height:5px;overflow:hidden;margin-bottom:3px">
-        <div style="height:100%;width:${barW}%;background:${wrColor};border-radius:3px"></div>
+      <div style="background:rgba(255,255,255,0.05);border-radius:3px;height:6px;overflow:hidden;margin-bottom:4px">
+        <div style="height:100%;width:${barW}%;background:${wrColor};border-radius:3px;transition:width 0.5s"></div>
       </div>
-      <div style="font-size:7px;color:#5a7a68">${wins}W / ${losses}L · n=${total}</div>
+      <div style="font-size:9px;color:#5a7a68">${wins}W / ${losses}L · n=${total}</div>
     </div>`;
   }).join('');
+
+  chartEl.innerHTML = `
+    <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-radius:8px;padding:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:#a78bfa;font-family:'Space Mono',monospace">📊 CALIBRATION: PREDICTED vs ACTUAL WIN RATE${filterLabel}</div>
+          <div style="font-size:8px;color:#3a5a48;font-family:'Space Mono',monospace;margin-top:2px">✓ = well-calibrated (actual within ±10% of predicted) · ⚠ = miscalibrated</div>
+        </div>
+        ${activeTF ? '<button onclick="_filterCalibrationByTF(null)" style="font-size:8px;padding:4px 10px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:4px;cursor:pointer;font-family:\'Space Mono\',monospace;font-weight:700;width:auto;margin:0">Show All</button>' : ''}
+      </div>
+      <div style="display:flex;gap:8px;align-items:flex-end;padding:12px 0;min-height:80px">${bars}</div>
+      <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:12px;margin-top:10px">
+        <div style="font-size:11px;font-weight:700;color:#ff6b35;font-family:'Space Mono',monospace;margin-bottom:10px">📡 WIN RATE BY TIMEFRAME <span style="font-size:8px;color:#5a7a68;font-weight:400">— click a timeframe to filter calibration</span></div>
+        <div data-tf-grid style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px">${tfCards}</div>
+      </div>
+      <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:8px;font-size:9px;font-family:'Space Mono',monospace">
+        <div style="margin-bottom:4px"><span style="color:#5a7a68">By Regime:</span> ${regimeRows || '<span style="color:#3a5a48">No data</span>'}</div>
+        <div><span style="color:#5a7a68">By Quality:</span> ${mqRows || '<span style="color:#3a5a48">No data</span>'}</div>
+      </div>
+    </div>
+  `;
+}
+
+// Click handler: filter calibration bars by timeframe
+function _filterCalibrationByTF(tf) {
+  if (!window._calStats) return;
+  window._calActiveTF = (tf === window._calActiveTF) ? null : tf; // toggle off if same TF clicked
+  _renderCalibrationChart(window._calStats, window._calActiveTF);
+  // Also fetch server data for this TF
+  _fetchAndMergeServerTFStats(window._calStats);
 }
 
 // Render scan history UI
@@ -14314,74 +14407,14 @@ function renderScanHistory() {
     `;
   }
 
+  // Store stats globally for TF filtering
+  window._calStats = stats;
+  window._calActiveTF = null;
+
   // Calibration chart — probability bucket accuracy
   const chartEl = document.getElementById('scanCalibrationChart');
   if (chartEl && Object.keys(stats.buckets).length > 0) {
-    const sortedBuckets = Object.entries(stats.buckets)
-      .sort((a, b) => a[1].bucket - b[1].bucket);
-
-    const bars = sortedBuckets.map(([label, data]) => {
-      const actualWR = (data.wins / data.total * 100).toFixed(0);
-      const expectedMid = data.bucket + 2.5;
-      const barHeight = Math.max(4, data.total * 3);
-      const wrColor = parseFloat(actualWR) >= expectedMid ? '#00f5a0' : parseFloat(actualWR) >= expectedMid - 10 ? '#f5c400' : '#ff4d6d';
-      const isCalibrated = Math.abs(parseFloat(actualWR) - expectedMid) <= 10;
-      return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;min-width:40px">
-        <div style="font-size:7px;color:${wrColor};font-weight:700;font-family:'Space Mono',monospace">${actualWR}%</div>
-        <div style="width:100%;max-width:30px;height:${barHeight}px;background:${wrColor};border-radius:3px;opacity:0.7"></div>
-        <div style="font-size:6px;color:#5a7a68;font-family:'Space Mono',monospace">${label}</div>
-        <div style="font-size:6px;color:#3a5a48;font-family:'Space Mono',monospace">n=${data.total}</div>
-        <div style="font-size:6px;color:${isCalibrated ? '#00f5a0' : '#ff8c69'};font-family:'Space Mono',monospace">${isCalibrated ? '✓' : '⚠'}</div>
-      </div>`;
-    }).join('');
-
-    // Breakdown rows for regime, MQ, TF
-    const regimeRows = Object.entries(stats.byRegime).map(([regime, d]) =>
-      `<span style="color:${regime === 'bull' ? '#00f5a0' : regime === 'bear' ? '#ff4d6d' : '#f5c400'}">${regime}: ${(d.wins/d.total*100).toFixed(0)}% (${d.total})</span>`
-    ).join(' · ');
-
-    const mqRows = Object.entries(stats.byMQ).sort((a,b) => a[0].localeCompare(b[0])).map(([mq, d]) =>
-      `<span style="color:${mq === 'A' ? '#00f5a0' : mq === 'B' ? '#f5c400' : '#ff8c69'}">${mq}: ${(d.wins/d.total*100).toFixed(0)}% (${d.total})</span>`
-    ).join(' · ');
-
-    // Build TF breakdown grid (visual cards per timeframe)
-    const allTFs = ['5m', '15m', '30m', '1h', '4h', '1d'];
-    const tfCards = allTFs.map(tf => {
-      const d = stats.byTF[tf];
-      const total = d ? d.total : 0;
-      const wins = d ? d.wins : 0;
-      const losses = total - wins;
-      const wr = total > 0 ? (wins / total * 100) : null;
-      const wrLabel = wr !== null ? wr.toFixed(0) + '%' : '—';
-      const wrColor = wr === null ? '#3a5a48' : wr >= 55 ? '#00f5a0' : wr >= 45 ? '#f5c400' : '#ff4d6d';
-      const barW = wr !== null ? Math.max(5, wr) : 0;
-      return `<div style="background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.12);border-radius:6px;padding:8px;min-width:80px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-          <span style="font-weight:700;color:#ff6b35;font-size:10px">${tf}</span>
-          <span style="color:${wrColor};font-weight:700;font-size:12px">${wrLabel}</span>
-        </div>
-        <div style="background:rgba(255,255,255,0.05);border-radius:3px;height:5px;overflow:hidden;margin-bottom:3px">
-          <div style="height:100%;width:${barW}%;background:${wrColor};border-radius:3px"></div>
-        </div>
-        <div style="font-size:7px;color:#5a7a68">${wins}W / ${losses}L · n=${total}</div>
-      </div>`;
-    }).join('');
-
-    chartEl.innerHTML = `
-      <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-radius:8px;padding:12px">
-        <div style="font-size:9px;font-weight:700;color:#a78bfa;font-family:'Space Mono',monospace;margin-bottom:8px">📊 CALIBRATION: PREDICTED vs ACTUAL WIN RATE</div>
-        <div style="font-size:7px;color:#3a5a48;font-family:'Space Mono',monospace;margin-bottom:8px">✓ = well-calibrated (actual within ±10% of predicted) · ⚠ = miscalibrated</div>
-        <div style="display:flex;gap:4px;align-items:flex-end;padding:8px 0">${bars}</div>
-        <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:10px;margin-top:8px">
-          <div style="font-size:9px;font-weight:700;color:#ff6b35;font-family:'Space Mono',monospace;margin-bottom:8px">📡 WIN RATE BY TIMEFRAME</div>
-          <div data-tf-grid style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:6px;margin-bottom:10px">${tfCards}</div>
-        </div>
-        <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:8px;font-size:7px;font-family:'Space Mono',monospace">
-          <div style="margin-bottom:3px"><span style="color:#5a7a68">By Regime:</span> ${regimeRows || '<span style="color:#3a5a48">No data</span>'}</div>
-          <div><span style="color:#5a7a68">By Quality:</span> ${mqRows || '<span style="color:#3a5a48">No data</span>'}</div>
-        </div>
-      </div>
-    `;
+    _renderCalibrationChart(stats, null);
   } else if (chartEl) {
     chartEl.innerHTML = '';
   }
