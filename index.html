@@ -9725,7 +9725,7 @@ async function runClientDegenScan() {
     });
 
     if (statusEl) statusEl.textContent = `⟳ Scoring ${filtered.length} candidates...`;
-    const scored = filtered.map(t => ({ ...t, ...clientScoreToken(t.pair) }))
+    let scored = filtered.map(t => ({ ...t, ...clientScoreToken(t.pair) }))
       .sort((a, b) => b.degenScore - a.degenScore);
 
     // ── RugCheck as HARD GATE — expanded to top 50 ────────────
@@ -9845,9 +9845,9 @@ async function runClientDegenScan() {
     }
     // Filter out hard-blocked tokens from results
     scored = scored.filter(t => !t._hardBlocked);
-    top15.sort((a, b) => b.degenScore - a.degenScore);
+    scored.sort((a, b) => b.degenScore - a.degenScore);
 
-    const tokens = top15.map(t => {
+    const tokens = scored.map(t => {
       const buyPct    = Math.round((t.buyRatio1h || 0.5) * 100);
       const vol24h    = t.pair.volume?.h24 || 0;
       const mcap      = t.pair.marketCap || t.pair.fdv || 0;
