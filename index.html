@@ -18227,40 +18227,41 @@ const COIN_COMPETITORS = {
 // REFERENCE DATA (static — approximate, updated periodically):
 //   activeUsers, dApps, revenueM, devActivity, profitable, txDayK, uniqueMetric
 // These reference metrics are sourced from Token Terminal, Artemis, Electric Capital reports
+// stakingPct = % of total supply staked (for PoS chains), 0 = not applicable/PoW
 const COIN_FUNDAMENTALS = {
-  bitcoin:       { activeUsers: 12000, dApps: 50,   revenueM: 1500, devActivity: 'high', profitable: true,  txDayK: 600,  uniqueMetric: '~1M Lightning channels' },
-  ethereum:      { activeUsers: 6000,  dApps: 4927, revenueM: 3200, devActivity: 'high', profitable: true,  txDayK: 1200, uniqueMetric: 'Largest DeFi ecosystem' },
-  solana:        { activeUsers: 15000, dApps: 5351, revenueM: 450,  devActivity: 'high', profitable: true,  txDayK: 45000,uniqueMetric: '45M+ daily TXs' },
-  binancecoin:   { activeUsers: 4000,  dApps: 3413, revenueM: 800,  devActivity: 'med',  profitable: true,  txDayK: 5000, uniqueMetric: 'Binance ecosystem anchor' },
-  ripple:        { activeUsers: 800,   dApps: 30,   revenueM: 20,   devActivity: 'med',  profitable: false, txDayK: 1500, uniqueMetric: '300+ bank partnerships' },
-  cardano:       { activeUsers: 600,   dApps: 150,  revenueM: 8,    devActivity: 'med',  profitable: false, txDayK: 100,  uniqueMetric: 'Peer-reviewed research' },
-  'avalanche-2': { activeUsers: 500,   dApps: 400,  revenueM: 30,   devActivity: 'med',  profitable: false, txDayK: 600,  uniqueMetric: '500+ subnets deployed' },
-  sui:           { activeUsers: 3000,  dApps: 200,  revenueM: 15,   devActivity: 'high', profitable: false, txDayK: 8000, uniqueMetric: 'Object-centric model' },
-  near:          { activeUsers: 2500,  dApps: 300,  revenueM: 10,   devActivity: 'high', profitable: false, txDayK: 5000, uniqueMetric: 'Chain abstraction leader' },
-  toncoin:       { activeUsers: 8000,  dApps: 600,  revenueM: 25,   devActivity: 'high', profitable: false, txDayK: 6000, uniqueMetric: '900M Telegram reach' },
-  aptos:         { activeUsers: 500,   dApps: 80,   revenueM: 5,    devActivity: 'med',  profitable: false, txDayK: 2000, uniqueMetric: 'Parallel execution engine' },
-  'matic-network':{ activeUsers: 2000, dApps: 1500, revenueM: 60,   devActivity: 'high', profitable: false, txDayK: 3000, uniqueMetric: 'zkEVM live + enterprise' },
-  arbitrum:      { activeUsers: 3000,  dApps: 777,  revenueM: 120,  devActivity: 'high', profitable: true,  txDayK: 2500, uniqueMetric: 'Largest L2 by TVL' },
-  optimism:      { activeUsers: 1500,  dApps: 400,  revenueM: 50,   devActivity: 'high', profitable: false, txDayK: 1500, uniqueMetric: 'OP Stack → 10+ chains' },
-  starknet:      { activeUsers: 400,   dApps: 100,  revenueM: 5,    devActivity: 'high', profitable: false, txDayK: 300,  uniqueMetric: 'ZK validity proofs' },
-  chainlink:     { activeUsers: 1000,  dApps: 2200, revenueM: 200,  devActivity: 'high', profitable: true,  txDayK: 800,  uniqueMetric: 'Value secured by oracles' },
-  polkadot:      { activeUsers: 400,   dApps: 200,  revenueM: 5,    devActivity: 'med',  profitable: false, txDayK: 300,  uniqueMetric: 'Cross-chain via XCM' },
-  uniswap:       { activeUsers: 1500,  dApps: 1,    revenueM: 700,  devActivity: 'high', profitable: true,  txDayK: 500,  uniqueMetric: '$2T+ cumulative volume' },
-  aave:          { activeUsers: 500,   dApps: 1,    revenueM: 300,  devActivity: 'high', profitable: true,  txDayK: 200,  uniqueMetric: 'Largest lending protocol' },
-  maker:         { activeUsers: 200,   dApps: 1,    revenueM: 250,  devActivity: 'med',  profitable: true,  txDayK: 80,   uniqueMetric: '$5B DAI supply' },
-  'jupiter-exchange-solana': { activeUsers: 2000, dApps: 1, revenueM: 150, devActivity: 'high', profitable: true, txDayK: 1000, uniqueMetric: '#1 Solana DEX aggregator' },
-  'injective-protocol': { activeUsers: 200, dApps: 100, revenueM: 10, devActivity: 'med', profitable: false, txDayK: 200, uniqueMetric: 'On-chain orderbook' },
-  'curve-dao-token': { activeUsers: 300, dApps: 1, revenueM: 80, devActivity: 'med', profitable: true, txDayK: 150, uniqueMetric: 'crvUSD lending market' },
-  'render-token': { activeUsers: 50,  dApps: 10,  revenueM: 15,   devActivity: 'med',  profitable: false, txDayK: 30,   uniqueMetric: '500K+ GPU frames/day' },
-  'fetch-ai':    { activeUsers: 80,   dApps: 30,  revenueM: 5,    devActivity: 'med',  profitable: false, txDayK: 50,   uniqueMetric: 'ASI Alliance merger' },
-  bittensor:     { activeUsers: 30,   dApps: 40,  revenueM: 3,    devActivity: 'high', profitable: false, txDayK: 20,   uniqueMetric: '50+ AI subnets' },
-  singularitynet:{ activeUsers: 20,   dApps: 15,  revenueM: 2,    devActivity: 'low',  profitable: false, txDayK: 10,   uniqueMetric: 'AGI research focus' },
-  dogecoin:      { activeUsers: 500,  dApps: 5,   revenueM: 2,    devActivity: 'low',  profitable: false, txDayK: 100,  uniqueMetric: 'Elon Musk backing' },
-  'shiba-inu':   { activeUsers: 300,  dApps: 10,  revenueM: 1,    devActivity: 'low',  profitable: false, txDayK: 50,   uniqueMetric: 'Shibarium L2 launched' },
-  pepe:          { activeUsers: 200,  dApps: 0,   revenueM: 0,    devActivity: 'low',  profitable: false, txDayK: 80,   uniqueMetric: 'Pure speculation' },
-  bonk:          { activeUsers: 150,  dApps: 5,   revenueM: 0,    devActivity: 'low',  profitable: false, txDayK: 60,   uniqueMetric: 'SOL community meme' },
-  dogwifcoin:    { activeUsers: 100,  dApps: 0,   revenueM: 0,    devActivity: 'low',  profitable: false, txDayK: 40,   uniqueMetric: 'No utility' },
-  floki:         { activeUsers: 120,  dApps: 3,   revenueM: 1,    devActivity: 'low',  profitable: false, txDayK: 30,   uniqueMetric: 'TokenFi platform' },
+  bitcoin:       { activeUsers: 12000, dApps: 50,   revenueM: 1500, devActivity: 'high', profitable: true,  txDayK: 600,  stakingPct: 0,  uniqueMetric: '~1M Lightning channels' },
+  ethereum:      { activeUsers: 6000,  dApps: 4927, revenueM: 3200, devActivity: 'high', profitable: true,  txDayK: 1200, stakingPct: 28, uniqueMetric: 'Largest DeFi ecosystem' },
+  solana:        { activeUsers: 15000, dApps: 5351, revenueM: 450,  devActivity: 'high', profitable: true,  txDayK: 45000,stakingPct: 67, uniqueMetric: '45M+ daily TXs' },
+  binancecoin:   { activeUsers: 4000,  dApps: 3413, revenueM: 800,  devActivity: 'med',  profitable: true,  txDayK: 5000, stakingPct: 15, uniqueMetric: 'Binance ecosystem anchor' },
+  ripple:        { activeUsers: 800,   dApps: 30,   revenueM: 20,   devActivity: 'med',  profitable: false, txDayK: 1500, stakingPct: 0,  uniqueMetric: '300+ bank partnerships' },
+  cardano:       { activeUsers: 600,   dApps: 150,  revenueM: 8,    devActivity: 'med',  profitable: false, txDayK: 100,  stakingPct: 63, uniqueMetric: 'Peer-reviewed research' },
+  'avalanche-2': { activeUsers: 500,   dApps: 400,  revenueM: 30,   devActivity: 'med',  profitable: false, txDayK: 600,  stakingPct: 55, uniqueMetric: '500+ subnets deployed' },
+  sui:           { activeUsers: 3000,  dApps: 200,  revenueM: 15,   devActivity: 'high', profitable: false, txDayK: 8000, stakingPct: 77, uniqueMetric: 'Object-centric model' },
+  near:          { activeUsers: 2500,  dApps: 300,  revenueM: 10,   devActivity: 'high', profitable: false, txDayK: 5000, stakingPct: 48, uniqueMetric: 'Chain abstraction leader' },
+  toncoin:       { activeUsers: 8000,  dApps: 600,  revenueM: 25,   devActivity: 'high', profitable: false, txDayK: 6000, stakingPct: 30, uniqueMetric: '900M Telegram reach' },
+  aptos:         { activeUsers: 500,   dApps: 80,   revenueM: 5,    devActivity: 'med',  profitable: false, txDayK: 2000, stakingPct: 82, uniqueMetric: 'Parallel execution engine' },
+  'matic-network':{ activeUsers: 2000, dApps: 1500, revenueM: 60,   devActivity: 'high', profitable: false, txDayK: 3000, stakingPct: 38, uniqueMetric: 'zkEVM live + enterprise' },
+  arbitrum:      { activeUsers: 3000,  dApps: 777,  revenueM: 120,  devActivity: 'high', profitable: true,  txDayK: 2500, stakingPct: 12, uniqueMetric: 'Largest L2 by TVL' },
+  optimism:      { activeUsers: 1500,  dApps: 400,  revenueM: 50,   devActivity: 'high', profitable: false, txDayK: 1500, stakingPct: 5,  uniqueMetric: 'OP Stack → 10+ chains' },
+  starknet:      { activeUsers: 400,   dApps: 100,  revenueM: 5,    devActivity: 'high', profitable: false, txDayK: 300,  stakingPct: 22, uniqueMetric: 'ZK validity proofs' },
+  chainlink:     { activeUsers: 1000,  dApps: 2200, revenueM: 200,  devActivity: 'high', profitable: true,  txDayK: 800,  stakingPct: 35, uniqueMetric: 'Value secured by oracles' },
+  polkadot:      { activeUsers: 400,   dApps: 200,  revenueM: 5,    devActivity: 'med',  profitable: false, txDayK: 300,  stakingPct: 58, uniqueMetric: 'Cross-chain via XCM' },
+  uniswap:       { activeUsers: 1500,  dApps: 1,    revenueM: 700,  devActivity: 'high', profitable: true,  txDayK: 500,  stakingPct: 0,  uniqueMetric: '$2T+ cumulative volume' },
+  aave:          { activeUsers: 500,   dApps: 1,    revenueM: 300,  devActivity: 'high', profitable: true,  txDayK: 200,  stakingPct: 18, uniqueMetric: 'Largest lending protocol' },
+  maker:         { activeUsers: 200,   dApps: 1,    revenueM: 250,  devActivity: 'med',  profitable: true,  txDayK: 80,   stakingPct: 25, uniqueMetric: '$5B DAI supply' },
+  'jupiter-exchange-solana': { activeUsers: 2000, dApps: 1, revenueM: 150, devActivity: 'high', profitable: true, txDayK: 1000, stakingPct: 30, uniqueMetric: '#1 Solana DEX aggregator' },
+  'injective-protocol': { activeUsers: 200, dApps: 100, revenueM: 10, devActivity: 'med', profitable: false, txDayK: 200, stakingPct: 60, uniqueMetric: 'On-chain orderbook' },
+  'curve-dao-token': { activeUsers: 300, dApps: 1, revenueM: 80, devActivity: 'med', profitable: true, txDayK: 150, stakingPct: 42, uniqueMetric: 'crvUSD lending market' },
+  'render-token': { activeUsers: 50,  dApps: 10,  revenueM: 15,   devActivity: 'med',  profitable: false, txDayK: 30,   stakingPct: 0,  uniqueMetric: '500K+ GPU frames/day' },
+  'fetch-ai':    { activeUsers: 80,   dApps: 30,  revenueM: 5,    devActivity: 'med',  profitable: false, txDayK: 50,   stakingPct: 20, uniqueMetric: 'ASI Alliance merger' },
+  bittensor:     { activeUsers: 30,   dApps: 40,  revenueM: 3,    devActivity: 'high', profitable: false, txDayK: 20,   stakingPct: 55, uniqueMetric: '50+ AI subnets' },
+  singularitynet:{ activeUsers: 20,   dApps: 15,  revenueM: 2,    devActivity: 'low',  profitable: false, txDayK: 10,   stakingPct: 10, uniqueMetric: 'AGI research focus' },
+  dogecoin:      { activeUsers: 500,  dApps: 5,   revenueM: 2,    devActivity: 'low',  profitable: false, txDayK: 100,  stakingPct: 0,  uniqueMetric: 'Elon Musk backing' },
+  'shiba-inu':   { activeUsers: 300,  dApps: 10,  revenueM: 1,    devActivity: 'low',  profitable: false, txDayK: 50,   stakingPct: 0,  uniqueMetric: 'Shibarium L2 launched' },
+  pepe:          { activeUsers: 200,  dApps: 0,   revenueM: 0,    devActivity: 'low',  profitable: false, txDayK: 80,   stakingPct: 0,  uniqueMetric: 'Pure speculation' },
+  bonk:          { activeUsers: 150,  dApps: 5,   revenueM: 0,    devActivity: 'low',  profitable: false, txDayK: 60,   stakingPct: 0,  uniqueMetric: 'SOL community meme' },
+  dogwifcoin:    { activeUsers: 100,  dApps: 0,   revenueM: 0,    devActivity: 'low',  profitable: false, txDayK: 40,   stakingPct: 0,  uniqueMetric: 'No utility' },
+  floki:         { activeUsers: 120,  dApps: 3,   revenueM: 1,    devActivity: 'low',  profitable: false, txDayK: 30,   stakingPct: 0,  uniqueMetric: 'TokenFi platform' },
 };
 
 // ── DeFi Llama chain/protocol slug mapping for live TVL ──
@@ -18858,6 +18859,7 @@ function renderPortfolioTracker() {
         { label: '📊 Revenue (Annual)', key: 'rev', getValue: e => e.fund.revenueM, format: v => fmtRev(v), higher: true, source: 'Ref' },
         { label: '📊 Daily Transactions', key: 'tx', getValue: e => e.fund.txDayK, format: v => fmtK(v), higher: true, source: 'Ref' },
         { label: '📊 Dev Activity', key: 'dev', getValue: e => e.fund.devActivity === 'high' ? 3 : e.fund.devActivity === 'med' ? 2 : 1, format: v => v===3?'🟢 High':v===2?'🟡 Med':'🔴 Low', higher: true, source: 'Ref' },
+        { label: '📊 Supply Staked', key: 'staked', getValue: e => e.fund.stakingPct || 0, format: v => v > 0 ? v + '%' : 'N/A', higher: true, source: 'Ref' },
         { label: '📊 Profitable', key: 'profit', getValue: e => e.fund.profitable ? 1 : 0, format: v => v ? '✅ Yes' : '❌ No', higher: true, source: 'Ref' },
       ];
 
@@ -18899,7 +18901,7 @@ function renderPortfolioTracker() {
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
           <span style="font-size:11px;font-weight:700;color:#fff">${h.sym}</span>
           <span style="font-size:8px;padding:2px 6px;background:rgba(245,196,0,0.1);border:1px solid rgba(245,196,0,0.25);border-radius:3px;color:#f5c400">Score: ${myScoreVal}/100</span>
-          <span style="font-size:7px;color:#5a7a68">vs ${compData.length} competitor${compData.length > 1 ? 's' : ''} across 11 metrics</span>
+          <span style="font-size:7px;color:#5a7a68">vs ${compData.length} competitor${compData.length > 1 ? 's' : ''} across 12 metrics</span>
         </div>
         <table style="width:100%;border-collapse:collapse;font-family:'Space Mono',monospace">
           <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
@@ -18926,13 +18928,18 @@ function renderPortfolioTracker() {
       const adoptionLabel = util.adoption === 'high' ? 'High Adoption' : util.adoption === 'medium' ? 'Moderate Adoption' : 'Low Adoption';
       const tvlIcon = util.tvlTrend === 'up' ? '📈' : util.tvlTrend === 'stable' ? '➡️' : '📉';
       const tvlColor = util.tvlTrend === 'up' ? '#00f5a0' : util.tvlTrend === 'stable' ? '#f5c400' : '#ff4d6d';
+      const fund = COIN_FUNDAMENTALS[h.id];
+      const liveTvl = getLiveTVL(h.id);
+      const tvlStr = liveTvl > 1e9 ? '$' + (liveTvl/1e9).toFixed(1) + 'B' : liveTvl > 1e6 ? '$' + (liveTvl/1e6).toFixed(0) + 'M' : liveTvl > 0 ? '$' + (liveTvl/1e3).toFixed(0) + 'K' : '—';
+      const stakePct = fund?.stakingPct || 0;
 
       return `<div style="padding:8px;margin-bottom:6px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:6px">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
           <span style="font-size:10px;font-weight:700;color:#fff">${h.sym}</span>
           <span style="font-size:6px;padding:1px 5px;background:rgba(${sectorMeta.color === '#f5c400' ? '245,196,0' : sectorMeta.color === '#63b3ed' ? '99,179,237' : sectorMeta.color === '#ff6b35' ? '255,107,53' : sectorMeta.color === '#00c9ff' ? '0,201,255' : sectorMeta.color === '#ff8c00' ? '255,140,0' : sectorMeta.color === '#a78bfa' ? '167,139,250' : '90,122,104'},0.2);border:1px solid ${sectorMeta.color}44;color:${sectorMeta.color};border-radius:3px;font-weight:700">${sectorMeta.name}</span>
           <span style="font-size:7px;color:#aaa">${adoptionIcon} ${adoptionLabel}</span>
-          <span style="font-size:7px;color:${tvlColor}">${tvlIcon} TVL ${util.tvlTrend}</span>
+          <span style="font-size:7px;color:${tvlColor}">${tvlIcon} TVL: ${tvlStr}</span>
+          ${stakePct > 0 ? `<span style="font-size:7px;color:#a78bfa">🥩 ${stakePct}% supply staked</span>` : ''}
         </div>
         <div style="font-size:8px;color:#ddd;margin-bottom:4px;font-weight:600">${util.purpose}</div>
         <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px">
