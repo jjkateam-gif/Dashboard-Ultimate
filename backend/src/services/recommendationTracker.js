@@ -238,6 +238,57 @@ async function getSummary(userId, source = null) {
      ORDER BY "winRate" DESC NULLS LAST`;
   const { rows: tfRows } = await pool.query(tfQuery, params);
 
+  // Probability bucket breakdown — calibration data
+  let probQuery = `SELECT
+       CASE
+         WHEN probability < 35 THEN '30-34'
+         WHEN probability < 40 THEN '35-39'
+         WHEN probability < 45 THEN '40-44'
+         WHEN probability < 50 THEN '45-49'
+         WHEN probability < 55 THEN '50-54'
+         WHEN probability < 60 THEN '55-59'
+         WHEN probability < 65 THEN '60-64'
+         WHEN probability < 70 THEN '65-69'
+         WHEN probability < 75 THEN '70-74'
+         WHEN probability < 80 THEN '75-79'
+         ELSE '80+'
+       END AS bucket,
+       CASE
+         WHEN probability < 35 THEN 32
+         WHEN probability < 40 THEN 37
+         WHEN probability < 45 THEN 42
+         WHEN probability < 50 THEN 47
+         WHEN probability < 55 THEN 52
+         WHEN probability < 60 THEN 57
+         WHEN probability < 65 THEN 62
+         WHEN probability < 70 THEN 67
+         WHEN probability < 75 THEN 72
+         WHEN probability < 80 THEN 77
+         ELSE 82
+       END AS "bucketMid",
+       COUNT(*) FILTER (WHERE outcome IN ('win','loss'))::int AS total,
+       COUNT(*) FILTER (WHERE outcome = 'win')::int AS wins
+     FROM trade_recommendations
+     ${whereClause} AND probability IS NOT NULL AND outcome IN ('win','loss')
+     GROUP BY bucket, "bucketMid"
+     ORDER BY "bucketMid" ASC`;
+  const { rows: probRows } = await pool.query(probQuery, params);
+
+  // Win rate by timeframe for resolved trades (for calibration filtering)
+  let tfCalQuery = `SELECT timeframe,
+       COUNT(*) FILTER (WHERE outcome IN ('win','loss'))::int AS total,
+       COUNT(*) FILTER (WHERE outcome = 'win')::int AS wins,
+       ROUND(
+         CASE WHEN COUNT(*) FILTER (WHERE outcome IN ('win','loss')) > 0
+              THEN COUNT(*) FILTER (WHERE outcome = 'win')::numeric / COUNT(*) FILTER (WHERE outcome IN ('win','loss')) * 100
+              ELSE NULL END, 1
+       ) AS "winRate"
+     FROM trade_recommendations
+     ${whereClause} AND timeframe IS NOT NULL AND outcome IN ('win','loss')
+     GROUP BY timeframe
+     ORDER BY total DESC`;
+  const { rows: tfCalRows } = await pool.query(tfCalQuery, params);
+
   return {
     total: summary.total || 0,
     wins: summary.wins || 0,
@@ -253,6 +304,19 @@ async function getSummary(userId, source = null) {
       wins: t.wins,
       avgPnl: t.avgPnl != null ? parseFloat(t.avgPnl) : null,
       winRate: t.winRate != null ? parseFloat(t.winRate) : null,
+    })),
+    byProbBucket: probRows.map(b => ({
+      bucket: b.bucket,
+      bucketMid: parseInt(b.bucketMid),
+      total: b.total,
+      wins: b.wins,
+      winRate: b.total > 0 ? parseFloat((b.wins / b.total * 100).toFixed(1)) : 0,
+    })),
+    byTimeframeCal: tfCalRows.map(t => ({
+      timeframe: t.timeframe,
+      total: t.total,
+      wins: t.wins,
+      winRate: t.winRate != null ? parseFloat(t.winRate) : 0,
     })),
   };
 }
