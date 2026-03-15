@@ -7,8 +7,45 @@ const { fetchKlines } = require('./binance');
 const { sma, ema, rsi, stdev, atr } = require('./indicators');
 const blofinClient = require('./blofinClient');
 const liveEngine = require('./liveEngine');
+const https = require('https');
 let pool = null;
 try { pool = require('../db').pool; } catch {}
+
+// ══════════════════════════════════════════════════════════════
+// FUNDING RATE CACHE (fetched from Binance Futures, refreshed every 5 min)
+// ══════════════════════════════════════════════════════════════
+const fundingRateCache = { data: {}, lastRefresh: 0, refreshMs: 5 * 60_000 };
+
+async function refreshFundingRates() {
+  const now = Date.now();
+  if (now - fundingRateCache.lastRefresh < fundingRateCache.refreshMs) return;
+  try {
+    const url = 'https://fapi.binance.com/fapi/v1/premiumIndex';
+    const raw = await new Promise((resolve, reject) => {
+      https.get(url, { timeout: 10000 }, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => resolve(body));
+      }).on('error', reject);
+    });
+    const data = JSON.parse(raw);
+    if (Array.isArray(data)) {
+      for (const item of data) {
+        if (item.symbol && item.lastFundingRate) {
+          fundingRateCache.data[item.symbol] = parseFloat(item.lastFundingRate);
+        }
+      }
+      fundingRateCache.lastRefresh = now;
+      console.log(`[BestTrades] Funding rates refreshed: ${Object.keys(fundingRateCache.data).length} pairs`);
+    }
+  } catch (e) {
+    console.warn('[BestTrades] Funding rate fetch error:', e.message);
+  }
+}
+
+function getFundingRateForAsset(sym) {
+  return fundingRateCache.data[sym] || 0;
+}
 
 // ══════════════════════════════════════════════════════════════
 // ASSETS & CONFIG
@@ -36,11 +73,11 @@ const ASSETS = [
   { sym: 'RENDERUSDT', label: 'RENDER' },
 ];
 
-// Scan intervals per timeframe (how often to re-scan each TF)
+// Scan intervals per timeframe (optimized: no need to scan faster than candle closes)
 const SCAN_INTERVALS = {
-  '1m': 60_000, '3m': 2 * 60_000, '5m': 3 * 60_000,
-  '15m': 10 * 60_000, '30m': 15 * 60_000, '1h': 30 * 60_000,
-  '4h': 60 * 60_000, '1d': 4 * 60 * 60_000,
+  '1m': 60_000, '3m': 2 * 60_000, '5m': 3 * 60_000,      // 5m candle → scan every 3min
+  '15m': 5 * 60_000, '30m': 15 * 60_000, '1h': 30 * 60_000, // 15m → every 5min (faster signal catch)
+  '4h': 2 * 60 * 60_000, '1d': 8 * 60 * 60_000,            // 4h → every 2h, 1d → every 8h
 };
 
 // All timeframes to scan (server covers every TF)
@@ -810,8 +847,9 @@ class BestTradesScanner {
 
   async _scanTimeframe(tf) {
     // Scanning always runs (for prediction logging & calibration). Auto-trading is gated separately in _processAutoTrades().
-    // Refresh calibration cache (no-op if refreshed recently)
+    // Refresh calibration cache and funding rates (no-op if refreshed recently)
     await refreshCalibrationCache();
+    await refreshFundingRates();
     console.log(`[BestTrades] Scanning ${ASSETS.length} assets on ${tf}...`);
 
     const results = [];
@@ -852,11 +890,43 @@ class BestTradesScanner {
 
         // ── CALIBRATION: Adjust probability using historical accuracy ──
         const rawProb = best.prob;
-        const calibratedProb = calibrateProb(rawProb, regime, tf, marketQuality);
+        let calibratedProb = calibrateProb(rawProb, regime, tf, marketQuality);
+
+        // ── FUNDING RATE: Contrarian signal — extreme funding penalizes aligned trades ──
+        const fundingRate = getFundingRateForAsset(asset.sym);
+        if (Math.abs(fundingRate) > 0.0005) { // >0.05% per 8h = significant
+          // High positive funding = longs paying shorts → bearish pressure
+          // High negative funding = shorts paying longs → bullish pressure
+          if (direction === 'long' && fundingRate > 0.0005) {
+            calibratedProb -= Math.min(3, Math.round(fundingRate * 3000)); // up to -3%
+          } else if (direction === 'short' && fundingRate < -0.0005) {
+            calibratedProb -= Math.min(3, Math.round(Math.abs(fundingRate) * 3000));
+          } else if (direction === 'long' && fundingRate < -0.0005) {
+            calibratedProb += Math.min(2, Math.round(Math.abs(fundingRate) * 2000)); // bonus up to +2%
+          } else if (direction === 'short' && fundingRate > 0.0005) {
+            calibratedProb += Math.min(2, Math.round(fundingRate * 2000));
+          }
+          calibratedProb = Math.max(25, Math.min(85, calibratedProb));
+        }
 
         // Estimate R/R using calibrated probability
         const rrData = estimateRR(price, atrVal, direction, calibratedProb, this.settings.leverage,
           best.confidence, candles, marketQuality);
+
+        // Build signal snapshot for learning (indicator values at time of prediction)
+        const signalSnapshot = {};
+        for (const [ind, sig] of Object.entries(signals)) {
+          if (sig && typeof sig === 'object') {
+            signalSnapshot[ind] = {
+              bull: !!sig.bull, bear: !!sig.bear,
+              ...(sig.value != null ? { value: Math.round(sig.value * 1000) / 1000 } : {}),
+              ...(sig.crossBull ? { crossBull: true } : {}),
+              ...(sig.crossBear ? { crossBear: true } : {}),
+            };
+          }
+        }
+        // Add funding rate to snapshot
+        signalSnapshot.fundingRate = fundingRate;
 
         results.push({
           asset: asset.label,
@@ -868,6 +938,7 @@ class BestTradesScanner {
           longProb: longScore.prob,
           shortProb: shortScore.prob,
           confidence: best.confidence,
+          confluenceScore: best.confluence,
           marketQuality,
           entryEfficiency,
           regime,
@@ -882,6 +953,9 @@ class BestTradesScanner {
           mqSizeMult: rrData.mqSizeMult,
           hits: best.hits,
           misses: best.misses,
+          atrValue: atrVal,
+          volumeRatio: signals.Volume?.ratio || null,
+          signalSnapshot,
           timestamp: new Date().toISOString(),
         });
 
@@ -1181,18 +1255,22 @@ class BestTradesScanner {
 
   async _logResults(results) {
     if (!pool) return;
-    // Log top 5 results with prob >= 50% for calibration data (independent of auto-trade minProb)
-    const top = results.filter(r => r.prob >= 50).slice(0, 5);
+    // Log top 3 results with prob >= 50% for calibration data (independent of auto-trade minProb)
+    const top = results.filter(r => r.prob >= 50).slice(0, 3);
     for (const r of top) {
       try {
         await pool.query(
           `INSERT INTO best_trades_log
            (asset, direction, probability, confidence, market_quality, rr_ratio,
-            entry_price, stop_price, target_price, stop_pct, target_pct, regime, executed, timeframe)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+            entry_price, stop_price, target_price, stop_pct, target_pct, regime, executed, timeframe,
+            signal_snapshot, raw_probability, ev, optimal_lev, atr_value, hits, misses, volume_ratio, confluence_score)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
           [r.asset, r.direction, r.prob, r.confidence,
            r.marketQuality, r.rr, r.price, r.stopPrice, r.targetPrice,
-           r.stopPct, r.targetPct, r.regime, false, r.timeframe || '4h']
+           r.stopPct, r.targetPct, r.regime, false, r.timeframe || '4h',
+           JSON.stringify(r.signalSnapshot || {}), r.rawProb, r.ev, r.optimalLev,
+           r.atrValue, JSON.stringify(r.hits || []), JSON.stringify(r.misses || []),
+           r.volumeRatio, r.confluenceScore]
         );
       } catch (e) {
         console.warn(`[BestTrades] Log insert error for ${r.asset}:`, e.message);
@@ -1226,6 +1304,36 @@ class BestTradesScanner {
     // Run first check after 60s
     setTimeout(() => this._resolveOpenPredictions().catch(() => {}), 60_000);
     console.log('[BestTrades] Resolution tracker started (every 5 min)');
+
+    // 90-day retention cleanup — runs once daily (every 24h)
+    this._runRetentionCleanup(); // Run on startup
+    this.retentionTimer = setInterval(() => this._runRetentionCleanup(), 24 * 60 * 60_000);
+  }
+
+  async _runRetentionCleanup() {
+    if (!pool) return;
+    try {
+      // Delete resolved predictions older than 90 days (keep calibration stats via the cache)
+      const result = await pool.query(
+        `DELETE FROM best_trades_log
+         WHERE created_at < NOW() - INTERVAL '90 days'
+         AND outcome IS NOT NULL`
+      );
+      if (result.rowCount > 0) {
+        console.log(`[BestTrades] Retention cleanup: deleted ${result.rowCount} resolved predictions older than 90 days`);
+      }
+      // Also delete unresolved (pending) predictions older than 30 days (abandoned)
+      const abandoned = await pool.query(
+        `DELETE FROM best_trades_log
+         WHERE created_at < NOW() - INTERVAL '30 days'
+         AND outcome IS NULL`
+      );
+      if (abandoned.rowCount > 0) {
+        console.log(`[BestTrades] Retention cleanup: deleted ${abandoned.rowCount} abandoned pending predictions older than 30 days`);
+      }
+    } catch (e) {
+      console.warn('[BestTrades] Retention cleanup error:', e.message);
+    }
   }
 
   async _resolveOpenPredictions() {
@@ -1622,6 +1730,12 @@ class BestTradesScanner {
         lastRefresh: calibrationCache.lastRefresh ? new Date(calibrationCache.lastRefresh).toISOString() : null,
         bucketCount: Object.keys(calibrationCache.byProbBucket).length,
       },
+      fundingRates: {
+        cached: Object.keys(fundingRateCache.data).length,
+        lastRefresh: fundingRateCache.lastRefresh ? new Date(fundingRateCache.lastRefresh).toISOString() : null,
+      },
+      dataRetention: '90 days (resolved), 30 days (abandoned pending)',
+      logsPerScan: 3,
     };
   }
 }
