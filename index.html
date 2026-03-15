@@ -18721,10 +18721,16 @@ function renderPortfolioTracker() {
         if (myFund.txDayK > cFund.txDayK) wins++; else if (myFund.txDayK < cFund.txDayK) losses++;
         if (myMcap > cMcap) wins++; else if (myMcap < cMcap) losses++;
 
-        const verdict = wins > losses ? '🟢 Stronger' : wins < losses ? '🔴 Weaker' : '🟡 Even';
+        // Verdict from YOUR coin's perspective vs this competitor
+        const cSym = cCoin?.sym || cId;
+        const verdict = wins > losses
+          ? `🟢 You beat ${cSym}`
+          : wins < losses
+            ? `🔴 ${cSym} is stronger`
+            : '🟡 Even match';
         const verdictColor = wins > losses ? '#00f5a0' : wins < losses ? '#ff4d6d' : '#f5c400';
 
-        return { sym: cCoin?.sym || cId, id: cId, fund: cFund, score: cScore, change7d: cChange7d,
+        return { sym: cSym, id: cId, fund: cFund, score: cScore, change7d: cChange7d,
           mcap: cMcap, vol: cVol, wins, losses, verdict, verdictColor };
       }).filter(Boolean);
 
@@ -18778,8 +18784,8 @@ function renderPortfolioTracker() {
       // Verdict row
       const verdictRow = compData.length > 0 ? `<tr style="border-top:1px solid rgba(245,196,0,0.15)">
         <td style="padding:6px;color:#f5c400;font-size:7px;font-weight:700">VERDICT</td>
-        <td style="padding:6px;text-align:center;font-size:8px;color:#f5c400;font-weight:700">YOUR COIN</td>
-        ${compData.map(c => `<td style="padding:6px;text-align:center;font-size:8px;color:${c.verdictColor};font-weight:700">${c.verdict}<br><span style="font-size:7px;font-weight:400;color:#5a7a68">${c.wins}W-${c.losses}L</span></td>`).join('')}
+        <td style="padding:6px;text-align:center;font-size:9px;color:#f5c400;font-weight:700">⭐ YOUR COIN</td>
+        ${compData.map(c => `<td style="padding:6px;text-align:center;font-size:8px;color:${c.verdictColor};font-weight:700">${c.verdict}<br><span style="font-size:7px;font-weight:400;color:#5a7a68">You win ${c.wins} · lose ${c.losses}</span></td>`).join('')}
       </tr>` : '';
 
       return `<div style="padding:10px;margin-bottom:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:8px;overflow-x:auto">
