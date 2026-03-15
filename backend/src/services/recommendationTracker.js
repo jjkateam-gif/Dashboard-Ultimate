@@ -289,6 +289,57 @@ async function getSummary(userId, source = null) {
      ORDER BY total DESC`;
   const { rows: tfCalRows } = await pool.query(tfCalQuery, params);
 
+  // Distribution: wins by probability bucket (for the WINS filter view)
+  const bucketCaseSQL = `CASE
+         WHEN probability < 35 THEN '30-34%'
+         WHEN probability < 40 THEN '35-39%'
+         WHEN probability < 45 THEN '40-44%'
+         WHEN probability < 50 THEN '45-49%'
+         WHEN probability < 55 THEN '50-54%'
+         WHEN probability < 60 THEN '55-59%'
+         WHEN probability < 65 THEN '60-64%'
+         WHEN probability < 70 THEN '65-69%'
+         WHEN probability < 75 THEN '70-74%'
+         WHEN probability < 80 THEN '75-79%'
+         ELSE '80+%'
+       END`;
+  const midCaseSQL = `CASE
+         WHEN probability < 35 THEN 32 WHEN probability < 40 THEN 37
+         WHEN probability < 45 THEN 42 WHEN probability < 50 THEN 47
+         WHEN probability < 55 THEN 52 WHEN probability < 60 THEN 57
+         WHEN probability < 65 THEN 62 WHEN probability < 70 THEN 67
+         WHEN probability < 75 THEN 72 WHEN probability < 80 THEN 77
+         ELSE 82
+       END`;
+
+  // Wins distribution by prob bucket
+  const winsDistQuery = `SELECT ${bucketCaseSQL} AS bucket, ${midCaseSQL} AS mid, COUNT(*)::int AS count
+     FROM trade_recommendations
+     ${whereClause} AND probability IS NOT NULL AND outcome = 'win'
+     GROUP BY bucket, mid ORDER BY mid ASC`;
+  const { rows: winsDistRows } = await pool.query(winsDistQuery, params);
+
+  // Losses distribution by prob bucket
+  const lossDistQuery = `SELECT ${bucketCaseSQL} AS bucket, ${midCaseSQL} AS mid, COUNT(*)::int AS count
+     FROM trade_recommendations
+     ${whereClause} AND probability IS NOT NULL AND outcome = 'loss'
+     GROUP BY bucket, mid ORDER BY mid ASC`;
+  const { rows: lossDistRows } = await pool.query(lossDistQuery, params);
+
+  // Wins distribution by timeframe
+  const winsTFQuery = `SELECT timeframe AS tf, COUNT(*)::int AS count
+     FROM trade_recommendations
+     ${whereClause} AND timeframe IS NOT NULL AND outcome = 'win'
+     GROUP BY tf ORDER BY count DESC`;
+  const { rows: winsTFRows } = await pool.query(winsTFQuery, params);
+
+  // Losses distribution by timeframe
+  const lossTFQuery = `SELECT timeframe AS tf, COUNT(*)::int AS count
+     FROM trade_recommendations
+     ${whereClause} AND timeframe IS NOT NULL AND outcome = 'loss'
+     GROUP BY tf ORDER BY count DESC`;
+  const { rows: lossTFRows } = await pool.query(lossTFQuery, params);
+
   return {
     total: summary.total || 0,
     wins: summary.wins || 0,
@@ -318,6 +369,10 @@ async function getSummary(userId, source = null) {
       wins: t.wins,
       winRate: t.winRate != null ? parseFloat(t.winRate) : 0,
     })),
+    winsDistByProb: winsDistRows.map(r => ({ bucket: r.bucket, mid: parseInt(r.mid), count: r.count })),
+    lossDistByProb: lossDistRows.map(r => ({ bucket: r.bucket, mid: parseInt(r.mid), count: r.count })),
+    winsDistByTF: winsTFRows.map(r => ({ tf: r.tf, count: r.count })),
+    lossDistByTF: lossTFRows.map(r => ({ tf: r.tf, count: r.count })),
   };
 }
 
