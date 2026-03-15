@@ -18584,15 +18584,21 @@ function renderPortfolioTracker() {
 
       const stakeRows = stakedHoldings.map(h => {
         const pctStaked = (h.stakedQty / h.quantity * 100).toFixed(0);
-        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.03)">
-          <span style="font-size:9px;font-weight:700;color:#fff;width:50px">${h.sym}</span>
-          <span style="font-size:8px;color:#a78bfa;width:60px">${h.stakedQty.toLocaleString(undefined,{maximumFractionDigits:4})} staked</span>
-          <span style="font-size:8px;color:#5a7a68;width:40px">${pctStaked}% of bag</span>
-          <span style="font-size:8px;color:#00f5a0;width:50px">${h.stakeAPY}% APY</span>
-          <span style="font-size:8px;color:#00f5a0;width:70px">+${h.dailyYieldTokens.toFixed(6)}/day</span>
-          <span style="font-size:8px;color:#aaa;width:70px">+${h.monthlyYieldTokens.toFixed(4)}/mo</span>
-          <span style="font-size:8px;color:#00f5a0;width:60px">$${(h.dailyYieldTokens * h.currentPrice).toFixed(2)}/day</span>
-          <span style="font-size:7px;color:#5a7a68">${Math.floor(h.stakeDaysElapsed)}d staking · earned ${h.earnedTokens.toFixed(6)} ${h.sym} ($${h.earnedValue.toFixed(2)})</span>
+        return `<div style="padding:8px;margin-bottom:6px;background:rgba(167,139,250,0.04);border:1px solid rgba(167,139,250,0.08);border-radius:6px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:10px;font-weight:700;color:#fff">${h.sym}</span>
+              <span style="font-size:8px;padding:2px 6px;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:3px">${h.stakeAPY}% APY</span>
+              <span style="font-size:8px;color:#5a7a68">${h.stakedQty.toLocaleString(undefined,{maximumFractionDigits:4})} staked (${pctStaked}% of bag)</span>
+            </div>
+            <span style="font-size:7px;color:#5a7a68">${Math.floor(h.stakeDaysElapsed)}d staking</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px">
+            <div style="font-size:8px"><span style="color:#5a7a68">Daily: </span><span style="color:#00f5a0">+${h.dailyYieldTokens.toFixed(6)} ${h.sym}</span> <span style="color:#aaa">($${(h.dailyYieldTokens * h.currentPrice).toFixed(2)})</span></div>
+            <div style="font-size:8px"><span style="color:#5a7a68">Monthly: </span><span style="color:#00f5a0">+${h.monthlyYieldTokens.toFixed(4)} ${h.sym}</span> <span style="color:#aaa">($${(h.monthlyYieldTokens * h.currentPrice).toFixed(0)})</span></div>
+            <div style="font-size:8px"><span style="color:#5a7a68">Yearly: </span><span style="color:#00f5a0">+${h.yearlyYieldTokens.toFixed(2)} ${h.sym}</span> <span style="color:#aaa">($${(h.yearlyYieldTokens * h.currentPrice).toLocaleString(undefined,{maximumFractionDigits:0})})</span></div>
+            <div style="font-size:8px"><span style="color:#5a7a68">Earned: </span><span style="color:#00f5a0">+${h.earnedTokens.toFixed(6)} ${h.sym}</span> <span style="color:#aaa">($${h.earnedValue.toFixed(2)})</span></div>
+          </div>
         </div>`;
       }).join('');
 
