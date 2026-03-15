@@ -2830,21 +2830,23 @@ function switchAuthView(view) {
         <div style="text-align:center"><div style="font-size:7px;color:#5a7a68;text-transform:uppercase">Max Pos</div><div id="pfMaxPos" style="font-size:14px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">10</div></div>
       </div>
     </div>
-    <!-- Calibration Chart for Trade Log -->
-    <div id="recCalibrationChart" style="margin-bottom:12px"></div>
     <div id="recSummaryCards" style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px">
-      <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Total</div><div id="recTotal" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#e0e0e0">0</div></div>
+      <div onclick="_recFilterOutcome('all')" id="recCardTotal" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center;cursor:pointer;transition:all 0.2s" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Total</div><div id="recTotal" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#e0e0e0">0</div></div>
       <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Win Rate</div><div id="recWinRate" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">&mdash;</div></div>
-      <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Wins</div><div id="recWins" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#00f5a0">0</div></div>
-      <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Losses</div><div id="recLosses" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#ff4d6d">0</div></div>
+      <div onclick="_recFilterOutcome('win')" id="recCardWins" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center;cursor:pointer;transition:all 0.2s" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Wins</div><div id="recWins" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#00f5a0">0</div></div>
+      <div onclick="_recFilterOutcome('loss')" id="recCardLosses" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center;cursor:pointer;transition:all 0.2s" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Losses</div><div id="recLosses" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#ff4d6d">0</div></div>
       <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Avg P&amp;L</div><div id="recAvgPnl" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">&mdash;</div></div>
-      <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Streak</div><div id="recStreak" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">&mdash;</div></div>
+      <div onclick="_recFilterOutcome('pending')" id="recCardStreak" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center;cursor:pointer;transition:all 0.2s" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Streak</div><div id="recStreak" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">&mdash;</div></div>
     </div>
     <!-- Best Timeframe Analysis -->
     <div id="recTfAnalysis" style="display:none;margin-bottom:12px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:12px">
       <div style="font-size:9px;font-weight:700;color:#a855f7;font-family:'Space Mono',monospace;margin-bottom:8px">🏆 TIMEFRAME PERFORMANCE</div>
       <div id="recTfBars" style="display:flex;flex-direction:column;gap:5px"></div>
     </div>
+    <!-- Calibration Chart for Trade Log -->
+    <div id="recCalibrationChart" style="margin-bottom:12px"></div>
+    <!-- Outcome filter banner -->
+    <div id="recOutcomeFilterBanner" style="display:none;margin-bottom:8px"></div>
     <div id="recHistoryList" style="max-height:500px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 transparent">
       <div style="text-align:center;padding:20px;color:#5a7a68;font-family:'Space Mono',monospace;font-size:10px">Run the Probability Engine to start tracking recommendations</div>
     </div>
@@ -16533,12 +16535,72 @@ const _origRenderBlofinHistory = typeof renderBlofinHistory === 'function' ? ren
 // Initialize tax UI on page load
 document.addEventListener('DOMContentLoaded', () => { setTimeout(updateTaxUI, 1000); });
 
-function renderRecHistory(recs) {
-  _lastRecsList = recs; // store for portfolio calc
+// Track record outcome filter state
+let _recOutcomeFilter = null;
+let _recAllRecs = []; // cached unfiltered list
+
+function _recFilterOutcome(outcome) {
+  // Toggle off if same filter clicked
+  _recOutcomeFilter = (_recOutcomeFilter === outcome) ? null : outcome;
+  _recApplyOutcomeFilter();
+  _recUpdateCardHighlights();
+}
+
+function _recUpdateCardHighlights() {
+  const filter = _recOutcomeFilter;
+  const cards = {
+    all: document.getElementById('recCardTotal'),
+    win: document.getElementById('recCardWins'),
+    loss: document.getElementById('recCardLosses'),
+    pending: document.getElementById('recCardStreak'),
+  };
+  for (const [key, el] of Object.entries(cards)) {
+    if (!el) continue;
+    if (filter === key) {
+      const colors = { all: '#a78bfa', win: '#00f5a0', loss: '#ff4d6d', pending: '#f5c400' };
+      el.style.border = '2px solid ' + (colors[key] || '#a78bfa');
+      el.style.background = 'rgba(255,255,255,0.05)';
+    } else {
+      el.style.border = '1px solid rgba(255,255,255,0.05)';
+      el.style.background = 'rgba(0,0,0,0.3)';
+    }
+  }
+}
+
+function _recApplyOutcomeFilter() {
+  const banner = document.getElementById('recOutcomeFilterBanner');
+  let filtered = _recAllRecs;
+
+  if (_recOutcomeFilter === 'win') {
+    filtered = _recAllRecs.filter(r => r.outcome === 'win');
+  } else if (_recOutcomeFilter === 'loss') {
+    filtered = _recAllRecs.filter(r => r.outcome === 'loss');
+  } else if (_recOutcomeFilter === 'pending') {
+    filtered = _recAllRecs.filter(r => !r.outcome || r.outcome === 'pending');
+  }
+  // 'all' shows everything
+
+  if (banner) {
+    if (_recOutcomeFilter) {
+      const labels = { all: 'All', win: 'Wins', loss: 'Losses', pending: 'Pending' };
+      banner.style.display = 'block';
+      banner.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:rgba(255,107,53,0.08);border:1px solid rgba(255,107,53,0.2);border-radius:6px;font-family:'Space Mono',monospace;font-size:9px">
+        <span style="color:#ff6b35">Showing: <strong>${labels[_recOutcomeFilter] || _recOutcomeFilter}</strong> (${filtered.length} entries)</span>
+        <button onclick="_recFilterOutcome(null)" style="font-size:8px;padding:3px 8px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">Clear</button>
+      </div>`;
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+
+  _renderRecRows(filtered);
+}
+
+function _renderRecRows(recs) {
   const el = document.getElementById('recHistoryList');
   if (!el) return;
   if (recs.length === 0) {
-    el.innerHTML = '<div style="text-align:center;padding:30px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:10px">No trades logged yet. Click 📋 Log Trade on any setup card to start tracking.</div>';
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:10px">No trades match this filter.</div>';
     return;
   }
   const header = '<div style="display:grid;grid-template-columns:40px 1.4fr 1fr 0.8fr 0.8fr 0.8fr 1fr 0.8fr 0.6fr;gap:10px;padding:10px 16px;font-size:9px;color:#5a7a68;font-family:\'Space Mono\',monospace;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.08)"><span></span><span>Date</span><span>Symbol</span><span>Dir</span><span>Prob</span><span>R/R</span><span>Outcome</span><span>P&L</span><span>TF</span></div>';
@@ -16557,6 +16619,24 @@ function renderRecHistory(recs) {
     return '<div style="display:grid;grid-template-columns:40px 1.4fr 1fr 0.8fr 0.8fr 0.8fr 1fr 0.8fr 0.6fr;gap:10px;padding:9px 16px;font-size:11px;font-family:\'Space Mono\',monospace;border-bottom:1px solid rgba(255,255,255,0.03);border-left:3px solid ' + borderColor + ';transition:background 0.15s" onmouseenter="this.style.background=\'rgba(255,255,255,0.03)\'" onmouseleave="this.style.background=\'transparent\'"><span style="font-size:13px">' + sourceIcon + '</span><span style="color:#888;font-size:10px">' + date + '</span><span style="color:#e0e0e0;font-weight:700;font-size:12px">' + (r.symbol || '').replace(/USDT$/i,'') + '</span><span style="color:' + dirColor + '">' + dirIcon + ' ' + r.direction + '</span><span style="color:#63b3ed">' + (r.probability || 0) + '%</span><span style="color:#a78bfa">' + rrDisplay + '</span><span style="color:' + outcomeColor + ';font-size:10px">' + outcomeLabel + '</span><span style="color:' + pnlColor + ';font-weight:700">' + pnl + '</span><span style="color:#5a7a68">' + tf + '</span></div>';
   }).join('');
   el.innerHTML = header + rows;
+}
+
+function renderRecHistory(recs) {
+  _lastRecsList = recs; // store for portfolio calc
+  _recAllRecs = recs;   // cache for outcome filtering
+  const el = document.getElementById('recHistoryList');
+  if (!el) return;
+  if (recs.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:10px">No trades logged yet. Click 📋 Log Trade on any setup card to start tracking.</div>';
+    return;
+  }
+
+  // Apply any active outcome filter
+  if (_recOutcomeFilter) {
+    _recApplyOutcomeFilter();
+  } else {
+    _renderRecRows(recs);
+  }
   recomputePortfolio();
 }
 
