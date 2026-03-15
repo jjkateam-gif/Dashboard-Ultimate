@@ -2454,6 +2454,14 @@ function switchAuthView(view) {
           <label style="font-size:7px;color:#5a7a68;display:block;margin-bottom:2px">Avg Buy Price ($)</label>
           <input id="pfBuyPrice" type="number" step="any" min="0" placeholder="42000" style="font-size:9px;padding:5px 8px;background:#0a1a10;border:1px solid rgba(255,255,255,0.1);color:#ddd;border-radius:4px;font-family:'Space Mono',monospace;width:100px">
         </div>
+        <div>
+          <label style="font-size:7px;color:#5a7a68;display:block;margin-bottom:2px">Staked Qty (opt)</label>
+          <input id="pfStakedQty" type="number" step="any" min="0" placeholder="0" style="font-size:9px;padding:5px 8px;background:#0a1a10;border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:4px;font-family:'Space Mono',monospace;width:80px">
+        </div>
+        <div>
+          <label style="font-size:7px;color:#5a7a68;display:block;margin-bottom:2px">APY % (opt)</label>
+          <input id="pfStakeAPY" type="number" step="any" min="0" placeholder="5.2" style="font-size:9px;padding:5px 8px;background:#0a1a10;border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:4px;font-family:'Space Mono',monospace;width:70px">
+        </div>
         <button onclick="addPortfolioHolding()" style="font-size:8px;padding:5px 14px;background:rgba(245,196,0,0.15);border:1px solid rgba(245,196,0,0.4);color:#f5c400;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">+ Add</button>
       </div>
     </div>
@@ -2482,6 +2490,26 @@ function switchAuthView(view) {
         <div style="font-size:9px;font-weight:700;color:#aaa;font-family:'Space Mono',monospace;letter-spacing:2px;margin-bottom:8px">🏆 TOP / BOTTOM PERFORMERS</div>
         <div id="portfolioPerformers" style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68">No data</div>
       </div>
+    </div>
+
+    <!-- Staking Summary -->
+    <div style="background:rgba(167,139,250,0.04);border:1px solid rgba(167,139,250,0.15);border-radius:8px;padding:12px;margin-bottom:14px">
+      <div style="font-size:9px;font-weight:700;color:#a78bfa;font-family:'Space Mono',monospace;letter-spacing:2px;margin-bottom:8px">🥩 STAKING REWARDS</div>
+      <div id="portfolioStakingSummary" style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68">No staked positions yet. Add staking info when adding a holding.</div>
+    </div>
+
+    <!-- Competitor Comparison -->
+    <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:12px;margin-bottom:14px">
+      <div style="font-size:9px;font-weight:700;color:#aaa;font-family:'Space Mono',monospace;letter-spacing:2px;margin-bottom:8px">🏆 COMPETITOR COMPARISON</div>
+      <div style="font-size:7px;color:#3a5a48;font-family:'Space Mono',monospace;margin-bottom:8px">How your coins stack up against their closest rivals (7d performance)</div>
+      <div id="portfolioCompetitors" style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68">No data</div>
+    </div>
+
+    <!-- Coin Utility & Purpose -->
+    <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:12px;margin-bottom:14px">
+      <div style="font-size:9px;font-weight:700;color:#aaa;font-family:'Space Mono',monospace;letter-spacing:2px;margin-bottom:8px">📋 COIN PURPOSE & UTILITY</div>
+      <div style="font-size:7px;color:#3a5a48;font-family:'Space Mono',monospace;margin-bottom:8px">What each coin does, its real-world usage, and adoption status</div>
+      <div id="portfolioCoinUtility" style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68">No data</div>
     </div>
 
     <!-- Smart Recommendations -->
@@ -18119,6 +18147,80 @@ const SECTOR_META = {
   other: { label: 'Other', color: '#5a7a68', name: 'Other' },
 };
 
+// ── Coin Purpose, Utility & Adoption Data ──
+const COIN_UTILITY = {
+  bitcoin:       { purpose: 'Digital store of value & decentralized money', useCases: ['Store of Value','Payments','Settlement'], adoption: 'high', tvlTrend: 'up', note: 'Most liquid & widely adopted crypto. Lightning Network enables payments.' },
+  ethereum:      { purpose: 'Smart contract platform & DeFi backbone', useCases: ['Smart Contracts','DeFi','NFTs','L2 Settlement'], adoption: 'high', tvlTrend: 'up', note: 'Largest DeFi ecosystem. L2s driving scaling. EIP-4844 reduced fees.' },
+  solana:        { purpose: 'High-throughput smart contract platform', useCases: ['DeFi','NFTs','Payments','Gaming'], adoption: 'high', tvlTrend: 'up', note: 'Sub-cent fees, 400ms blocks. Growing DeFi/consumer app ecosystem.' },
+  binancecoin:   { purpose: 'Exchange utility token & BNB Chain gas', useCases: ['Exchange Fees','DeFi','Gas Token'], adoption: 'high', tvlTrend: 'stable', note: 'Powers Binance ecosystem. BNB Chain has strong DeFi/GameFi activity.' },
+  ripple:        { purpose: 'Cross-border payments & settlement', useCases: ['Payments','Remittance','CBDC Infrastructure'], adoption: 'medium', tvlTrend: 'stable', note: 'Used by banks for cross-border transfers. Regulatory clarity improving.' },
+  cardano:       { purpose: 'Peer-reviewed smart contract platform', useCases: ['Smart Contracts','Identity','Supply Chain'], adoption: 'medium', tvlTrend: 'stable', note: 'Academic-driven development. Growing DeFi but slower adoption pace.' },
+  'avalanche-2': { purpose: 'Multi-chain smart contract platform', useCases: ['DeFi','Subnets','Gaming','Institutions'], adoption: 'medium', tvlTrend: 'stable', note: 'Subnet architecture for custom chains. Institutional partnerships growing.' },
+  sui:           { purpose: 'Move-based L1 for consumer apps', useCases: ['Gaming','DeFi','Social','Consumer Apps'], adoption: 'medium', tvlTrend: 'up', note: 'Object-centric model. Fast-growing ecosystem, strong dev activity.' },
+  near:          { purpose: 'Sharded L1 focused on usability', useCases: ['DeFi','AI','Account Abstraction'], adoption: 'medium', tvlTrend: 'stable', note: 'Chain abstraction & AI focus. Near DA for rollup data availability.' },
+  toncoin:       { purpose: 'Telegram-integrated blockchain', useCases: ['Payments','Social','Mini Apps','Gaming'], adoption: 'high', tvlTrend: 'up', note: '900M+ Telegram users as distribution. Mini apps driving adoption.' },
+  aptos:         { purpose: 'Move-based L1 for scalable applications', useCases: ['DeFi','Gaming','Enterprise'], adoption: 'low', tvlTrend: 'stable', note: 'Meta/Diem heritage. Parallel execution engine. Early ecosystem stage.' },
+  'matic-network':{ purpose: 'Ethereum scaling & zkEVM rollup', useCases: ['L2 Scaling','DeFi','Enterprise','Identity'], adoption: 'high', tvlTrend: 'stable', note: 'POL migration underway. zkEVM live. Major enterprise partnerships.' },
+  arbitrum:      { purpose: 'Optimistic rollup for Ethereum scaling', useCases: ['DeFi','Orbit Chains','Gaming'], adoption: 'high', tvlTrend: 'up', note: 'Largest L2 by TVL. Orbit chains expanding ecosystem.' },
+  optimism:      { purpose: 'Optimistic rollup & Superchain framework', useCases: ['DeFi','Superchain','Public Goods'], adoption: 'medium', tvlTrend: 'stable', note: 'OP Stack powers Base, Zora, etc. Retroactive public goods funding.' },
+  starknet:      { purpose: 'ZK-rollup for Ethereum scaling', useCases: ['DeFi','ZK Proofs','Privacy','Gaming'], adoption: 'low', tvlTrend: 'up', note: 'Cairo language. Validity proofs for security. Growing DeFi ecosystem.' },
+  chainlink:     { purpose: 'Decentralized oracle network', useCases: ['Oracles','Data Feeds','CCIP','VRF'], adoption: 'high', tvlTrend: 'up', note: 'Dominant oracle provider. CCIP enables cross-chain messaging. Critical DeFi infra.' },
+  polkadot:      { purpose: 'Multi-chain interoperability protocol', useCases: ['Cross-Chain','Parachains','DeFi','Identity'], adoption: 'medium', tvlTrend: 'stable', note: 'Parachain architecture. JAM upgrade coming. Cross-chain messaging via XCM.' },
+  uniswap:       { purpose: 'Largest decentralized exchange (DEX)', useCases: ['Token Swaps','Liquidity','DEX'], adoption: 'high', tvlTrend: 'stable', note: 'Dominant AMM. Uniswap v4 hooks enable custom pool logic.' },
+  aave:          { purpose: 'Decentralized lending & borrowing', useCases: ['Lending','Borrowing','Flash Loans','GHO Stablecoin'], adoption: 'high', tvlTrend: 'up', note: 'Largest lending protocol. GHO stablecoin. Multi-chain deployment.' },
+  maker:         { purpose: 'DAI stablecoin & lending protocol', useCases: ['Stablecoin','Lending','RWA'], adoption: 'high', tvlTrend: 'stable', note: 'DAI is battle-tested. Moving into real-world assets (RWA).' },
+  'jupiter-exchange-solana': { purpose: 'Solana DEX aggregator & launchpad', useCases: ['DEX Aggregation','Limit Orders','Perps','Launchpad'], adoption: 'high', tvlTrend: 'up', note: 'Dominant Solana DEX. JUP launchpad & perpetuals driving growth.' },
+  'injective-protocol': { purpose: 'DeFi-optimized L1 for finance', useCases: ['Perps','Orderbook DEX','Prediction Markets'], adoption: 'medium', tvlTrend: 'stable', note: 'MEV-resistant chain. On-chain orderbook for derivatives.' },
+  'curve-dao-token': { purpose: 'Stablecoin & pegged asset DEX', useCases: ['Stablecoin Swaps','Yield','crvUSD'], adoption: 'high', tvlTrend: 'stable', note: 'Dominant for stable swaps. crvUSD lending market. Vote-locked tokenomics.' },
+  'render-token': { purpose: 'Decentralized GPU rendering network', useCases: ['GPU Compute','3D Rendering','AI Training'], adoption: 'medium', tvlTrend: 'up', note: 'Real GPU compute usage. Apple partnership. AI narrative driver.' },
+  'fetch-ai':    { purpose: 'Autonomous AI agent framework', useCases: ['AI Agents','DeFi Automation','Data'], adoption: 'medium', tvlTrend: 'up', note: 'ASI Alliance merger (FET+AGIX+OCEAN). Building autonomous economic agents.' },
+  bittensor:     { purpose: 'Decentralized AI model marketplace', useCases: ['AI Training','Model Hosting','Compute'], adoption: 'low', tvlTrend: 'up', note: 'Subnet model for specialized AI tasks. Novel incentive design for AI.' },
+  singularitynet:{ purpose: 'AI services marketplace', useCases: ['AI Services','AGI Research','Marketplace'], adoption: 'low', tvlTrend: 'stable', note: 'Part of ASI Alliance. Focus on artificial general intelligence.' },
+  dogecoin:      { purpose: 'Meme-origin payments coin', useCases: ['Payments','Tipping','Meme'], adoption: 'medium', tvlTrend: 'stable', note: 'Strong brand recognition. Accepted by some merchants. Low fees.' },
+  'shiba-inu':   { purpose: 'Meme ecosystem with DeFi layer', useCases: ['Meme','Shibarium L2','DEX'], adoption: 'low', tvlTrend: 'stable', note: 'Shibarium L2 launched. Trying to evolve beyond meme status.' },
+  pepe:          { purpose: 'Pure meme coin', useCases: ['Meme','Speculation'], adoption: 'low', tvlTrend: 'stable', note: 'No utility beyond meme speculation. High volatility, driven by social sentiment.' },
+  bonk:          { purpose: 'Solana community meme coin', useCases: ['Meme','Solana Ecosystem','Tipping'], adoption: 'low', tvlTrend: 'stable', note: 'Solana ecosystem meme. Community-driven with some DeFi integrations.' },
+  dogwifcoin:    { purpose: 'Solana meme coin', useCases: ['Meme','Speculation'], adoption: 'low', tvlTrend: 'stable', note: 'Pure memecoin on Solana. No fundamental utility — sentiment-driven.' },
+  floki:         { purpose: 'Meme ecosystem with utility ambitions', useCases: ['Meme','GameFi','TokenFi'], adoption: 'low', tvlTrend: 'stable', note: 'Building TokenFi (tokenization) and Valhalla (game). Still mostly meme-driven.' },
+};
+
+// ── Competitor Mapping (top 2-3 competitors per coin) ──
+const COIN_COMPETITORS = {
+  bitcoin:       [],  // No direct competitor
+  ethereum:      ['solana','avalanche-2','cardano'],
+  solana:        ['ethereum','sui','avalanche-2'],
+  binancecoin:   ['ethereum','toncoin'],
+  ripple:        ['solana','toncoin'],
+  cardano:       ['ethereum','polkadot','solana'],
+  'avalanche-2': ['ethereum','solana','polkadot'],
+  sui:           ['solana','aptos','near'],
+  near:          ['solana','sui','ethereum'],
+  toncoin:       ['solana','binancecoin'],
+  aptos:         ['sui','solana','near'],
+  'matic-network':['arbitrum','optimism','starknet'],
+  arbitrum:      ['matic-network','optimism','starknet'],
+  optimism:      ['arbitrum','matic-network','starknet'],
+  starknet:      ['arbitrum','optimism','matic-network'],
+  chainlink:     [],  // Dominant oracle — no close peer in list
+  polkadot:      ['ethereum','cardano','avalanche-2'],
+  uniswap:       ['jupiter-exchange-solana','curve-dao-token'],
+  aave:          ['maker','injective-protocol'],
+  maker:         ['aave','curve-dao-token'],
+  'jupiter-exchange-solana': ['uniswap','curve-dao-token'],
+  'injective-protocol': ['uniswap','jupiter-exchange-solana'],
+  'curve-dao-token': ['uniswap','jupiter-exchange-solana'],
+  'render-token': ['fetch-ai','bittensor'],
+  'fetch-ai':    ['render-token','singularitynet','bittensor'],
+  bittensor:     ['render-token','fetch-ai'],
+  singularitynet:['fetch-ai','render-token','bittensor'],
+  dogecoin:      ['shiba-inu','pepe','floki'],
+  'shiba-inu':   ['dogecoin','pepe','floki'],
+  pepe:          ['dogecoin','shiba-inu','bonk'],
+  bonk:          ['dogwifcoin','pepe','floki'],
+  dogwifcoin:    ['bonk','pepe','shiba-inu'],
+  floki:         ['dogecoin','shiba-inu','bonk'],
+};
+
 let _pfInitialized = false;
 
 function initPortfolioTracker() {
@@ -18145,10 +18247,13 @@ function addPortfolioHolding() {
   const coinId = $('pfCoinSelect')?.value;
   const qty = parseFloat($('pfQuantity')?.value);
   const buyPrice = parseFloat($('pfBuyPrice')?.value);
+  const stakedQty = parseFloat($('pfStakedQty')?.value) || 0;
+  const stakeAPY = parseFloat($('pfStakeAPY')?.value) || 0;
 
   if (!coinId) { toast('Select a coin', 'error'); return; }
   if (!qty || qty <= 0) { toast('Enter a valid quantity', 'error'); return; }
   if (!buyPrice || buyPrice <= 0) { toast('Enter a valid buy price', 'error'); return; }
+  if (stakedQty > qty) { toast('Staked qty cannot exceed total qty', 'error'); return; }
 
   const coin = PF_COINS.find(c => c.id === coinId);
   if (!coin) { toast('Coin not found', 'error'); return; }
@@ -18161,6 +18266,12 @@ function addPortfolioHolding() {
     const totalCost = existing.quantity * existing.avgBuyPrice + qty * buyPrice;
     existing.quantity += qty;
     existing.avgBuyPrice = totalCost / existing.quantity;
+    // Update staking info if provided
+    if (stakedQty > 0) {
+      existing.stakedQty = (existing.stakedQty || 0) + stakedQty;
+      existing.stakeAPY = stakeAPY || existing.stakeAPY || 0;
+      existing.stakeStartDate = existing.stakeStartDate || Date.now();
+    }
     toast(`Updated ${coin.sym} holding`);
   } else {
     holdings.push({
@@ -18170,6 +18281,9 @@ function addPortfolioHolding() {
       sector: coin.sector,
       quantity: qty,
       avgBuyPrice: buyPrice,
+      stakedQty: stakedQty,
+      stakeAPY: stakeAPY,
+      stakeStartDate: stakedQty > 0 ? Date.now() : null,
       addedAt: Date.now(),
     });
     toast(`Added ${coin.sym} to portfolio`);
@@ -18179,6 +18293,8 @@ function addPortfolioHolding() {
   $('pfQuantity').value = '';
   $('pfBuyPrice').value = '';
   $('pfCoinSelect').value = '';
+  $('pfStakedQty').value = '';
+  $('pfStakeAPY').value = '';
   renderPortfolioTracker();
 }
 
@@ -18194,13 +18310,17 @@ async function refreshPortfolioPrices() {
   const holdings = pfLoad();
   if (!holdings.length) { renderPortfolioTracker(); return; }
 
-  const ids = [...new Set(holdings.map(h => h.id))].join(',');
+  // Collect all IDs: holdings + their competitors
+  const holdingIds = holdings.map(h => h.id);
+  const competitorIds = holdingIds.flatMap(id => COIN_COMPETITORS[id] || []);
+  const allIds = [...new Set([...holdingIds, ...competitorIds])].join(',');
+
   try {
-    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true&include_7d_change=true&include_market_cap=true&include_24hr_vol=true`);
+    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${allIds}&vs_currencies=usd&include_24hr_change=true&include_7d_change=true&include_market_cap=true&include_24hr_vol=true`);
     if (res.ok) {
       const data = await res.json();
       pfPricesSave({ ...data, _ts: Date.now() });
-      console.log('[Portfolio] Prices updated for', Object.keys(data).length, 'coins');
+      console.log('[Portfolio] Prices updated for', Object.keys(data).length, 'coins (inc. competitors)');
     }
   } catch (e) {
     console.warn('[Portfolio] Price fetch failed:', e.message);
@@ -18218,6 +18338,10 @@ function renderPortfolioTracker() {
   const recEl = $('portfolioRecommendations');
   const healthEl = $('portfolioHealthScore');
 
+  const stakeEl = $('portfolioStakingSummary');
+  const compEl = $('portfolioCompetitors');
+  const utilEl = $('portfolioCoinUtility');
+
   if (!holdings.length) {
     if (kpiEl) kpiEl.innerHTML = '';
     if (tableEl) tableEl.innerHTML = '<div style="text-align:center;padding:20px;color:#3a5a48;font-family:\'Space Mono\',monospace;font-size:9px">No holdings yet. Add your first coin above.</div>';
@@ -18225,6 +18349,9 @@ function renderPortfolioTracker() {
     if (perfEl) perfEl.innerHTML = 'No data';
     if (recEl) recEl.innerHTML = 'Add holdings to receive recommendations.';
     if (healthEl) healthEl.innerHTML = '';
+    if (stakeEl) stakeEl.innerHTML = 'No staked positions yet.';
+    if (compEl) compEl.innerHTML = 'No data';
+    if (utilEl) utilEl.innerHTML = 'No data';
     return;
   }
 
@@ -18242,7 +18369,19 @@ function renderPortfolioTracker() {
     const volume = p?.usd_24h_vol || 0;
     totalValue += value;
     totalCost += cost;
-    return { ...h, currentPrice, value, cost, pnl, pnlPct, change24h, marketCap, volume };
+    // Staking calculations
+    const stakedQty = h.stakedQty || 0;
+    const stakeAPY = h.stakeAPY || 0;
+    const stakeStartDate = h.stakeStartDate || Date.now();
+    const stakeDaysElapsed = stakedQty > 0 ? Math.max(0, (Date.now() - stakeStartDate) / 86400000) : 0;
+    const dailyYieldTokens = stakedQty > 0 ? stakedQty * (stakeAPY / 100) / 365 : 0;
+    const earnedTokens = dailyYieldTokens * stakeDaysElapsed;
+    const stakedValue = stakedQty * currentPrice;
+    const earnedValue = earnedTokens * currentPrice;
+    const monthlyYieldTokens = dailyYieldTokens * 30;
+    const yearlyYieldTokens = stakedQty * (stakeAPY / 100);
+    return { ...h, currentPrice, value, cost, pnl, pnlPct, change24h, marketCap, volume,
+      stakedQty, stakeAPY, stakedValue, earnedTokens, earnedValue, dailyYieldTokens, monthlyYieldTokens, yearlyYieldTokens, stakeDaysElapsed };
   });
 
   // Sort by value descending
@@ -18296,8 +18435,11 @@ function renderPortfolioTracker() {
       const chgColor = h.change24h >= 0 ? '#00f5a0' : '#ff4d6d';
       const sectorMeta = SECTOR_META[h.sector] || SECTOR_META.other;
       const fmt = p => p > 1000 ? '$' + p.toLocaleString(undefined,{maximumFractionDigits:0}) : p > 1 ? '$' + p.toFixed(2) : '$' + p.toFixed(6);
+      const util = COIN_UTILITY[h.id];
+      const adoptionIcon = util ? (util.adoption === 'high' ? '🟢' : util.adoption === 'medium' ? '🟡' : '🔴') : '';
+      const stakeTag = h.stakedQty > 0 ? `<span style="font-size:6px;padding:1px 4px;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:3px;margin-left:3px">🥩 ${h.stakeAPY}%</span>` : '';
       return `<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
-        <td style="padding:6px 8px;font-weight:700;color:#fff">${h.sym} <span style="color:${sectorMeta.color};font-size:7px;font-weight:400">${sectorMeta.label}</span></td>
+        <td style="padding:6px 8px;font-weight:700;color:#fff">${h.sym} <span style="font-size:6px;padding:1px 4px;background:rgba(${sectorMeta.color === '#f5c400' ? '245,196,0' : sectorMeta.color === '#63b3ed' ? '99,179,237' : sectorMeta.color === '#ff6b35' ? '255,107,53' : sectorMeta.color === '#00c9ff' ? '0,201,255' : sectorMeta.color === '#ff8c00' ? '255,140,0' : sectorMeta.color === '#a78bfa' ? '167,139,250' : '90,122,104'},0.15);border:1px solid ${sectorMeta.color}44;color:${sectorMeta.color};border-radius:3px;font-weight:700">${sectorMeta.label}</span> ${adoptionIcon}${stakeTag}</td>
         <td style="padding:6px 8px;color:#aaa">${h.quantity.toLocaleString(undefined,{maximumFractionDigits:6})}</td>
         <td style="padding:6px 8px;color:#5a7a68">${fmt(h.avgBuyPrice)}</td>
         <td style="padding:6px 8px;color:#fff">${fmt(h.currentPrice)}</td>
@@ -18405,6 +18547,129 @@ function renderPortfolioTracker() {
     `;
   }
 
+  // ── Staking Rewards Summary ──
+  if (stakeEl) {
+    const stakedHoldings = enriched.filter(h => h.stakedQty > 0);
+    if (stakedHoldings.length === 0) {
+      stakeEl.innerHTML = '<div style="color:#3a5a48">No staked positions yet. Add staking info when adding or updating a holding.</div>';
+    } else {
+      const totalStakedValue = stakedHoldings.reduce((s, h) => s + h.stakedValue, 0);
+      const totalDailyEarnings = stakedHoldings.reduce((s, h) => s + (h.dailyYieldTokens * h.currentPrice), 0);
+      const totalMonthlyEarnings = totalDailyEarnings * 30;
+      const totalYearlyEarnings = totalDailyEarnings * 365;
+      const totalEarnedSoFar = stakedHoldings.reduce((s, h) => s + h.earnedValue, 0);
+
+      let stakeKPIs = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px;margin-bottom:10px">
+        <div style="background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);border-radius:6px;padding:8px;text-align:center">
+          <div style="font-size:14px;font-weight:800;color:#a78bfa">$${totalStakedValue.toLocaleString(undefined,{maximumFractionDigits:0})}</div>
+          <div style="font-size:7px;color:#5a7a68">TOTAL STAKED</div>
+        </div>
+        <div style="background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);border-radius:6px;padding:8px;text-align:center">
+          <div style="font-size:14px;font-weight:800;color:#00f5a0">$${totalEarnedSoFar.toFixed(2)}</div>
+          <div style="font-size:7px;color:#5a7a68">EARNED SO FAR</div>
+        </div>
+        <div style="background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);border-radius:6px;padding:8px;text-align:center">
+          <div style="font-size:14px;font-weight:800;color:#00f5a0">$${totalDailyEarnings.toFixed(2)}</div>
+          <div style="font-size:7px;color:#5a7a68">DAILY EARNINGS</div>
+        </div>
+        <div style="background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);border-radius:6px;padding:8px;text-align:center">
+          <div style="font-size:14px;font-weight:800;color:#00f5a0">$${totalMonthlyEarnings.toFixed(0)}</div>
+          <div style="font-size:7px;color:#5a7a68">MONTHLY EST.</div>
+        </div>
+        <div style="background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);border-radius:6px;padding:8px;text-align:center">
+          <div style="font-size:14px;font-weight:800;color:#00f5a0">$${totalYearlyEarnings.toLocaleString(undefined,{maximumFractionDigits:0})}</div>
+          <div style="font-size:7px;color:#5a7a68">YEARLY EST.</div>
+        </div>
+      </div>`;
+
+      const stakeRows = stakedHoldings.map(h => {
+        const pctStaked = (h.stakedQty / h.quantity * 100).toFixed(0);
+        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.03)">
+          <span style="font-size:9px;font-weight:700;color:#fff;width:50px">${h.sym}</span>
+          <span style="font-size:8px;color:#a78bfa;width:60px">${h.stakedQty.toLocaleString(undefined,{maximumFractionDigits:4})} staked</span>
+          <span style="font-size:8px;color:#5a7a68;width:40px">${pctStaked}% of bag</span>
+          <span style="font-size:8px;color:#00f5a0;width:50px">${h.stakeAPY}% APY</span>
+          <span style="font-size:8px;color:#00f5a0;width:70px">+${h.dailyYieldTokens.toFixed(6)}/day</span>
+          <span style="font-size:8px;color:#aaa;width:70px">+${h.monthlyYieldTokens.toFixed(4)}/mo</span>
+          <span style="font-size:8px;color:#00f5a0;width:60px">$${(h.dailyYieldTokens * h.currentPrice).toFixed(2)}/day</span>
+          <span style="font-size:7px;color:#5a7a68">${Math.floor(h.stakeDaysElapsed)}d staking · earned ${h.earnedTokens.toFixed(6)} ${h.sym} ($${h.earnedValue.toFixed(2)})</span>
+        </div>`;
+      }).join('');
+
+      stakeEl.innerHTML = stakeKPIs + '<div style="overflow-x:auto">' + stakeRows + '</div>';
+    }
+  }
+
+  // ── Competitor Comparison ──
+  if (compEl) {
+    const compRows = enriched.map(h => {
+      const competitors = COIN_COMPETITORS[h.id] || [];
+      if (competitors.length === 0) return '';
+
+      const myChange7d = prices[h.id]?.usd_7d_change || 0;
+      const compData = competitors.map(cId => {
+        const cCoin = PF_COINS.find(c => c.id === cId);
+        const cPrice = prices[cId];
+        const cChange7d = cPrice?.usd_7d_change || 0;
+        const diff = myChange7d - cChange7d;
+        const diffColor = diff >= 0 ? '#00f5a0' : '#ff4d6d';
+        const badge = diff >= 5 ? '🟢 Beating' : diff <= -5 ? '🔴 Losing to' : '🟡 Even';
+        return { sym: cCoin?.sym || cId, change7d: cChange7d, diff, diffColor, badge, cPrice: cPrice?.usd };
+      });
+
+      const myBadgeBg = myChange7d >= 0 ? 'rgba(0,245,160,0.08)' : 'rgba(255,77,109,0.08)';
+      const myBadgeColor = myChange7d >= 0 ? '#00f5a0' : '#ff4d6d';
+
+      return `<div style="padding:8px;margin-bottom:6px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:6px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:10px;font-weight:700;color:#fff">${h.sym}</span>
+          <span style="font-size:8px;padding:2px 6px;background:${myBadgeBg};border-radius:3px;color:${myBadgeColor}">${myChange7d >= 0 ? '+' : ''}${myChange7d.toFixed(1)}% 7d</span>
+          <span style="font-size:7px;color:#5a7a68">vs competitors:</span>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${compData.map(c => `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:5px;padding:5px 8px;min-width:110px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+              <span style="font-size:8px;font-weight:700;color:#aaa">${c.sym}</span>
+              <span style="font-size:7px;color:${c.change7d >= 0 ? '#00f5a0' : '#ff4d6d'}">${c.change7d >= 0 ? '+' : ''}${c.change7d.toFixed(1)}%</span>
+            </div>
+            <div style="font-size:7px;color:${c.diffColor};margin-top:2px">${c.badge} · ${c.diff >= 0 ? '+' : ''}${c.diff.toFixed(1)}%</div>
+          </div>`).join('')}
+        </div>
+      </div>`;
+    }).filter(Boolean).join('');
+
+    compEl.innerHTML = compRows || '<div style="color:#3a5a48">Add holdings to see competitor comparisons.</div>';
+  }
+
+  // ── Coin Purpose & Utility ──
+  if (utilEl) {
+    const utilRows = enriched.map(h => {
+      const util = COIN_UTILITY[h.id];
+      if (!util) return '';
+      const sectorMeta = SECTOR_META[h.sector] || SECTOR_META.other;
+      const adoptionIcon = util.adoption === 'high' ? '🟢' : util.adoption === 'medium' ? '🟡' : '🔴';
+      const adoptionLabel = util.adoption === 'high' ? 'High Adoption' : util.adoption === 'medium' ? 'Moderate Adoption' : 'Low Adoption';
+      const tvlIcon = util.tvlTrend === 'up' ? '📈' : util.tvlTrend === 'stable' ? '➡️' : '📉';
+      const tvlColor = util.tvlTrend === 'up' ? '#00f5a0' : util.tvlTrend === 'stable' ? '#f5c400' : '#ff4d6d';
+
+      return `<div style="padding:8px;margin-bottom:6px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:6px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
+          <span style="font-size:10px;font-weight:700;color:#fff">${h.sym}</span>
+          <span style="font-size:6px;padding:1px 5px;background:rgba(${sectorMeta.color === '#f5c400' ? '245,196,0' : sectorMeta.color === '#63b3ed' ? '99,179,237' : sectorMeta.color === '#ff6b35' ? '255,107,53' : sectorMeta.color === '#00c9ff' ? '0,201,255' : sectorMeta.color === '#ff8c00' ? '255,140,0' : sectorMeta.color === '#a78bfa' ? '167,139,250' : '90,122,104'},0.2);border:1px solid ${sectorMeta.color}44;color:${sectorMeta.color};border-radius:3px;font-weight:700">${sectorMeta.name}</span>
+          <span style="font-size:7px;color:#aaa">${adoptionIcon} ${adoptionLabel}</span>
+          <span style="font-size:7px;color:${tvlColor}">${tvlIcon} TVL ${util.tvlTrend}</span>
+        </div>
+        <div style="font-size:8px;color:#ddd;margin-bottom:4px;font-weight:600">${util.purpose}</div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px">
+          ${util.useCases.map(uc => `<span style="font-size:6px;padding:1px 5px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);color:#aaa;border-radius:3px">${uc}</span>`).join('')}
+        </div>
+        <div style="font-size:7px;color:#5a7a68;font-style:italic">${util.note}</div>
+      </div>`;
+    }).filter(Boolean).join('');
+
+    utilEl.innerHTML = utilRows || '<div style="color:#3a5a48">No data available.</div>';
+  }
+
   // ── Smart Recommendations ──
   if (recEl) {
     const recs = generatePortfolioRecommendations(enriched, totalValue, prices);
@@ -18485,6 +18750,28 @@ function calcPortfolioHealth(enriched, totalValue) {
       score -= 10;
       notes.push({ text: `${riskAlloc.toFixed(0)}% in risk-on sectors during bear regime`, color: '#ff4d6d' });
     }
+  }
+
+  // Staking yield bonus
+  const totalStaked = enriched.reduce((s, h) => s + (h.stakedValue || 0), 0);
+  if (totalStaked > 0 && totalValue > 0) {
+    const stakedPct = totalStaked / totalValue * 100;
+    if (stakedPct > 30) {
+      score += 5;
+      notes.push({ text: `${stakedPct.toFixed(0)}% staked — earning passive yield`, color: '#a78bfa' });
+    } else if (stakedPct > 10) {
+      notes.push({ text: `${stakedPct.toFixed(0)}% staked`, color: '#a78bfa' });
+    }
+  }
+
+  // Low adoption exposure check
+  const lowAdoptionAlloc = enriched.filter(h => {
+    const util = COIN_UTILITY[h.id];
+    return util && util.adoption === 'low';
+  }).reduce((s, h) => s + h.allocation, 0);
+  if (lowAdoptionAlloc > 30) {
+    score -= 10;
+    notes.push({ text: `${lowAdoptionAlloc.toFixed(0)}% in low-adoption coins`, color: '#f5c400' });
   }
 
   return { score: Math.max(0, Math.min(100, score)), notes };
@@ -18625,7 +18912,38 @@ function generatePortfolioRecommendations(enriched, totalValue, prices) {
     }
   }
 
-  return recs.slice(0, 8); // Cap at 8 recommendations
+  // 10. Staking recommendations
+  const stakeable = enriched.filter(h => h.stakedQty === 0 && ['l1','l2','infra'].includes(h.sector) && h.allocation > 5);
+  if (stakeable.length > 0) {
+    recs.push({ ...recStyle('action'), title: `Consider staking: ${stakeable.map(h => h.sym).join(', ')}`,
+      detail: `These L1/L2/Infra holdings could earn passive yield if staked. Add staking info via the holding form to track rewards.` });
+  }
+
+  // 11. Competitor underperformance
+  for (const h of enriched.slice(0, 5)) {
+    const competitors = COIN_COMPETITORS[h.id] || [];
+    if (competitors.length === 0) continue;
+    const myChange7d = prices[h.id]?.usd_7d_change || 0;
+    const betterComps = competitors.filter(cId => {
+      const c7d = prices[cId]?.usd_7d_change || 0;
+      return c7d - myChange7d > 10;
+    }).map(cId => PF_COINS.find(c => c.id === cId)?.sym || cId);
+    if (betterComps.length > 0 && h.allocation > 5) {
+      recs.push({ ...recStyle('warning'), title: `${h.sym} underperforming vs ${betterComps.join(', ')}`,
+        detail: `Competitors are significantly outperforming ${h.sym} this week. Review whether sector rotation is happening away from ${h.sym}.` });
+    }
+  }
+
+  // 12. Low adoption utility warning
+  for (const h of enriched) {
+    const util = COIN_UTILITY[h.id];
+    if (util && util.adoption === 'low' && h.allocation > 10) {
+      recs.push({ ...recStyle('info'), title: `${h.sym} has low adoption (${h.allocation.toFixed(0)}% of portfolio)`,
+        detail: `${util.purpose}. Current adoption is low — consider whether the risk is justified at this allocation.` });
+    }
+  }
+
+  return recs.slice(0, 10); // Cap at 10 recommendations
 }
 
 function exportPortfolioCSV() {
@@ -18633,19 +18951,22 @@ function exportPortfolioCSV() {
   const prices = pfPricesLoad();
   if (!holdings.length) { alert('No holdings to export.'); return; }
 
-  const headers = ['coin','symbol','sector','quantity','avg_buy_price','current_price','value','pnl','pnl_pct','allocation_pct'];
+  const headers = ['coin','symbol','sector','quantity','avg_buy_price','current_price','value','pnl','pnl_pct','allocation_pct','staked_qty','stake_apy','daily_yield_tokens','monthly_yield_usd'];
   let totalValue = 0;
   const enriched = holdings.map(h => {
     const p = prices[h.id];
     const currentPrice = p?.usd || h.avgBuyPrice;
     const value = h.quantity * currentPrice;
     totalValue += value;
-    return { ...h, currentPrice, value, pnl: value - h.quantity * h.avgBuyPrice, pnlPct: ((currentPrice - h.avgBuyPrice) / h.avgBuyPrice * 100) };
+    const stakedQty = h.stakedQty || 0;
+    const stakeAPY = h.stakeAPY || 0;
+    const dailyYieldTokens = stakedQty > 0 ? stakedQty * (stakeAPY / 100) / 365 : 0;
+    return { ...h, currentPrice, value, pnl: value - h.quantity * h.avgBuyPrice, pnlPct: ((currentPrice - h.avgBuyPrice) / h.avgBuyPrice * 100), stakedQty, stakeAPY, dailyYieldTokens };
   });
   enriched.forEach(h => h.allocation = totalValue > 0 ? (h.value / totalValue * 100) : 0);
 
   const rows = enriched.map(h =>
-    [h.name, h.sym, h.sector, h.quantity, h.avgBuyPrice, h.currentPrice, h.value.toFixed(2), h.pnl.toFixed(2), h.pnlPct.toFixed(2), h.allocation.toFixed(2)].join(',')
+    [h.name, h.sym, h.sector, h.quantity, h.avgBuyPrice, h.currentPrice, h.value.toFixed(2), h.pnl.toFixed(2), h.pnlPct.toFixed(2), h.allocation.toFixed(2), h.stakedQty, h.stakeAPY, h.dailyYieldTokens.toFixed(8), (h.dailyYieldTokens * h.currentPrice * 30).toFixed(2)].join(',')
   );
 
   const csv = [headers.join(','), ...rows].join('\n');
