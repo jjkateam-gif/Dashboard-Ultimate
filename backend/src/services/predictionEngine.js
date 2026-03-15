@@ -5,6 +5,10 @@ const { EventEmitter } = require('events');
 const dataPipeline = require('./predictionDataPipeline');
 const scorer = require('./predictionScorer');
 
+// Database for persistent state (survives Railway deploys)
+let pool = null;
+try { pool = require('../db').pool; } catch {}
+
 // Jupiter Prediction Market API
 const JUP_API = 'https://prediction-market-api.jup.ag/api/v1';
 const JUP_API_KEY = process.env.JUP_API_KEY || '';
@@ -58,7 +62,10 @@ class PredictionEngine extends EventEmitter {
     this._loadState();
   }
 
-  start() {
+  async start() {
+    // Load state from PostgreSQL (overrides file-based state from constructor)
+    await this._loadStateFromDB();
+
     // Start AI data pipeline (Binance WS + REST polling)
     try {
       dataPipeline.start();
@@ -73,17 +80,21 @@ class PredictionEngine extends EventEmitter {
     this.resolveTimer = setInterval(() => this.resolveExpiredTrades(), 60000);
     // Pre-compute AI scores every 10 seconds to cut execution latency
     this.precomputeTimer = setInterval(() => this._precomputeScores(), 10000);
+    // Save state to DB every 5 minutes (backup persistence)
+    this.dbSaveTimer = setInterval(() => this._saveState(), 300000);
     this.pollMarkets(); // immediate first poll
-    console.log('[JupPredict] Engine started. Mode:', this.mode, '| AI:', this.config.useAI ? 'ENABLED' : 'DISABLED');
+    console.log(`[JupPredict] Engine started. Mode: ${this.mode} | Running: ${this.running} | AI: ${this.config.useAI ? 'ENABLED' : 'DISABLED'}`);
   }
 
   stop() {
     if (this.pollTimer) clearInterval(this.pollTimer);
     if (this.resolveTimer) clearInterval(this.resolveTimer);
     if (this.precomputeTimer) clearInterval(this.precomputeTimer);
+    if (this.dbSaveTimer) clearInterval(this.dbSaveTimer);
     this.pollTimer = null;
     this.resolveTimer = null;
     this.precomputeTimer = null;
+    this.dbSaveTimer = null;
     try { dataPipeline.stop(); } catch {}
     console.log('[JupPredict] Engine stopped.');
   }
@@ -500,7 +511,52 @@ class PredictionEngine extends EventEmitter {
       }
     }
 
+    // Log trade to PostgreSQL for V2 ML training data
+    this._logTradeToDB(trade, signal);
     this._saveState();
+  }
+
+  /**
+   * Log trade to PostgreSQL for future ML training and analysis.
+   */
+  async _logTradeToDB(trade, signal) {
+    if (!pool) return;
+    try {
+      await pool.query(
+        `INSERT INTO prediction_trades
+         (trade_id, signal_id, type, strategy, market, market_id, timeframe, direction,
+          edge, net_edge, confidence, ai_prob_up, market_prob_up, kelly_fraction,
+          bet_size, entry_price, mode, status, top_features, reasons)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+         ON CONFLICT (trade_id) DO NOTHING`,
+        [
+          trade.id, trade.signalId, trade.type, trade.strategy,
+          trade.market, trade.marketId, trade.timeframe, trade.direction,
+          trade.edge, trade.netEdge, trade.confidence,
+          trade.aiProbUp, trade.marketProbUp, trade.kellyFraction,
+          trade.betSize, trade.entryPrice, trade.mode, trade.status,
+          JSON.stringify(trade.topFeatures), JSON.stringify(trade.reasons),
+        ]
+      );
+    } catch (err) {
+      console.warn('[JupPredict] DB trade log error:', err.message);
+    }
+  }
+
+  /**
+   * Update trade resolution in PostgreSQL.
+   */
+  async _updateTradeResolutionDB(trade) {
+    if (!pool) return;
+    try {
+      await pool.query(
+        `UPDATE prediction_trades SET status=$1, outcome=$2, pnl=$3,
+         resolution_source=$4, resolved_at=NOW() WHERE trade_id=$5`,
+        [trade.status, trade.outcome, trade.pnl, trade.resolutionSource, trade.id]
+      );
+    } catch (err) {
+      console.warn('[JupPredict] DB trade update error:', err.message);
+    }
   }
 
   async resolveExpiredTrades() {
@@ -556,6 +612,7 @@ class PredictionEngine extends EventEmitter {
         }
 
         this.broadcast('resolved', { trade, mode: 'paper' });
+        this._updateTradeResolutionDB(trade);
       } catch {}
     }
 
@@ -565,8 +622,34 @@ class PredictionEngine extends EventEmitter {
     this._saveState();
   }
 
-  // ─── State persistence ───
+  // ─── State persistence (PostgreSQL — survives Railway deploys) ───
   _saveState() {
+    // Save to PostgreSQL (async, fire-and-forget)
+    if (pool) {
+      pool.query(
+        `INSERT INTO prediction_state (id, running, mode, config, stats, paper_trades, real_trades, updated_at)
+         VALUES (1, $1, $2, $3, $4, $5, $6, NOW())
+         ON CONFLICT (id) DO UPDATE SET
+           running = $1, mode = $2, config = $3, stats = $4,
+           paper_trades = $5, real_trades = $6, updated_at = NOW()`,
+        [
+          this.running,
+          this.mode,
+          JSON.stringify(this.config),
+          JSON.stringify(this.stats),
+          JSON.stringify(this.paperTrades.slice(0, 100)),
+          JSON.stringify(this.realTrades.slice(0, 100)),
+        ]
+      ).catch(err => {
+        // Fallback to file if DB fails
+        this._saveStateFile();
+      });
+    } else {
+      this._saveStateFile();
+    }
+  }
+
+  _saveStateFile() {
     try {
       const state = {
         paperTrades: this.paperTrades.slice(0, 100),
@@ -584,6 +667,7 @@ class PredictionEngine extends EventEmitter {
   }
 
   _loadState() {
+    // Try file first (sync, for constructor)
     try {
       const fs = require('fs');
       const path = require('path');
@@ -596,9 +680,44 @@ class PredictionEngine extends EventEmitter {
         if (state.config) Object.assign(this.config, state.config);
         this.mode = state.mode || 'paper';
         this.running = state.running || false;
-        console.log('[JupPredict] Loaded saved state:', this.stats.paper.trades, 'paper trades,', this.stats.real.trades, 'real trades');
+        console.log('[JupPredict] Loaded saved state from file:', this.stats.paper.trades, 'paper trades');
+        return;
       }
     } catch {}
+
+    // Default: bot ON in paper mode (so it auto-trades after fresh deploys)
+    this.running = true;
+    this.mode = 'paper';
+    console.log('[JupPredict] No saved state found — defaulting to RUNNING in paper mode');
+  }
+
+  /**
+   * Load state from PostgreSQL (called after DB is ready).
+   * This overrides the file-based state loaded in constructor.
+   */
+  async _loadStateFromDB() {
+    if (!pool) return;
+    try {
+      const result = await pool.query('SELECT * FROM prediction_state WHERE id = 1');
+      if (result.rows.length > 0) {
+        const row = result.rows[0];
+        this.running = row.running;
+        this.mode = row.mode || 'paper';
+        if (row.config && typeof row.config === 'object') Object.assign(this.config, row.config);
+        if (row.stats && typeof row.stats === 'object') this.stats = { ...this.stats, ...row.stats };
+        if (Array.isArray(row.paper_trades)) this.paperTrades = row.paper_trades;
+        if (Array.isArray(row.real_trades)) this.realTrades = row.real_trades;
+        console.log(`[JupPredict] ✅ Loaded state from PostgreSQL: running=${this.running}, mode=${this.mode}, ${this.stats.paper.trades} paper trades, ${this.stats.real.trades} real trades`);
+      } else {
+        // No DB state yet — insert default (running=true, paper mode)
+        this.running = true;
+        this.mode = 'paper';
+        this._saveState();
+        console.log('[JupPredict] ✅ No DB state found — initialized as RUNNING in paper mode');
+      }
+    } catch (err) {
+      console.warn('[JupPredict] DB state load failed (using defaults):', err.message);
+    }
   }
 
   // ─── Public API ───
