@@ -2659,6 +2659,11 @@ function switchAuthView(view) {
               <input type="checkbox" id="atBfDemo" style="accent-color:#ff6b35">
               <label for="atBfDemo" style="font-size:10px;color:#5a7a68;font-family:'Space Mono',monospace">Demo mode (testnet)</label>
             </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+              <input type="checkbox" id="atBfRemember" checked style="accent-color:#00f5a0">
+              <label for="atBfRemember" style="font-size:10px;color:#00f5a0;font-family:'Space Mono',monospace">Remember password (auto-unlock on refresh)</label>
+            </div>
+            <div style="font-size:8px;color:#5a7a68;margin-top:2px;line-height:1.4;font-family:'Space Mono',monospace">When checked, your encryption password is saved locally so credentials auto-unlock when you refresh the page. Your BloFin API keys are still AES-256 encrypted on the server.</div>
           </div>
           <div id="atBfStatus" style="display:none;font-size:10px;font-family:'Space Mono',monospace;padding:8px 10px;border-radius:5px;margin-bottom:12px"></div>
           <div style="display:flex;gap:10px">
@@ -9550,7 +9555,7 @@ function switchPageTab(tab) {
     if (!PROBE.lastRun) runProbEngine();
     loadRecommendations();
     loadAutoTradeSettings();
-    checkBlofinConnection();
+    autoUnlockBlofin().then(() => checkBlofinConnection());
     refreshBtPositions();
     liveRefreshBalance();
     renderScanHistory();
@@ -17037,6 +17042,15 @@ async function submitBlofinConnect() {
         }
       } catch (e2) {}
 
+      // Remember password for auto-unlock on page refresh
+      const rememberChecked = $('atBfRemember')?.checked;
+      if (rememberChecked) {
+        localStorage.setItem('dash_bfUnlockPwd', btoa(encPwd));
+        console.log('[BloFin] Encryption password saved for auto-unlock on refresh');
+      } else {
+        localStorage.removeItem('dash_bfUnlockPwd');
+      }
+
       // Refresh connection status + start balance auto-refresh
       await checkBlofinConnection();
       startBalanceAutoRefresh();
@@ -17107,6 +17121,45 @@ async function refreshBtPositions() {
 }
 
 // Check BloFin connection status for auto-trade panel
+// Auto-unlock BloFin credentials on page load (if password was saved)
+async function autoUnlockBlofin() {
+  const savedPwd = localStorage.getItem('dash_bfUnlockPwd');
+  if (!savedPwd) return;
+  try {
+    const pwd = atob(savedPwd);
+    // First check if already unlocked
+    const statusR = await fetch(LIVE_API + '/status', { headers: liveHeaders() });
+    if (!statusR.ok) return;
+    const statusD = await statusR.json();
+    if (statusD.credentialsUnlocked) {
+      console.log('[BloFin] Already unlocked — skipping auto-unlock');
+      return;
+    }
+    // Also check if credentials exist at all
+    const credR = await fetch(LIVE_API + '/credentials', { headers: liveHeaders() });
+    if (!credR.ok) return;
+    const credD = await credR.json();
+    if (!credD.hasCredentials) return;
+
+    // Unlock with saved password
+    const r = await fetch(LIVE_API + '/credentials/unlock', {
+      method: 'POST',
+      headers: liveHeaders(),
+      body: JSON.stringify({ password: pwd }),
+    });
+    const d = await r.json();
+    if (d.success) {
+      console.log('[BloFin] ✅ Auto-unlocked credentials on page load');
+      toast('🔗 BloFin auto-unlocked — ready to trade', 'success', 3000);
+    } else {
+      console.warn('[BloFin] Auto-unlock failed:', d.error, '— password may have changed');
+      localStorage.removeItem('dash_bfUnlockPwd'); // Clear bad password
+    }
+  } catch (e) {
+    console.warn('[BloFin] Auto-unlock error:', e.message);
+  }
+}
+
 async function checkBlofinConnection() {
   const dot = $('atBlofinDot');
   const label = $('atBlofinLabel');
@@ -18418,6 +18471,14 @@ function renderHall100x() {
 // Init counts on load
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => { updateP100Count(); updateHall100xCount(); }, 700);
+  // Auto-unlock BloFin credentials on page load if password was saved
+  setTimeout(() => {
+    if (localStorage.getItem('dash_bfUnlockPwd') && localStorage.getItem('dash_token')) {
+      autoUnlockBlofin().then(() => {
+        console.log('[BloFin] Startup auto-unlock check complete');
+      });
+    }
+  }, 3000);
 });
 
 // ════════════════════════════════════════════════════════════════

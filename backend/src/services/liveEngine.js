@@ -92,12 +92,43 @@ class LiveEngine {
     return creds ? !!creds.demo : false;
   }
 
+  /* ── auto-unlock on startup ────────────────────────────── */
+
+  async autoUnlockFromEnv() {
+    const unlockPwd = process.env.BLOFIN_UNLOCK_PWD;
+    if (!unlockPwd) {
+      console.log('[LiveEngine] No BLOFIN_UNLOCK_PWD env var — auto-unlock skipped');
+      return;
+    }
+    try {
+      // Find admin user with stored credentials
+      const userResult = await pool.query(
+        "SELECT u.id FROM users u JOIN trading_wallets tw ON tw.user_id = u.id WHERE u.role='admin' LIMIT 1"
+      );
+      if (userResult.rows.length === 0) {
+        console.log('[LiveEngine] No admin user with stored credentials — auto-unlock skipped');
+        return;
+      }
+      const adminId = userResult.rows[0].id;
+      if (this.isUnlocked(adminId)) {
+        console.log('[LiveEngine] Admin already unlocked — skipping');
+        return;
+      }
+      const preview = await this.unlockCredentials(adminId, unlockPwd);
+      console.log(`[LiveEngine] ✅ Auto-unlocked BloFin credentials on startup (key: ${preview}) — 24/7 trading active`);
+    } catch (err) {
+      console.error('[LiveEngine] Auto-unlock failed:', err.message, '— check BLOFIN_UNLOCK_PWD env var');
+    }
+  }
+
   /* ── engine lifecycle ───────────────────────────────────── */
 
   start() {
     if (this.running) return;
     this.running = true;
     console.log('[LiveEngine] Live trading engine started');
+    // Auto-unlock credentials if env var is set (for 24/7 trading on Railway)
+    setTimeout(() => this.autoUnlockFromEnv(), 3000);
   }
 
   stop() {
