@@ -14224,9 +14224,61 @@ function getScanLogStats() {
   }
 }
 
+// Fetch server-side TF stats and merge into the calibration chart
+function _fetchAndMergeServerTFStats(localStats) {
+  const token = localStorage.getItem('dash_token');
+  if (!token) return;
+  fetch((window.CBP_BACKEND || 'http://localhost:3001') + '/best-trades/stats', {
+    headers: { 'Authorization': 'Bearer ' + token },
+  }).then(r => r.json()).then(serverData => {
+    if (serverData.error || !serverData.byTimeframe) return;
+    // Merge server TF data into local stats (server takes priority since it has more data)
+    const merged = { ...localStats.byTF };
+    for (const tf of serverData.byTimeframe) {
+      const existing = merged[tf.timeframe];
+      if (!existing || tf.wins + tf.losses > existing.total) {
+        merged[tf.timeframe] = { total: tf.wins + tf.losses, wins: tf.wins };
+      }
+    }
+    // Re-render the TF cards section with merged data
+    _updateTFCards(merged);
+  }).catch(() => {});
+}
+
+function _updateTFCards(byTF) {
+  const chartEl = document.getElementById('scanCalibrationChart');
+  if (!chartEl) return;
+  // Find the TF grid container and update it
+  const tfGrid = chartEl.querySelector('[data-tf-grid]');
+  if (!tfGrid) return;
+  const allTFs = ['5m', '15m', '30m', '1h', '4h', '1d'];
+  tfGrid.innerHTML = allTFs.map(tf => {
+    const d = byTF[tf];
+    const total = d ? d.total : 0;
+    const wins = d ? d.wins : 0;
+    const losses = total - wins;
+    const wr = total > 0 ? (wins / total * 100) : null;
+    const wrLabel = wr !== null ? wr.toFixed(0) + '%' : '—';
+    const wrColor = wr === null ? '#3a5a48' : wr >= 55 ? '#00f5a0' : wr >= 45 ? '#f5c400' : '#ff4d6d';
+    const barW = wr !== null ? Math.max(5, wr) : 0;
+    return `<div style="background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.12);border-radius:6px;padding:8px;min-width:80px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-weight:700;color:#ff6b35;font-size:10px">${tf}</span>
+        <span style="color:${wrColor};font-weight:700;font-size:12px">${wrLabel}</span>
+      </div>
+      <div style="background:rgba(255,255,255,0.05);border-radius:3px;height:5px;overflow:hidden;margin-bottom:3px">
+        <div style="height:100%;width:${barW}%;background:${wrColor};border-radius:3px"></div>
+      </div>
+      <div style="font-size:7px;color:#5a7a68">${wins}W / ${losses}L · n=${total}</div>
+    </div>`;
+  }).join('');
+}
+
 // Render scan history UI
 function renderScanHistory() {
   const stats = getScanLogStats();
+  // Also fetch server-side stats and merge TF data
+  _fetchAndMergeServerTFStats(stats);
 
   // Summary cards
   const summaryEl = document.getElementById('scanAccuracySummary');
@@ -14292,19 +14344,41 @@ function renderScanHistory() {
       `<span style="color:${mq === 'A' ? '#00f5a0' : mq === 'B' ? '#f5c400' : '#ff8c69'}">${mq}: ${(d.wins/d.total*100).toFixed(0)}% (${d.total})</span>`
     ).join(' · ');
 
-    const tfRows = Object.entries(stats.byTF).map(([tf, d]) =>
-      `<span style="color:#a78bfa">${tf}: ${(d.wins/d.total*100).toFixed(0)}% (${d.total})</span>`
-    ).join(' · ');
+    // Build TF breakdown grid (visual cards per timeframe)
+    const allTFs = ['5m', '15m', '30m', '1h', '4h', '1d'];
+    const tfCards = allTFs.map(tf => {
+      const d = stats.byTF[tf];
+      const total = d ? d.total : 0;
+      const wins = d ? d.wins : 0;
+      const losses = total - wins;
+      const wr = total > 0 ? (wins / total * 100) : null;
+      const wrLabel = wr !== null ? wr.toFixed(0) + '%' : '—';
+      const wrColor = wr === null ? '#3a5a48' : wr >= 55 ? '#00f5a0' : wr >= 45 ? '#f5c400' : '#ff4d6d';
+      const barW = wr !== null ? Math.max(5, wr) : 0;
+      return `<div style="background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.12);border-radius:6px;padding:8px;min-width:80px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-weight:700;color:#ff6b35;font-size:10px">${tf}</span>
+          <span style="color:${wrColor};font-weight:700;font-size:12px">${wrLabel}</span>
+        </div>
+        <div style="background:rgba(255,255,255,0.05);border-radius:3px;height:5px;overflow:hidden;margin-bottom:3px">
+          <div style="height:100%;width:${barW}%;background:${wrColor};border-radius:3px"></div>
+        </div>
+        <div style="font-size:7px;color:#5a7a68">${wins}W / ${losses}L · n=${total}</div>
+      </div>`;
+    }).join('');
 
     chartEl.innerHTML = `
       <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-radius:8px;padding:12px">
         <div style="font-size:9px;font-weight:700;color:#a78bfa;font-family:'Space Mono',monospace;margin-bottom:8px">📊 CALIBRATION: PREDICTED vs ACTUAL WIN RATE</div>
         <div style="font-size:7px;color:#3a5a48;font-family:'Space Mono',monospace;margin-bottom:8px">✓ = well-calibrated (actual within ±10% of predicted) · ⚠ = miscalibrated</div>
         <div style="display:flex;gap:4px;align-items:flex-end;padding:8px 0">${bars}</div>
-        <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:8px;margin-top:8px;font-size:7px;font-family:'Space Mono',monospace">
+        <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:10px;margin-top:8px">
+          <div style="font-size:9px;font-weight:700;color:#ff6b35;font-family:'Space Mono',monospace;margin-bottom:8px">📡 WIN RATE BY TIMEFRAME</div>
+          <div data-tf-grid style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:6px;margin-bottom:10px">${tfCards}</div>
+        </div>
+        <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:8px;font-size:7px;font-family:'Space Mono',monospace">
           <div style="margin-bottom:3px"><span style="color:#5a7a68">By Regime:</span> ${regimeRows || '<span style="color:#3a5a48">No data</span>'}</div>
-          <div style="margin-bottom:3px"><span style="color:#5a7a68">By Quality:</span> ${mqRows || '<span style="color:#3a5a48">No data</span>'}</div>
-          <div><span style="color:#5a7a68">By Timeframe:</span> ${tfRows || '<span style="color:#3a5a48">No data</span>'}</div>
+          <div><span style="color:#5a7a68">By Quality:</span> ${mqRows || '<span style="color:#3a5a48">No data</span>'}</div>
         </div>
       </div>
     `;
