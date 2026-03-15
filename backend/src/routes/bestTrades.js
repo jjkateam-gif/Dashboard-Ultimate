@@ -64,7 +64,11 @@ router.get('/results', (req, res) => {
 // GET /best-trades/stats — win rates broken down by timeframe, confidence, quality, regime
 router.get('/stats', async (req, res) => {
   try {
-    const stats = await scanner.getStats();
+    const filters = {};
+    if (req.query.timeframe) filters.timeframe = req.query.timeframe;
+    if (req.query.regime) filters.regime = req.query.regime;
+    if (req.query.market_quality) filters.market_quality = req.query.market_quality;
+    const stats = await scanner.getStats(filters);
     res.json(stats);
   } catch (err) {
     console.error('[BestTrades] Stats error:', err);
@@ -83,16 +87,25 @@ router.post('/resolve', async (req, res) => {
   }
 });
 
-// GET /best-trades/history — scan log from DB
+// GET /best-trades/history — scan log from DB (with optional filters)
 router.get('/history', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 500);
     const offset = parseInt(req.query.offset) || 0;
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+    if (req.query.timeframe) { conditions.push(`timeframe = $${idx++}`); params.push(req.query.timeframe); }
+    if (req.query.regime) { conditions.push(`regime = $${idx++}`); params.push(req.query.regime); }
+    if (req.query.market_quality) { conditions.push(`market_quality = $${idx++}`); params.push(req.query.market_quality); }
+    if (req.query.outcome === 'pending') { conditions.push('outcome IS NULL'); }
+    else if (req.query.outcome) { conditions.push(`outcome = $${idx++}`); params.push(req.query.outcome); }
+    const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
     const result = await pool.query(
-      'SELECT * FROM best_trades_log ORDER BY created_at DESC LIMIT $1 OFFSET $2',
-      [limit, offset]
+      `SELECT * FROM best_trades_log ${where} ORDER BY created_at DESC LIMIT $${idx} OFFSET $${idx + 1}`,
+      [...params, limit, offset]
     );
-    const countResult = await pool.query('SELECT COUNT(*) AS total FROM best_trades_log');
+    const countResult = await pool.query(`SELECT COUNT(*) AS total FROM best_trades_log ${where}`, params);
     res.json({
       history: result.rows,
       total: parseInt(countResult.rows[0].total),

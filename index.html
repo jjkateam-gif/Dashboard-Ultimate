@@ -2762,39 +2762,22 @@ function switchAuthView(view) {
   <div style="margin-top:20px;border-top:1px solid rgba(255,255,255,0.05);padding-top:16px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <div>
-        <div style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#a78bfa">📜 SCAN HISTORY & ACCURACY</div>
-        <div style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;margin-top:2px">Every scan is logged. Predictions auto-resolve against live price. Build calibration data over time.</div>
+        <div style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#a78bfa">📜 SCAN HISTORY & CALIBRATION</div>
+        <div style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;margin-top:2px">24/7 server predictions auto-resolve against live price. Click cards, timeframes, regimes or grades to filter.</div>
       </div>
       <div style="display:flex;gap:6px;align-items:center">
         <button onclick="renderScanHistory()" style="font-size:8px;padding:5px 12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">↻ Refresh</button>
+        <button onclick="triggerServerResolve()" style="font-size:8px;padding:5px 12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">⚡ Resolve Now</button>
         <button onclick="exportScanLog()" style="font-size:8px;padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:#5a7a68;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">📥 Export CSV</button>
-        <button onclick="if(confirm('Clear all scan history? This cannot be undone.')){localStorage.removeItem('bestTradesScanLog_v1');renderScanHistory()}" style="font-size:8px;padding:5px 12px;background:rgba(255,77,109,0.06);border:1px solid rgba(255,77,109,0.15);color:#ff4d6d;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">🗑 Clear</button>
       </div>
     </div>
     <!-- Accuracy Summary -->
     <div id="scanAccuracySummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px"></div>
-    <!-- Accuracy by Probability Bucket -->
+    <!-- Calibration Chart (Predicted vs Actual Win Rate) -->
     <div id="scanCalibrationChart" style="margin-bottom:12px"></div>
-    <!-- Recent Scans Table -->
+    <!-- Scan History Table -->
     <div id="scanHistoryTable" style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-radius:8px;padding:12px;font-family:'Space Mono',monospace;font-size:10px;color:#5a7a68;max-height:400px;overflow-y:auto">
-      No scan history yet. Run a scan to start building calibration data.
-    </div>
-  </div>
-
-  <!-- Server-Side Calibration (per-TF win rates) -->
-  <div style="margin-top:20px;border-top:1px solid rgba(255,255,255,0.05);padding-top:16px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <div>
-        <div style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#00f5a0">🖥️ SERVER-SIDE CALIBRATION</div>
-        <div style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;margin-top:2px">Win rates from the 24/7 server scanner — broken down by timeframe, confidence, quality & regime</div>
-      </div>
-      <div style="display:flex;gap:6px;align-items:center">
-        <button onclick="fetchServerStats()" style="font-size:8px;padding:5px 12px;background:rgba(0,245,160,0.1);border:1px solid rgba(0,245,160,0.25);color:#00f5a0;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">↻ Refresh</button>
-        <button onclick="triggerServerResolve()" style="font-size:8px;padding:5px 12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">⚡ Resolve Now</button>
-      </div>
-    </div>
-    <div id="serverCalibrationContent" style="background:rgba(0,0,0,0.2);border:1px solid rgba(0,245,160,0.1);border-radius:8px;padding:12px;font-family:'Space Mono',monospace;font-size:10px;color:#5a7a68">
-      Loading server calibration data...
+      Loading scan history from server...
     </div>
   </div>
 
@@ -9559,7 +9542,6 @@ function switchPageTab(tab) {
     refreshBtPositions();
     liveRefreshBalance();
     renderScanHistory();
-    fetchServerStats();
   } else if (tab === 'alerts') {
     renderAlertList();
     loadTgCredentialsIntoForm();
@@ -14025,251 +14007,220 @@ function getCalibratedProb(rawProb, currentRegime) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// BEST TRADES SCAN LOG — Complete Historical Record (#1 Priority)
-// Logs EVERY scan result (not just high-confidence) for full calibration
-// Resolves predictions against live price to build accuracy dataset
+// BEST TRADES SCAN HISTORY — Powered by Server Database
+// All scan results are logged and resolved by the 24/7 server scanner
+// Frontend fetches from /best-trades/stats and /best-trades/history
 // ══════════════════════════════════════════════════════════════
-const SCAN_LOG_KEY = 'bestTradesScanLog_v1';
-const SCAN_LOG_MAX = 2000; // max individual signal entries
 
-function logScanResults(results, tf, leverage) {
-  try {
-    const log = JSON.parse(localStorage.getItem(SCAN_LOG_KEY) || '[]');
-    const scanId = Date.now();
+// Legacy stubs — scan logging is now done server-side by the 24/7 scanner
+function logScanResults() { /* Server handles this */ }
+function resolveScanLogEntries() { /* Server handles this */ }
 
-    for (const r of results) {
-      log.push({
-        scanId,
-        ts: scanId,
-        asset: r.asset,
-        sym: r.sym,
-        tf,
-        leverage,
-        direction: r.direction,
-        prob: r.prob,
-        price: r.price,
-        stopPrice: r.rrData ? parseFloat(r.rrData.stop) : null,
-        targetPrice: r.rrData ? parseFloat(r.rrData.target) : null,
-        rr: r.rr,
-        ev: parseFloat(r.ev) || 0,
-        confidence: r.confidence,
-        marketQuality: r.marketQuality,
-        mqScore: r.mqScore,
-        regime: r.regimeData?.regime || 'unknown',
-        btcRegime: r.regimeData?._btcRegime || null,
-        localRegime: r.regimeData?._localRegime || null,
-        entryEfficiency: r.entryEfficiency || null,
-        calibratedProb: r.calibratedProb || null,
-        hitsCount: r.hits?.length || 0,
-        missesCount: r.misses?.length || 0,
-        fundingRate: r.fundingRate,
-        longProb: r.longProb,
-        shortProb: r.shortProb,
-        correlationDiscount: r._correlationDiscount || 0,
-        entryPenalty: r._entryPenalty || 0,
-        // Resolution fields — filled later
-        resolved: false,
-        outcome: null, // 'win', 'loss', 'expired'
-        resolvedPrice: null,
-        resolvedAt: null,
-        maxFavorable: null,  // max price move in favorable direction (MFE)
-        maxAdverse: null,    // max price move against (MAE)
-      });
-    }
+// Cached server data for client-side filtering
+window._serverStats = null;
+window._serverHistory = null;
 
-    // Cap log size — remove oldest entries
-    if (log.length > SCAN_LOG_MAX) {
-      log.splice(0, log.length - SCAN_LOG_MAX);
-    }
-
-    localStorage.setItem(SCAN_LOG_KEY, JSON.stringify(log));
-    console.log(`[ScanLog] Logged ${results.length} signals (total: ${log.length})`);
-  } catch (e) {
-    console.warn('[ScanLog] Failed to log:', e.message);
-  }
-}
-
-// Resolve unresolved scan log entries against current prices
-// Called during each scan when we already have live prices
-function resolveScanLogEntries(currentPrices) {
-  try {
-    const log = JSON.parse(localStorage.getItem(SCAN_LOG_KEY) || '[]');
-    let resolved = 0;
-    const now = Date.now();
-    const maxAge = 14 * 24 * 60 * 60 * 1000; // 14 days max for resolution
-
-    for (const entry of log) {
-      if (entry.resolved) continue;
-      if (!entry.stopPrice || !entry.targetPrice) continue;
-
-      const currentPrice = currentPrices[entry.sym];
-      if (!currentPrice) continue;
-
-      const age = now - entry.ts;
-
-      // Track MFE/MAE (Maximum Favorable/Adverse Excursion)
-      if (entry.direction === 'long') {
-        const favorable = ((currentPrice - entry.price) / entry.price) * 100;
-        if (entry.maxFavorable === null || favorable > entry.maxFavorable) entry.maxFavorable = favorable;
-        if (entry.maxAdverse === null || -favorable > entry.maxAdverse) entry.maxAdverse = -favorable;
-      } else {
-        const favorable = ((entry.price - currentPrice) / entry.price) * 100;
-        if (entry.maxFavorable === null || favorable > entry.maxFavorable) entry.maxFavorable = favorable;
-        if (entry.maxAdverse === null || -favorable > entry.maxAdverse) entry.maxAdverse = -favorable;
-      }
-
-      // Check target/stop hit
-      let hitTarget = false, hitStop = false;
-      if (entry.direction === 'long') {
-        if (currentPrice >= entry.targetPrice) hitTarget = true;
-        if (currentPrice <= entry.stopPrice) hitStop = true;
-      } else {
-        if (currentPrice <= entry.targetPrice) hitTarget = true;
-        if (currentPrice >= entry.stopPrice) hitStop = true;
-      }
-
-      if (hitTarget) {
-        entry.resolved = true;
-        entry.outcome = 'win';
-        entry.resolvedPrice = currentPrice;
-        entry.resolvedAt = now;
-        resolved++;
-      } else if (hitStop) {
-        entry.resolved = true;
-        entry.outcome = 'loss';
-        entry.resolvedPrice = currentPrice;
-        entry.resolvedAt = now;
-        resolved++;
-      } else if (age > maxAge) {
-        // Expired — mark as expired with current P&L
-        entry.resolved = true;
-        entry.outcome = 'expired';
-        entry.resolvedPrice = currentPrice;
-        entry.resolvedAt = now;
-        resolved++;
-      }
-    }
-
-    if (resolved > 0) {
-      localStorage.setItem(SCAN_LOG_KEY, JSON.stringify(log));
-      console.log(`[ScanLog] Resolved ${resolved} entries`);
-    }
-  } catch (e) {
-    console.warn('[ScanLog] Resolve failed:', e.message);
-  }
-}
-
-// Get scan log statistics for UI
-function getScanLogStats() {
-  try {
-    const log = JSON.parse(localStorage.getItem(SCAN_LOG_KEY) || '[]');
-    const resolved = log.filter(e => e.resolved && e.outcome !== 'expired');
-    const wins = resolved.filter(e => e.outcome === 'win');
-    const losses = resolved.filter(e => e.outcome === 'loss');
-    const pending = log.filter(e => !e.resolved);
-    const expired = log.filter(e => e.outcome === 'expired');
-
-    // Accuracy by probability bucket (5% increments)
-    const buckets = {};
-    for (const e of resolved) {
-      const bucket = Math.floor(e.prob / 5) * 5;
-      const key = `${bucket}-${bucket + 5}%`;
-      if (!buckets[key]) buckets[key] = { total: 0, wins: 0, bucket };
-      buckets[key].total++;
-      if (e.outcome === 'win') buckets[key].wins++;
-    }
-
-    // Accuracy by asset
-    const byAsset = {};
-    for (const e of resolved) {
-      if (!byAsset[e.asset]) byAsset[e.asset] = { total: 0, wins: 0 };
-      byAsset[e.asset].total++;
-      if (e.outcome === 'win') byAsset[e.asset].wins++;
-    }
-
-    // Accuracy by regime
-    const byRegime = {};
-    for (const e of resolved) {
-      const regime = (e.regime || 'unknown').split('_')[0];
-      if (!byRegime[regime]) byRegime[regime] = { total: 0, wins: 0 };
-      byRegime[regime].total++;
-      if (e.outcome === 'win') byRegime[regime].wins++;
-    }
-
-    // Accuracy by market quality
-    const byMQ = {};
-    for (const e of resolved) {
-      const mq = e.marketQuality || '?';
-      if (!byMQ[mq]) byMQ[mq] = { total: 0, wins: 0 };
-      byMQ[mq].total++;
-      if (e.outcome === 'win') byMQ[mq].wins++;
-    }
-
-    // Accuracy by timeframe
-    const byTF = {};
-    for (const e of resolved) {
-      if (!byTF[e.tf]) byTF[e.tf] = { total: 0, wins: 0 };
-      byTF[e.tf].total++;
-      if (e.outcome === 'win') byTF[e.tf].wins++;
-    }
-
-    // Average MFE/MAE for resolved trades
-    const mfeValues = resolved.filter(e => e.maxFavorable != null).map(e => e.maxFavorable);
-    const maeValues = resolved.filter(e => e.maxAdverse != null).map(e => e.maxAdverse);
-    const avgMFE = mfeValues.length ? mfeValues.reduce((s, v) => s + v, 0) / mfeValues.length : 0;
-    const avgMAE = maeValues.length ? maeValues.reduce((s, v) => s + v, 0) / maeValues.length : 0;
-
-    return {
-      total: log.length,
-      resolved: resolved.length,
-      wins: wins.length,
-      losses: losses.length,
-      pending: pending.length,
-      expired: expired.length,
-      winRate: resolved.length > 0 ? (wins.length / resolved.length * 100).toFixed(1) : 'N/A',
-      buckets,
-      byAsset,
-      byRegime,
-      byMQ,
-      byTF,
-      avgMFE: avgMFE.toFixed(2),
-      avgMAE: avgMAE.toFixed(2),
-      recentEntries: log.slice(-50).reverse(), // last 50 for table display
-    };
-  } catch (e) {
-    return { total: 0, resolved: 0, wins: 0, losses: 0, pending: 0, expired: 0, winRate: 'N/A', buckets: {}, byAsset: {}, byRegime: {}, byMQ: {}, byTF: {}, avgMFE: '0', avgMAE: '0', recentEntries: [] };
-  }
-}
-
-// Fetch server-side TF stats and merge into the calibration chart
-function _fetchAndMergeServerTFStats(localStats) {
+// ── Fetch stats + history from server and render ──────────────
+async function renderScanHistory() {
   const token = localStorage.getItem('dash_token');
   if (!token) return;
-  fetch((window.CBP_BACKEND || 'http://localhost:3001') + '/best-trades/stats', {
-    headers: { 'Authorization': 'Bearer ' + token },
-  }).then(r => r.json()).then(serverData => {
-    if (serverData.error || !serverData.byTimeframe) return;
-    // Merge server TF data into local stats (server takes priority since it has more data)
-    const merged = { ...localStats.byTF };
-    for (const tf of serverData.byTimeframe) {
-      const existing = merged[tf.timeframe];
-      if (!existing || tf.wins + tf.losses > existing.total) {
-        merged[tf.timeframe] = { total: tf.wins + tf.losses, wins: tf.wins };
-      }
-    }
-    // Re-render the TF cards section with merged data
-    _updateTFCards(merged);
-  }).catch(() => {});
-}
+  const backend = window.CBP_BACKEND || 'http://localhost:3001';
+  const headers = { 'Authorization': 'Bearer ' + token };
 
-function _updateTFCards(byTF) {
-  // Merge server TF data into the global stats object and re-render the whole chart
-  if (window._calStats) {
-    window._calStats.byTF = byTF;
-    _renderCalibrationChart(window._calStats, window._calActiveTF);
+  try {
+    // Fetch stats and history in parallel
+    const [statsR, historyR] = await Promise.all([
+      fetch(`${backend}/best-trades/stats`, { headers }),
+      fetch(`${backend}/best-trades/history?limit=200`, { headers }),
+    ]);
+    const stats = await statsR.json();
+    const history = await historyR.json();
+    if (stats.error) { console.warn('[ScanHistory] Stats error:', stats.error); return; }
+
+    window._serverStats = stats;
+    window._serverHistory = (history.history || []).map(_mapDbRow);
+
+    _renderUnifiedUI(stats, window._serverHistory);
+  } catch (e) {
+    console.warn('[ScanHistory] Fetch error:', e.message);
+    const el = document.getElementById('scanHistoryTable');
+    if (el) el.innerHTML = '<div style="color:#ff4d6d;text-align:center;padding:12px">Failed to load: ' + e.message + '</div>';
   }
 }
 
+// Map DB column names to frontend-friendly names
+function _mapDbRow(row) {
+  return {
+    ts: new Date(row.created_at).getTime(),
+    asset: row.asset,
+    direction: row.direction,
+    prob: row.probability,
+    price: parseFloat(row.entry_price) || 0,
+    stopPrice: parseFloat(row.stop_price) || null,
+    targetPrice: parseFloat(row.target_price) || null,
+    rr: parseFloat(row.rr_ratio) || 0,
+    confidence: row.confidence || '?',
+    marketQuality: row.market_quality || '?',
+    regime: row.regime || 'unknown',
+    tf: row.timeframe || '4h',
+    resolved: row.outcome !== null,
+    outcome: row.outcome,
+    pnl: parseFloat(row.pnl) || null,
+    executed: row.executed,
+    resolvedAt: row.resolved_at,
+  };
+}
+
+// ── Render the unified UI from server data ────────────────────
+function _renderUnifiedUI(stats, history) {
+  const o = stats.overall || {};
+  const totalWL = (o.wins || 0) + (o.losses || 0);
+  const wrValue = totalWL > 0 ? o.winRate.toFixed(1) : 'N/A';
+
+  // Summary stat cards (clickable)
+  const summaryEl = document.getElementById('scanAccuracySummary');
+  const activeOutcome = window._calActiveOutcome || null;
+  if (summaryEl) {
+    const wrColor = wrValue === 'N/A' ? '#5a7a68' : o.winRate >= 55 ? '#00f5a0' : o.winRate >= 45 ? '#f5c400' : '#ff4d6d';
+    const _sc = (filter, bg, border, color, value, label) => {
+      const isActive = activeOutcome === filter;
+      const activeBorder = isActive ? `border:2px solid ${color}` : `border:1px solid ${border}`;
+      const activeBg = isActive ? bg.replace('0.06', '0.15').replace('0.03', '0.1') : bg;
+      const cursor = filter ? 'cursor:pointer' : '';
+      const onclick = filter ? `onclick="_filterByOutcome('${filter}')"` : '';
+      return `<div ${onclick} style="background:${activeBg};${activeBorder};border-radius:8px;padding:10px;text-align:center;${cursor};transition:all 0.2s" ${filter ? `onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"` : ''}>
+        <div style="font-size:18px;font-weight:800;color:${color};font-family:'Space Mono',monospace">${value}</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">${label}${isActive ? ' ✕' : ''}</div>
+      </div>`;
+    };
+    summaryEl.innerHTML = `
+      ${_sc(null, 'rgba(167,139,250,0.06)', 'rgba(167,139,250,0.15)', wrColor, wrValue + (wrValue !== 'N/A' ? '%' : ''), 'WIN RATE')}
+      ${_sc('win', 'rgba(0,245,160,0.06)', 'rgba(0,245,160,0.12)', '#00f5a0', o.wins || 0, 'WINS')}
+      ${_sc('loss', 'rgba(255,77,109,0.06)', 'rgba(255,77,109,0.12)', '#ff4d6d', o.losses || 0, 'LOSSES')}
+      ${_sc('pending', 'rgba(245,196,0,0.06)', 'rgba(245,196,0,0.12)', '#f5c400', o.pending || 0, 'PENDING')}
+      ${_sc('all', 'rgba(255,255,255,0.03)', 'rgba(255,255,255,0.08)', '#aaa', o.totalLogged || 0, 'TOTAL LOGGED')}
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:14px;font-weight:800;font-family:'Space Mono',monospace">
+          <span style="color:#00f5a0">+${(o.avgWinPnl || 0).toFixed(2)}%</span> / <span style="color:#ff4d6d">${(o.avgLossPnl || 0).toFixed(2)}%</span>
+        </div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">AVG WIN / LOSS PNL</div>
+      </div>
+    `;
+  }
+
+  // Store globally for filters
+  window._calStats = stats;
+  if (window._calActiveTF === undefined) window._calActiveTF = null;
+  if (window._calActiveRegime === undefined) window._calActiveRegime = null;
+  if (window._calActiveMQ === undefined) window._calActiveMQ = null;
+  if (window._calActiveOutcome === undefined) window._calActiveOutcome = null;
+
+  // Calibration chart
+  const chartEl = document.getElementById('scanCalibrationChart');
+  if (chartEl && (stats.byProbBucket || []).length > 0) {
+    _renderCalibrationChart(stats, window._calActiveTF);
+  } else if (chartEl) {
+    chartEl.innerHTML = '';
+  }
+
+  // Scan history table
+  _renderHistoryTable(history);
+}
+
+// ── Render the calibration chart from server stats ────────────
+function _renderCalibrationChart(stats, activeTF) {
+  const chartEl = document.getElementById('scanCalibrationChart');
+  if (!chartEl) return;
+
+  // Build probability bucket bars from server data
+  const bucketData = stats.byProbBucket || [];
+  const buckets = {};
+  for (const b of bucketData) {
+    if (b.total > 0) {
+      buckets[b.bucket + '%'] = { total: b.total, wins: b.wins, bucket: b.bucketMid - 2 };
+    }
+  }
+  const bars = _buildBucketBars(buckets);
+
+  // Filter labels
+  const filters = [];
+  if (activeTF) filters.push(activeTF);
+  if (window._calActiveRegime) filters.push(window._calActiveRegime);
+  if (window._calActiveMQ) filters.push('Grade ' + window._calActiveMQ);
+  const filterLabel = filters.length > 0 ? `<span style="color:#ff6b35"> (${filters.join(' · ')})</span>` : ' <span style="color:#5a7a68">(all data)</span>';
+  const hasAnyFilter = activeTF || window._calActiveRegime || window._calActiveMQ;
+
+  // Regime rows (clickable)
+  const activeRegime = window._calActiveRegime || null;
+  const activeMQ = window._calActiveMQ || null;
+  const regimeRows = (stats.byRegime || []).map(r => {
+    const isActive = activeRegime === r.regime;
+    const color = r.regime === 'bull' ? '#00f5a0' : r.regime === 'bear' ? '#ff4d6d' : '#f5c400';
+    const border = isActive ? `border-bottom:2px solid ${color};padding-bottom:2px` : 'border-bottom:2px solid transparent;padding-bottom:2px';
+    return `<span onclick="_filterCalibrationByRegime('${r.regime}')" style="color:${color};cursor:pointer;${border};font-weight:${isActive ? '800' : '400'};transition:all 0.2s" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">${r.regime}: ${r.total > 0 ? r.winRate.toFixed(0) + '%' : '—'} (${r.total})</span>`;
+  }).join(' · ');
+
+  // Quality rows (clickable)
+  const mqRows = (stats.byQuality || []).map(q => {
+    const isActive = activeMQ === q.quality;
+    const color = q.quality === 'A' ? '#00f5a0' : q.quality === 'B' ? '#f5c400' : '#ff8c69';
+    const border = isActive ? `border-bottom:2px solid ${color};padding-bottom:2px` : 'border-bottom:2px solid transparent;padding-bottom:2px';
+    return `<span onclick="_filterCalibrationByMQ('${q.quality}')" style="color:${color};cursor:pointer;${border};font-weight:${isActive ? '800' : '400'};transition:all 0.2s" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">${q.quality}: ${q.total > 0 ? q.winRate.toFixed(0) + '%' : '—'} (${q.total})</span>`;
+  }).join(' · ');
+
+  // TF cards (clickable)
+  const allTFs = ['5m', '15m', '30m', '1h', '4h', '1d'];
+  const tfMap = {};
+  for (const tf of (stats.byTimeframe || [])) tfMap[tf.timeframe] = tf;
+  const tfCards = allTFs.map(tf => {
+    const d = tfMap[tf];
+    const total = d ? d.wins + d.losses : 0;
+    const wins = d ? d.wins : 0;
+    const losses = total - wins;
+    const wr = total > 0 ? (wins / total * 100) : null;
+    const wrLabel = wr !== null ? wr.toFixed(0) + '%' : '—';
+    const wrColor = wr === null ? '#3a5a48' : wr >= 55 ? '#00f5a0' : wr >= 45 ? '#f5c400' : '#ff4d6d';
+    const barW = wr !== null ? Math.max(5, wr) : 0;
+    const isActive = activeTF === tf;
+    const borderColor = isActive ? 'rgba(255,107,53,0.7)' : 'rgba(167,139,250,0.12)';
+    const bgColor = isActive ? 'rgba(255,107,53,0.1)' : 'rgba(0,0,0,0.3)';
+    const pending = d ? d.pending : 0;
+    const avgPnl = d ? d.avgPnl : 0;
+    return `<div onclick="_filterCalibrationByTF('${tf}')" style="background:${bgColor};border:2px solid ${borderColor};border-radius:6px;padding:10px;min-width:90px;cursor:pointer;transition:all 0.2s" onmouseover="this.style.borderColor='rgba(255,107,53,0.5)'" onmouseout="this.style.borderColor='${borderColor}'">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+        <span style="font-weight:700;color:#ff6b35;font-size:13px">${tf}</span>
+        <span style="color:${wrColor};font-weight:800;font-size:15px">${wrLabel}</span>
+      </div>
+      <div style="background:rgba(255,255,255,0.05);border-radius:3px;height:6px;overflow:hidden;margin-bottom:4px">
+        <div style="height:100%;width:${barW}%;background:${wrColor};border-radius:3px;transition:width 0.5s"></div>
+      </div>
+      <div style="font-size:9px;color:#5a7a68">${wins}W / ${losses}L · n=${total}${pending > 0 ? ' · ' + pending + 'p' : ''}${avgPnl ? ' · ' + (avgPnl >= 0 ? '+' : '') + avgPnl.toFixed(2) + '%' : ''}</div>
+    </div>`;
+  }).join('');
+
+  chartEl.innerHTML = `
+    <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-radius:8px;padding:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:#a78bfa;font-family:'Space Mono',monospace">📊 CALIBRATION: PREDICTED vs ACTUAL WIN RATE${filterLabel}</div>
+          <div style="font-size:8px;color:#3a5a48;font-family:'Space Mono',monospace;margin-top:2px">✓ = well-calibrated (actual within ±10% of predicted) · ⚠ = miscalibrated</div>
+        </div>
+        ${hasAnyFilter ? '<button onclick="_clearCalibrationFilters()" style="font-size:8px;padding:4px 10px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:4px;cursor:pointer;font-family:\'Space Mono\',monospace;font-weight:700;width:auto;margin:0">Clear Filters</button>' : ''}
+      </div>
+      <div style="display:flex;gap:8px;align-items:flex-end;padding:12px 0;min-height:80px">${bars}</div>
+      <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:12px;margin-top:10px">
+        <div style="font-size:11px;font-weight:700;color:#ff6b35;font-family:'Space Mono',monospace;margin-bottom:10px">📡 WIN RATE BY TIMEFRAME <span style="font-size:8px;color:#5a7a68;font-weight:400">— click a timeframe to filter</span></div>
+        <div data-tf-grid style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px">${tfCards}</div>
+      </div>
+      <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:8px;font-size:9px;font-family:'Space Mono',monospace">
+        <div style="margin-bottom:4px"><span style="color:#5a7a68">By Regime:</span> ${regimeRows || '<span style="color:#3a5a48">No data</span>'} <span style="color:#3a5a48;font-size:7px">— click to filter</span></div>
+        <div><span style="color:#5a7a68">By Quality:</span> ${mqRows || '<span style="color:#3a5a48">No data</span>'} <span style="color:#3a5a48;font-size:7px">— click to filter</span></div>
+      </div>
+    </div>
+  `;
+}
+
+// Build bucket bars from { label: { total, wins, bucket } }
 // Build probability bucket bars HTML
 function _buildBucketBars(buckets) {
   const sortedBuckets = Object.entries(buckets).sort((a, b) => a[1].bucket - b[1].bucket);
@@ -14291,295 +14242,136 @@ function _buildBucketBars(buckets) {
   }).join('');
 }
 
-// Filter buckets by timeframe from localStorage scan log
-function _getBucketsForTF(tf) {
-  try {
-    const log = JSON.parse(localStorage.getItem('bestTradesScanLog_v1') || '[]');
-    const resolved = log.filter(e => e.resolved && e.outcome !== 'expired' && e.tf === tf);
-    const buckets = {};
-    for (const e of resolved) {
-      const bucket = Math.floor(e.prob / 5) * 5;
-      const key = `${bucket}-${bucket + 5}%`;
-      if (!buckets[key]) buckets[key] = { total: 0, wins: 0, bucket };
-      buckets[key].total++;
-      if (e.outcome === 'win') buckets[key].wins++;
-    }
-    return buckets;
-  } catch { return {}; }
-}
 
-// Render/re-render the calibration chart (called on initial load + TF click)
-function _renderCalibrationChart(stats, activeTF) {
-  const chartEl = document.getElementById('scanCalibrationChart');
-  if (!chartEl) return;
-
-  // Get buckets — filtered by TF, regime, or quality
-  let buckets = activeTF ? _getBucketsForTF(activeTF) : stats.buckets;
-  if (window._calActiveRegime || window._calActiveMQ) {
-    buckets = _getBucketsFiltered(window._calActiveRegime, window._calActiveMQ, activeTF);
+// ── Render the scan history table ──────────────────────────────
+function _renderHistoryTable(history) {
+  const tableEl = document.getElementById('scanHistoryTable');
+  if (!tableEl) return;
+  if (!history || history.length === 0) {
+    tableEl.innerHTML = '<div style="text-align:center;padding:20px;color:#3a5a48;font-family:\'Space Mono\',monospace;font-size:9px">No scan history yet. The 24/7 server scanner will populate this automatically.</div>';
+    return;
   }
-  const bars = _buildBucketBars(buckets);
-  const filters = [];
-  if (activeTF) filters.push(activeTF);
-  if (window._calActiveRegime) filters.push(window._calActiveRegime);
-  if (window._calActiveMQ) filters.push('Grade ' + window._calActiveMQ);
-  const filterLabel = filters.length > 0 ? `<span style="color:#ff6b35"> (${filters.join(' · ')})</span>` : ' <span style="color:#5a7a68">(all timeframes)</span>';
-  const hasAnyFilter = activeTF || window._calActiveRegime || window._calActiveMQ;
 
-  // Breakdown rows for regime, MQ (clickable)
-  const activeRegime = window._calActiveRegime || null;
-  const activeMQ = window._calActiveMQ || null;
+  // Apply outcome filter
+  const outcomeFilter = window._calActiveOutcome || null;
+  let filteredEntries = history;
+  if (outcomeFilter === 'win') filteredEntries = filteredEntries.filter(e => e.outcome === 'win');
+  else if (outcomeFilter === 'loss') filteredEntries = filteredEntries.filter(e => e.outcome === 'loss');
+  else if (outcomeFilter === 'pending') filteredEntries = filteredEntries.filter(e => !e.resolved);
 
-  const regimeRows = Object.entries(stats.byRegime).map(([regime, d]) => {
-    const isActive = activeRegime === regime;
-    const color = regime === 'bull' ? '#00f5a0' : regime === 'bear' ? '#ff4d6d' : '#f5c400';
-    const border = isActive ? `border-bottom:2px solid ${color};padding-bottom:2px` : 'border-bottom:2px solid transparent;padding-bottom:2px';
-    return `<span onclick="_filterCalibrationByRegime('${regime}')" style="color:${color};cursor:pointer;${border};font-weight:${isActive ? '800' : '400'};transition:all 0.2s" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">${regime}: ${(d.wins/d.total*100).toFixed(0)}% (${d.total})</span>`;
-  }).join(' · ');
+  const rows = filteredEntries.map(e => {
+    const dirColor = e.direction === 'long' ? '#00f5a0' : '#ff4d6d';
+    const dirArrow = e.direction === 'long' ? '▲' : '▼';
+    const probColor = e.prob >= 70 ? '#00f5a0' : e.prob >= 60 ? '#f5c400' : e.prob >= 50 ? '#ff8c69' : '#5a7a68';
+    const outcomeLabel = !e.resolved ? '<span style="color:#f5c400">⏳ Pending</span>' :
+      e.outcome === 'win' ? '<span style="color:#00f5a0">✅ Win</span>' :
+      e.outcome === 'loss' ? '<span style="color:#ff4d6d">❌ Loss</span>' :
+      '<span style="color:#5a7a68">⏰ Expired</span>';
+    const pnlStr = e.pnl !== null ? `<span style="color:${e.pnl >= 0 ? '#00f5a0' : '#ff4d6d'}">${e.pnl >= 0 ? '+' : ''}${e.pnl.toFixed(2)}%</span>` : '—';
+    const timeAgo = formatTimeAgo(e.ts);
+    const mqColor = e.marketQuality === 'A' ? '#00f5a0' : e.marketQuality === 'B' ? '#f5c400' : '#ff8c69';
+    const execIcon = e.executed ? '⚡' : '';
 
-  const mqRows = Object.entries(stats.byMQ).sort((a,b) => a[0].localeCompare(b[0])).map(([mq, d]) => {
-    const isActive = activeMQ === mq;
-    const color = mq === 'A' ? '#00f5a0' : mq === 'B' ? '#f5c400' : '#ff8c69';
-    const border = isActive ? `border-bottom:2px solid ${color};padding-bottom:2px` : 'border-bottom:2px solid transparent;padding-bottom:2px';
-    return `<span onclick="_filterCalibrationByMQ('${mq}')" style="color:${color};cursor:pointer;${border};font-weight:${isActive ? '800' : '400'};transition:all 0.2s" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">${mq}: ${(d.wins/d.total*100).toFixed(0)}% (${d.total})</span>`;
-  }).join(' · ');
-
-  // Build TF breakdown grid (clickable cards)
-  const allTFs = ['5m', '15m', '30m', '1h', '4h', '1d'];
-  const tfCards = allTFs.map(tf => {
-    const d = stats.byTF[tf];
-    const total = d ? d.total : 0;
-    const wins = d ? d.wins : 0;
-    const losses = total - wins;
-    const wr = total > 0 ? (wins / total * 100) : null;
-    const wrLabel = wr !== null ? wr.toFixed(0) + '%' : '—';
-    const wrColor = wr === null ? '#3a5a48' : wr >= 55 ? '#00f5a0' : wr >= 45 ? '#f5c400' : '#ff4d6d';
-    const barW = wr !== null ? Math.max(5, wr) : 0;
-    const isActive = activeTF === tf;
-    const borderColor = isActive ? 'rgba(255,107,53,0.7)' : 'rgba(167,139,250,0.12)';
-    const bgColor = isActive ? 'rgba(255,107,53,0.1)' : 'rgba(0,0,0,0.3)';
-    return `<div onclick="_filterCalibrationByTF('${tf}')" style="background:${bgColor};border:2px solid ${borderColor};border-radius:6px;padding:10px;min-width:90px;cursor:pointer;transition:all 0.2s" onmouseover="this.style.borderColor='rgba(255,107,53,0.5)'" onmouseout="this.style.borderColor='${borderColor}'">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-        <span style="font-weight:700;color:#ff6b35;font-size:13px">${tf}</span>
-        <span style="color:${wrColor};font-weight:800;font-size:15px">${wrLabel}</span>
-      </div>
-      <div style="background:rgba(255,255,255,0.05);border-radius:3px;height:6px;overflow:hidden;margin-bottom:4px">
-        <div style="height:100%;width:${barW}%;background:${wrColor};border-radius:3px;transition:width 0.5s"></div>
-      </div>
-      <div style="font-size:9px;color:#5a7a68">${wins}W / ${losses}L · n=${total}</div>
-    </div>`;
+    return `<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+      <td style="padding:4px 6px;color:#5a7a68;font-size:7px;white-space:nowrap">${timeAgo}</td>
+      <td style="padding:4px 6px;font-weight:700">${execIcon}${e.asset}</td>
+      <td style="padding:4px 6px;color:${dirColor}">${dirArrow} ${(e.direction || '').toUpperCase()}</td>
+      <td style="padding:4px 6px;color:${probColor};font-weight:700">${e.prob}%</td>
+      <td style="padding:4px 6px">${e.rr}:1</td>
+      <td style="padding:4px 6px;color:${mqColor}">${e.marketQuality}</td>
+      <td style="padding:4px 6px">${e.confidence}</td>
+      <td style="padding:4px 6px;color:#5a7a68">${(e.regime || '').split('_')[0]}</td>
+      <td style="padding:4px 6px">${e.tf}</td>
+      <td style="padding:4px 6px">${outcomeLabel}</td>
+      <td style="padding:4px 6px">${pnlStr}</td>
+    </tr>`;
   }).join('');
 
-  chartEl.innerHTML = `
-    <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-radius:8px;padding:16px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div>
-          <div style="font-size:11px;font-weight:700;color:#a78bfa;font-family:'Space Mono',monospace">📊 CALIBRATION: PREDICTED vs ACTUAL WIN RATE${filterLabel}</div>
-          <div style="font-size:8px;color:#3a5a48;font-family:'Space Mono',monospace;margin-top:2px">✓ = well-calibrated (actual within ±10% of predicted) · ⚠ = miscalibrated</div>
-        </div>
-        ${hasAnyFilter ? '<button onclick="_clearCalibrationFilters()" style="font-size:8px;padding:4px 10px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:4px;cursor:pointer;font-family:\'Space Mono\',monospace;font-weight:700;width:auto;margin:0">Clear Filters</button>' : ''}
-      </div>
-      <div style="display:flex;gap:8px;align-items:flex-end;padding:12px 0;min-height:80px">${bars}</div>
-      <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:12px;margin-top:10px">
-        <div style="font-size:11px;font-weight:700;color:#ff6b35;font-family:'Space Mono',monospace;margin-bottom:10px">📡 WIN RATE BY TIMEFRAME <span style="font-size:8px;color:#5a7a68;font-weight:400">— click a timeframe to filter calibration</span></div>
-        <div data-tf-grid style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px">${tfCards}</div>
-      </div>
-      <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:8px;font-size:9px;font-family:'Space Mono',monospace">
-        <div style="margin-bottom:4px"><span style="color:#5a7a68">By Regime:</span> ${regimeRows || '<span style="color:#3a5a48">No data</span>'} <span style="color:#3a5a48;font-size:7px">— click to filter</span></div>
-        <div><span style="color:#5a7a68">By Quality:</span> ${mqRows || '<span style="color:#3a5a48">No data</span>'} <span style="color:#3a5a48;font-size:7px">— click to filter</span></div>
-      </div>
+  const filterBanner = outcomeFilter ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;margin-bottom:6px;background:rgba(255,107,53,0.08);border:1px solid rgba(255,107,53,0.2);border-radius:6px;font-family:'Space Mono',monospace;font-size:9px">
+    <span style="color:#ff6b35">Showing: <strong>${outcomeFilter === 'pending' ? 'Pending' : outcomeFilter === 'win' ? 'Wins' : outcomeFilter === 'loss' ? 'Losses' : 'All'}</strong> (${filteredEntries.length} entries)</span>
+    <button onclick="window._calActiveOutcome=null;renderScanHistory()" style="font-size:8px;padding:3px 8px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">Clear</button>
+  </div>` : '';
+
+  tableEl.innerHTML = `
+    ${filterBanner}
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-family:'Space Mono',monospace;font-size:8px">
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+          <td style="padding:5px 6px;color:#5a7a68;font-weight:700">TIME</td>
+          <td style="padding:5px 6px;color:#5a7a68;font-weight:700">ASSET</td>
+          <td style="padding:5px 6px;color:#5a7a68;font-weight:700">DIR</td>
+          <td style="padding:5px 6px;color:#5a7a68;font-weight:700">PROB</td>
+          <td style="padding:5px 6px;color:#5a7a68;font-weight:700">R:R</td>
+          <td style="padding:5px 6px;color:#5a7a68;font-weight:700">MQ</td>
+          <td style="padding:5px 6px;color:#5a7a68;font-weight:700">CONF</td>
+          <td style="padding:5px 6px;color:#5a7a68;font-weight:700">REGIME</td>
+          <td style="padding:5px 6px;color:#5a7a68;font-weight:700">TF</td>
+          <td style="padding:5px 6px;color:#5a7a68;font-weight:700">OUTCOME</td>
+          <td style="padding:5px 6px;color:#5a7a68;font-weight:700">P&L</td>
+        </tr>
+        ${rows}
+      </table>
     </div>
   `;
 }
 
-// Click handler: filter calibration bars by timeframe
+// ── Filter click handlers (re-fetch from server with filters) ──
 function _filterCalibrationByTF(tf) {
-  if (!window._calStats) return;
-  window._calActiveTF = (tf === window._calActiveTF) ? null : tf; // toggle off if same TF clicked
-  _renderCalibrationChart(window._calStats, window._calActiveTF);
-  // Also fetch server data for this TF
-  _fetchAndMergeServerTFStats(window._calStats);
+  window._calActiveTF = (tf === window._calActiveTF) ? null : tf;
+  _refetchWithFilters();
 }
-
-// Click handler: filter calibration bars by regime
 function _filterCalibrationByRegime(regime) {
-  if (!window._calStats) return;
   window._calActiveRegime = (regime === window._calActiveRegime) ? null : regime;
-  _renderCalibrationChart(window._calStats, window._calActiveTF);
+  _refetchWithFilters();
 }
-
-// Click handler: filter calibration bars by quality grade
 function _filterCalibrationByMQ(mq) {
-  if (!window._calStats) return;
   window._calActiveMQ = (mq === window._calActiveMQ) ? null : mq;
-  _renderCalibrationChart(window._calStats, window._calActiveTF);
+  _refetchWithFilters();
 }
-
-// Clear all calibration filters
 function _clearCalibrationFilters() {
   window._calActiveTF = null;
   window._calActiveRegime = null;
   window._calActiveMQ = null;
   window._calActiveOutcome = null;
-  if (window._calStats) _renderCalibrationChart(window._calStats, null);
-  renderScanHistory();
+  _refetchWithFilters();
 }
-
-// Filter scan history table by outcome (win/loss/pending/all)
 function _filterByOutcome(outcome) {
-  if (!window._calStats) return;
   window._calActiveOutcome = (outcome === window._calActiveOutcome) ? null : outcome;
-  renderScanHistory();
+  // Outcome filter is client-side — just re-render with cached data
+  if (window._serverStats && window._serverHistory) {
+    _renderUnifiedUI(window._serverStats, window._serverHistory);
+  }
 }
 
-// Get filtered buckets by regime and/or quality grade (and optionally TF)
-function _getBucketsFiltered(regime, mq, tf) {
+// Re-fetch stats with current TF/regime/quality filters
+async function _refetchWithFilters() {
+  const token = localStorage.getItem('dash_token');
+  if (!token) return;
+  const backend = window.CBP_BACKEND || 'http://localhost:3001';
+  const params = new URLSearchParams();
+  if (window._calActiveTF) params.set('timeframe', window._calActiveTF);
+  if (window._calActiveRegime) params.set('regime', window._calActiveRegime);
+  if (window._calActiveMQ) params.set('market_quality', window._calActiveMQ);
+  const qs = params.toString();
+
   try {
-    const log = JSON.parse(localStorage.getItem('bestTradesScanLog_v1') || '[]');
-    const resolved = log.filter(e => e.resolved && e.outcome !== 'expired');
-    const buckets = {};
-    for (const e of resolved) {
-      if (tf && e.tf !== tf) continue;
-      if (regime && (e.regime || 'unknown').split('_')[0] !== regime) continue;
-      if (mq && e.marketQuality !== mq) continue;
-      const prob = e.prob;
-      if (!prob) continue;
-      const bucket = Math.floor(prob / 5) * 5;
-      const key = `${bucket}-${bucket + 5}%`;
-      if (!buckets[key]) buckets[key] = { total: 0, wins: 0, bucket };
-      buckets[key].total++;
-      if (e.outcome === 'win') buckets[key].wins++;
-    }
-    return buckets;
-  } catch { return {}; }
-}
+    const [statsR, historyR] = await Promise.all([
+      fetch(`${backend}/best-trades/stats${qs ? '?' + qs : ''}`, { headers: { 'Authorization': 'Bearer ' + token } }),
+      fetch(`${backend}/best-trades/history?limit=200${qs ? '&' + qs : ''}`, { headers: { 'Authorization': 'Bearer ' + token } }),
+    ]);
+    const stats = await statsR.json();
+    const history = await historyR.json();
+    if (stats.error) return;
 
-// Render scan history UI
-function renderScanHistory() {
-  const stats = getScanLogStats();
-  // Also fetch server-side stats and merge TF data
-  _fetchAndMergeServerTFStats(stats);
-
-  // Summary cards (clickable to filter scan history table)
-  const summaryEl = document.getElementById('scanAccuracySummary');
-  const activeOutcome = window._calActiveOutcome || null;
-  if (summaryEl) {
-    const wrColor = stats.winRate === 'N/A' ? '#5a7a68' : parseFloat(stats.winRate) >= 55 ? '#00f5a0' : parseFloat(stats.winRate) >= 45 ? '#f5c400' : '#ff4d6d';
-    const _sc = (filter, bg, border, color, value, label) => {
-      const isActive = activeOutcome === filter;
-      const activeBorder = isActive ? `border:2px solid ${color}` : `border:1px solid ${border}`;
-      const activeBg = isActive ? bg.replace('0.06', '0.15').replace('0.03', '0.1') : bg;
-      const cursor = filter ? 'cursor:pointer' : '';
-      const onclick = filter ? `onclick="_filterByOutcome('${filter}')"` : '';
-      return `<div ${onclick} style="background:${activeBg};${activeBorder};border-radius:8px;padding:10px;text-align:center;${cursor};transition:all 0.2s" ${filter ? `onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"` : ''}>
-        <div style="font-size:18px;font-weight:800;color:${color};font-family:'Space Mono',monospace">${value}</div>
-        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">${label}${isActive ? ' ✕' : ''}</div>
-      </div>`;
-    };
-    summaryEl.innerHTML = `
-      ${_sc(null, 'rgba(167,139,250,0.06)', 'rgba(167,139,250,0.15)', wrColor, stats.winRate + (stats.winRate !== 'N/A' ? '%' : ''), 'WIN RATE')}
-      ${_sc('win', 'rgba(0,245,160,0.06)', 'rgba(0,245,160,0.12)', '#00f5a0', stats.wins, 'WINS')}
-      ${_sc('loss', 'rgba(255,77,109,0.06)', 'rgba(255,77,109,0.12)', '#ff4d6d', stats.losses, 'LOSSES')}
-      ${_sc('pending', 'rgba(245,196,0,0.06)', 'rgba(245,196,0,0.12)', '#f5c400', stats.pending, 'PENDING')}
-      ${_sc('all', 'rgba(255,255,255,0.03)', 'rgba(255,255,255,0.08)', '#aaa', stats.total, 'TOTAL LOGGED')}
-      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:14px;font-weight:800;font-family:'Space Mono',monospace">
-          <span style="color:#00f5a0">+${stats.avgMFE}%</span> / <span style="color:#ff4d6d">-${stats.avgMAE}%</span>
-        </div>
-        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">AVG MFE / MAE</div>
-      </div>
-    `;
-  }
-
-  // Store stats globally for TF filtering (preserve active filters if already set)
-  window._calStats = stats;
-  if (window._calActiveTF === undefined) window._calActiveTF = null;
-  if (window._calActiveRegime === undefined) window._calActiveRegime = null;
-  if (window._calActiveMQ === undefined) window._calActiveMQ = null;
-  if (window._calActiveOutcome === undefined) window._calActiveOutcome = null;
-
-  // Calibration chart — probability bucket accuracy
-  const chartEl = document.getElementById('scanCalibrationChart');
-  if (chartEl && Object.keys(stats.buckets).length > 0) {
-    _renderCalibrationChart(stats, null);
-  } else if (chartEl) {
-    chartEl.innerHTML = '';
-  }
-
-  // Recent scans table
-  const tableEl = document.getElementById('scanHistoryTable');
-  if (tableEl) {
-    if (stats.recentEntries.length === 0) {
-      tableEl.innerHTML = '<div style="text-align:center;padding:20px;color:#3a5a48;font-family:\'Space Mono\',monospace;font-size:9px">No scan history yet. Run a scan to start building calibration data.</div>';
-      return;
-    }
-
-    // Apply outcome filter
-    const outcomeFilter = window._calActiveOutcome || null;
-    let filteredEntries = stats.recentEntries;
-    if (outcomeFilter === 'win') filteredEntries = filteredEntries.filter(e => e.outcome === 'win');
-    else if (outcomeFilter === 'loss') filteredEntries = filteredEntries.filter(e => e.outcome === 'loss');
-    else if (outcomeFilter === 'pending') filteredEntries = filteredEntries.filter(e => !e.resolved);
-    // 'all' shows everything (no filter)
-
-    const rows = filteredEntries.map(e => {
-      const dirColor = e.direction === 'long' ? '#00f5a0' : '#ff4d6d';
-      const dirArrow = e.direction === 'long' ? '▲' : '▼';
-      const probColor = e.prob >= 70 ? '#00f5a0' : e.prob >= 60 ? '#f5c400' : e.prob >= 50 ? '#ff8c69' : '#5a7a68';
-      const outcomeLabel = !e.resolved ? '<span style="color:#f5c400">⏳ Pending</span>' :
-        e.outcome === 'win' ? '<span style="color:#00f5a0">✅ Win</span>' :
-        e.outcome === 'loss' ? '<span style="color:#ff4d6d">❌ Loss</span>' :
-        '<span style="color:#5a7a68">⏰ Expired</span>';
-      const pnl = e.resolved && e.resolvedPrice
-        ? ((e.direction === 'long' ? (e.resolvedPrice - e.price) : (e.price - e.resolvedPrice)) / e.price * 100).toFixed(2)
-        : null;
-      const pnlStr = pnl !== null ? `<span style="color:${parseFloat(pnl) >= 0 ? '#00f5a0' : '#ff4d6d'}">${parseFloat(pnl) >= 0 ? '+' : ''}${pnl}%</span>` : '';
-      const timeAgo = formatTimeAgo(e.ts);
-      const mqColor = e.marketQuality === 'A' ? '#00f5a0' : e.marketQuality === 'B' ? '#f5c400' : '#ff8c69';
-
-      return `<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
-        <td style="padding:4px 6px;color:#5a7a68;font-size:7px;white-space:nowrap">${timeAgo}</td>
-        <td style="padding:4px 6px;font-weight:700">${e.asset}</td>
-        <td style="padding:4px 6px;color:${dirColor}">${dirArrow} ${e.direction.toUpperCase()}</td>
-        <td style="padding:4px 6px;color:${probColor};font-weight:700">${e.prob}%</td>
-        <td style="padding:4px 6px">${e.rr}:1</td>
-        <td style="padding:4px 6px;color:${mqColor}">${e.marketQuality}</td>
-        <td style="padding:4px 6px">${e.confidence}</td>
-        <td style="padding:4px 6px;color:#5a7a68">${(e.regime || '').split('_')[0]}</td>
-        <td style="padding:4px 6px">${e.tf}</td>
-        <td style="padding:4px 6px">${outcomeLabel}</td>
-        <td style="padding:4px 6px">${pnlStr}</td>
-      </tr>`;
-    }).join('');
-
-    const filterBanner = outcomeFilter ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;margin-bottom:6px;background:rgba(255,107,53,0.08);border:1px solid rgba(255,107,53,0.2);border-radius:6px;font-family:'Space Mono',monospace;font-size:9px">
-      <span style="color:#ff6b35">Showing: <strong>${outcomeFilter === 'pending' ? 'Pending' : outcomeFilter === 'win' ? 'Wins' : outcomeFilter === 'loss' ? 'Losses' : 'All'}</strong> (${filteredEntries.length} entries)</span>
-      <button onclick="_filterByOutcome(null);renderScanHistory()" style="font-size:8px;padding:3px 8px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">Clear</button>
-    </div>` : '';
-
-    tableEl.innerHTML = `
-      ${filterBanner}
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-family:'Space Mono',monospace;font-size:8px">
-          <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
-            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">TIME</td>
-            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">ASSET</td>
-            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">DIR</td>
-            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">PROB</td>
-            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">R:R</td>
-            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">MQ</td>
-            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">CONF</td>
-            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">REGIME</td>
-            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">TF</td>
-            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">OUTCOME</td>
-            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">P&L</td>
-          </tr>
-          ${rows}
-        </table>
-      </div>
-    `;
+    window._serverStats = stats;
+    window._serverHistory = (history.history || []).map(_mapDbRow);
+    _renderUnifiedUI(stats, window._serverHistory);
+  } catch (e) {
+    console.warn('[ScanHistory] Filter refetch error:', e.message);
   }
 }
+
+// Old localStorage-based scan log functions removed — all data now comes from server DB
 
 // Helper: format timestamp as relative time
 function formatTimeAgo(ts) {
@@ -14594,23 +14386,26 @@ function formatTimeAgo(ts) {
   return new Date(ts).toLocaleDateString();
 }
 
-// Export scan log to CSV for external analysis
-function exportScanLog() {
+// Export scan log to CSV — fetches from server DB
+async function exportScanLog() {
   try {
-    const log = JSON.parse(localStorage.getItem(SCAN_LOG_KEY) || '[]');
+    const token = localStorage.getItem('dash_token');
+    if (!token) { alert('Not logged in'); return; }
+    const resp = await fetch((window.CBP_BACKEND || 'http://localhost:3001') + '/best-trades/history?limit=500', {
+      headers: { 'Authorization': 'Bearer ' + token },
+    });
+    const data = await resp.json();
+    const log = data.history || [];
     if (log.length === 0) { alert('No scan data to export.'); return; }
 
-    const headers = ['timestamp','asset','symbol','timeframe','direction','probability','entry_price','stop_price','target_price','rr','ev','confidence','market_quality','mq_score','regime','btc_regime','entry_efficiency','calibrated_prob','hits','misses','funding_rate','resolved','outcome','resolved_price','pnl_pct','max_favorable','max_adverse'];
+    const headers = ['timestamp','asset','symbol','timeframe','direction','probability','entry_price','stop_price','target_price','rr','ev','confidence','market_quality','mq_score','regime','entry_efficiency','calibrated_prob','resolved','outcome','resolved_price','pnl_pct'];
     const rows = log.map(e => {
-      const pnl = e.resolved && e.resolvedPrice
-        ? ((e.direction === 'long' ? (e.resolvedPrice - e.price) : (e.price - e.resolvedPrice)) / e.price * 100).toFixed(4)
-        : '';
       return [
-        new Date(e.ts).toISOString(), e.asset, e.sym, e.tf, e.direction, e.prob, e.price,
-        e.stopPrice, e.targetPrice, e.rr, e.ev, e.confidence, e.marketQuality, e.mqScore,
-        e.regime, e.btcRegime || '', e.entryEfficiency || '', e.calibratedProb || '',
-        e.hitsCount, e.missesCount, e.fundingRate || '', e.resolved, e.outcome || '',
-        e.resolvedPrice || '', pnl, e.maxFavorable || '', e.maxAdverse || ''
+        e.created_at, e.asset, e.symbol, e.timeframe, e.direction, e.probability, e.entry_price,
+        e.stop_price, e.target_price, e.rr, e.ev, e.confidence, e.market_quality, e.mq_score,
+        e.regime, e.entry_efficiency || '', e.calibrated_prob || '',
+        e.outcome ? 'true' : 'false', e.outcome || '',
+        e.resolved_price || '', e.pnl_pct || ''
       ].join(',');
     });
 
@@ -15486,11 +15281,7 @@ async function runProbEngine() {
   PROBE.results  = results;
   PROBE.lastRun  = new Date();
 
-  // ── Scan Log: Log every scan result + resolve previous predictions ──
-  logScanResults(results, tf, leverage);
-  const currentPrices = {};
-  for (const r of results) { if (r.sym && r.price) currentPrices[r.sym] = r.price; }
-  resolveScanLogEntries(currentPrices);
+  // ── Refresh scan history from server DB ──
   renderScanHistory();
 
   renderProbeResults(results, tf);
@@ -22937,24 +22728,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 900);
 });
 
-// ── Server-Side Stats / Calibration ─────────────────────────────
-function fetchServerStats() {
-  const token = localStorage.getItem('dash_token');
-  if (!token) return;
-  const el = document.getElementById('serverCalibrationContent');
-  if (!el) return;
-  el.innerHTML = '<div style="text-align:center;padding:10px;color:#5a7a68">Loading...</div>';
-
-  fetch((window.CBP_BACKEND || 'http://localhost:3001') + '/best-trades/stats', {
-    headers: { 'Authorization': 'Bearer ' + token },
-  }).then(r => r.json()).then(data => {
-    if (data.error) { el.innerHTML = '<div style="color:#ff4d6d">Error: ' + data.error + '</div>'; return; }
-    renderServerCalibration(data);
-  }).catch(e => {
-    el.innerHTML = '<div style="color:#ff4d6d">Failed to load stats: ' + e.message + '</div>';
-  });
-}
-
 function triggerServerResolve() {
   const token = localStorage.getItem('dash_token');
   if (!token) return;
@@ -22962,123 +22735,8 @@ function triggerServerResolve() {
     method: 'POST',
     headers: { 'Authorization': 'Bearer ' + token },
   }).then(r => r.json()).then(() => {
-    setTimeout(fetchServerStats, 2000); // Refresh stats after resolution
+    setTimeout(renderScanHistory, 2000); // Refresh unified scan history after resolution
   }).catch(() => {});
-}
-
-function renderServerCalibration(data) {
-  const el = document.getElementById('serverCalibrationContent');
-  if (!el) return;
-
-  const o = data.overall || {};
-  const totalWL = (o.wins || 0) + (o.losses || 0);
-  const wrColor = o.winRate >= 55 ? '#00f5a0' : o.winRate >= 45 ? '#f5c400' : '#ff4d6d';
-
-  // Overall summary cards
-  let html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:14px">';
-  html += _statCard('Win Rate', totalWL > 0 ? o.winRate.toFixed(1) + '%' : 'N/A', wrColor);
-  html += _statCard('Resolved', o.totalResolved || 0, '#a78bfa');
-  html += _statCard('Wins', o.wins || 0, '#00f5a0');
-  html += _statCard('Losses', o.losses || 0, '#ff4d6d');
-  html += _statCard('Pending', o.pending || 0, '#f5c400');
-  html += _statCard('Avg PnL', o.avgPnl ? o.avgPnl.toFixed(2) + '%' : 'N/A', o.avgPnl >= 0 ? '#00f5a0' : '#ff4d6d');
-  html += '</div>';
-
-  // Per-Timeframe breakdown
-  html += '<div style="margin-bottom:14px">';
-  html += '<div style="font-size:11px;font-weight:700;color:#ff6b35;margin-bottom:6px">Win Rate by Timeframe</div>';
-  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px">';
-  const tfs = data.byTimeframe || [];
-  if (tfs.length === 0) {
-    html += '<div style="color:#5a7a68;font-size:9px">No data yet — scanner needs to log & resolve predictions first</div>';
-  }
-  for (const tf of tfs) {
-    const tfTotal = tf.wins + tf.losses;
-    const tfWr = tfTotal > 0 ? tf.winRate : null;
-    const tfWrColor = tfWr === null ? '#5a7a68' : tfWr >= 55 ? '#00f5a0' : tfWr >= 45 ? '#f5c400' : '#ff4d6d';
-    const barWidth = tfWr !== null ? Math.max(5, tfWr) : 0;
-    html += '<div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,107,53,0.12);border-radius:6px;padding:8px">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
-    html += '<span style="font-weight:700;color:#ff6b35;font-size:11px">' + tf.timeframe + '</span>';
-    html += '<span style="color:' + tfWrColor + ';font-weight:700;font-size:12px">' + (tfWr !== null ? tfWr.toFixed(1) + '%' : '—') + '</span>';
-    html += '</div>';
-    html += '<div style="background:rgba(255,255,255,0.05);border-radius:3px;height:6px;overflow:hidden;margin-bottom:4px">';
-    html += '<div style="height:100%;width:' + barWidth + '%;background:' + tfWrColor + ';border-radius:3px;transition:width 0.5s"></div></div>';
-    html += '<div style="font-size:8px;color:#5a7a68">' + tf.wins + 'W / ' + tf.losses + 'L · ' + tf.pending + ' pending · avg ' + (tf.avgPnl ? tf.avgPnl.toFixed(2) + '%' : '0%') + '</div>';
-    html += '</div>';
-  }
-  html += '</div></div>';
-
-  // Per-Confidence breakdown
-  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">';
-
-  html += '<div>';
-  html += '<div style="font-size:10px;font-weight:700;color:#a78bfa;margin-bottom:6px">By Confidence</div>';
-  const confs = data.byConfidence || [];
-  for (const c of confs) {
-    const cWr = c.total > 0 ? c.winRate : null;
-    const cColor = cWr === null ? '#5a7a68' : cWr >= 55 ? '#00f5a0' : cWr >= 45 ? '#f5c400' : '#ff4d6d';
-    html += '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.03)">';
-    html += '<span>' + c.confidence + '</span>';
-    html += '<span style="color:' + cColor + '">' + (cWr !== null ? cWr.toFixed(1) + '%' : '—') + ' <span style="color:#5a7a68">(' + c.total + ')</span></span>';
-    html += '</div>';
-  }
-  html += '</div>';
-
-  // Per-Quality breakdown
-  html += '<div>';
-  html += '<div style="font-size:10px;font-weight:700;color:#a78bfa;margin-bottom:6px">By Market Quality</div>';
-  const quals = data.byQuality || [];
-  for (const q of quals) {
-    const qWr = q.total > 0 ? q.winRate : null;
-    const qColor = qWr === null ? '#5a7a68' : qWr >= 55 ? '#00f5a0' : qWr >= 45 ? '#f5c400' : '#ff4d6d';
-    html += '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.03)">';
-    html += '<span>Grade ' + q.quality + '</span>';
-    html += '<span style="color:' + qColor + '">' + (qWr !== null ? qWr.toFixed(1) + '%' : '—') + ' <span style="color:#5a7a68">(' + q.total + ')</span></span>';
-    html += '</div>';
-  }
-  html += '</div>';
-
-  html += '</div>';
-
-  // Per-Regime + Per-Probability Bucket
-  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
-
-  html += '<div>';
-  html += '<div style="font-size:10px;font-weight:700;color:#a78bfa;margin-bottom:6px">By Regime</div>';
-  const regimes = data.byRegime || [];
-  for (const r of regimes) {
-    const rWr = r.total > 0 ? r.winRate : null;
-    const rColor = rWr === null ? '#5a7a68' : rWr >= 55 ? '#00f5a0' : rWr >= 45 ? '#f5c400' : '#ff4d6d';
-    html += '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.03)">';
-    html += '<span>' + r.regime + '</span>';
-    html += '<span style="color:' + rColor + '">' + (rWr !== null ? rWr.toFixed(1) + '%' : '—') + ' <span style="color:#5a7a68">(' + r.total + ')</span></span>';
-    html += '</div>';
-  }
-  html += '</div>';
-
-  html += '<div>';
-  html += '<div style="font-size:10px;font-weight:700;color:#a78bfa;margin-bottom:6px">By Probability Bucket</div>';
-  const buckets = data.byProbBucket || [];
-  for (const b of buckets) {
-    const bWr = b.total > 0 ? b.winRate : null;
-    const bColor = bWr === null ? '#5a7a68' : bWr >= 55 ? '#00f5a0' : bWr >= 45 ? '#f5c400' : '#ff4d6d';
-    html += '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.03)">';
-    html += '<span>' + b.bucket + '%</span>';
-    html += '<span style="color:' + bColor + '">' + (bWr !== null ? bWr.toFixed(1) + '%' : '—') + ' <span style="color:#5a7a68">(' + b.total + ')</span></span>';
-    html += '</div>';
-  }
-  html += '</div>';
-
-  html += '</div>';
-
-  el.innerHTML = html;
-}
-
-function _statCard(label, value, color) {
-  return '<div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:8px;text-align:center">'
-    + '<div style="font-size:8px;color:#5a7a68;margin-bottom:3px">' + label + '</div>'
-    + '<div style="font-size:14px;font-weight:700;color:' + color + '">' + value + '</div></div>';
 }
 
 // ── Server-Side Scanner Status Check ────────────────────────────

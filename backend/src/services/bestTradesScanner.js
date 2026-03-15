@@ -1139,8 +1139,18 @@ class BestTradesScanner {
 
   // ── Stats / Win Rate API ──
 
-  async getStats() {
+  async getStats(filters = {}) {
     if (!pool) return { error: 'No database' };
+
+    // Build optional WHERE clause from filters
+    const conditions = [];
+    const filterParams = [];
+    let fIdx = 1;
+    if (filters.timeframe) { conditions.push(`timeframe = $${fIdx++}`); filterParams.push(filters.timeframe); }
+    if (filters.regime) { conditions.push(`regime = $${fIdx++}`); filterParams.push(filters.regime); }
+    if (filters.market_quality) { conditions.push(`market_quality = $${fIdx++}`); filterParams.push(filters.market_quality); }
+    const filterWhere = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+    const filterWhereAnd = conditions.length > 0 ? 'AND ' + conditions.join(' AND ') : '';
 
     try {
       // Overall stats
@@ -1151,11 +1161,12 @@ class BestTradesScanner {
           COUNT(*) FILTER (WHERE outcome = 'loss') AS losses,
           COUNT(*) FILTER (WHERE outcome = 'expired') AS expired,
           COUNT(*) FILTER (WHERE outcome IS NULL) AS pending,
+          COUNT(*) AS total_logged,
           ROUND(AVG(pnl) FILTER (WHERE outcome IN ('win','loss')), 4) AS avg_pnl,
           ROUND(AVG(pnl) FILTER (WHERE outcome = 'win'), 4) AS avg_win_pnl,
           ROUND(AVG(pnl) FILTER (WHERE outcome = 'loss'), 4) AS avg_loss_pnl
-        FROM best_trades_log
-      `);
+        FROM best_trades_log ${filterWhere}
+      `, filterParams);
 
       // Per-timeframe win rates
       const byTimeframe = await pool.query(`
@@ -1173,10 +1184,10 @@ class BestTradesScanner {
             END, 1
           ) AS win_rate,
           ROUND(AVG(pnl) FILTER (WHERE outcome IN ('win','loss')), 4) AS avg_pnl
-        FROM best_trades_log
+        FROM best_trades_log ${filterWhere}
         GROUP BY COALESCE(timeframe, '4h')
         ORDER BY COALESCE(timeframe, '4h')
-      `);
+      `, filterParams);
 
       // Per-confidence win rates
       const byConfidence = await pool.query(`
@@ -1192,10 +1203,10 @@ class BestTradesScanner {
           ) AS win_rate,
           ROUND(AVG(pnl) FILTER (WHERE outcome IN ('win','loss')), 4) AS avg_pnl
         FROM best_trades_log
-        WHERE confidence IS NOT NULL
+        WHERE confidence IS NOT NULL ${filterWhereAnd}
         GROUP BY confidence
         ORDER BY confidence
-      `);
+      `, filterParams);
 
       // Per-market quality win rates
       const byQuality = await pool.query(`
@@ -1211,10 +1222,10 @@ class BestTradesScanner {
           ) AS win_rate,
           ROUND(AVG(pnl) FILTER (WHERE outcome IN ('win','loss')), 4) AS avg_pnl
         FROM best_trades_log
-        WHERE market_quality IS NOT NULL
+        WHERE market_quality IS NOT NULL ${filterWhereAnd}
         GROUP BY market_quality
         ORDER BY market_quality
-      `);
+      `, filterParams);
 
       // Per-regime win rates
       const byRegime = await pool.query(`
@@ -1230,22 +1241,32 @@ class BestTradesScanner {
           ) AS win_rate,
           ROUND(AVG(pnl) FILTER (WHERE outcome IN ('win','loss')), 4) AS avg_pnl
         FROM best_trades_log
-        WHERE regime IS NOT NULL
+        WHERE regime IS NOT NULL ${filterWhereAnd}
         GROUP BY regime
         ORDER BY regime
-      `);
+      `, filterParams);
 
-      // Per probability bucket (60-65, 65-70, 70-75, 75-80, 80+)
+      // Per probability bucket
       const byProbBucket = await pool.query(`
         SELECT
           CASE
-            WHEN probability < 60 THEN '<60'
+            WHEN probability < 55 THEN '50-54'
+            WHEN probability < 60 THEN '55-59'
             WHEN probability < 65 THEN '60-64'
             WHEN probability < 70 THEN '65-69'
             WHEN probability < 75 THEN '70-74'
             WHEN probability < 80 THEN '75-79'
             ELSE '80+'
           END AS prob_bucket,
+          CASE
+            WHEN probability < 55 THEN 52
+            WHEN probability < 60 THEN 57
+            WHEN probability < 65 THEN 62
+            WHEN probability < 70 THEN 67
+            WHEN probability < 75 THEN 72
+            WHEN probability < 80 THEN 77
+            ELSE 82
+          END AS bucket_mid,
           COUNT(*) FILTER (WHERE outcome IN ('win','loss')) AS total,
           COUNT(*) FILTER (WHERE outcome = 'win') AS wins,
           ROUND(
@@ -1255,10 +1276,10 @@ class BestTradesScanner {
             END, 1
           ) AS win_rate,
           ROUND(AVG(pnl) FILTER (WHERE outcome IN ('win','loss')), 4) AS avg_pnl
-        FROM best_trades_log
-        GROUP BY prob_bucket
-        ORDER BY prob_bucket
-      `);
+        FROM best_trades_log ${filterWhere}
+        GROUP BY prob_bucket, bucket_mid
+        ORDER BY bucket_mid
+      `, filterParams);
 
       const o = overall.rows[0];
       const totalWL = parseInt(o.wins) + parseInt(o.losses);
@@ -1267,6 +1288,7 @@ class BestTradesScanner {
       return {
         overall: {
           totalResolved: parseInt(o.total_resolved),
+          totalLogged: parseInt(o.total_logged),
           wins: parseInt(o.wins),
           losses: parseInt(o.losses),
           expired: parseInt(o.expired),
@@ -1309,6 +1331,7 @@ class BestTradesScanner {
         })),
         byProbBucket: byProbBucket.rows.map(r => ({
           bucket: r.prob_bucket,
+          bucketMid: parseInt(r.bucket_mid),
           total: parseInt(r.total),
           wins: parseInt(r.wins),
           winRate: parseFloat(r.win_rate),
