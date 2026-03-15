@@ -2565,6 +2565,7 @@ function switchAuthView(view) {
       <div style="font-size:20px;font-weight:800;color:#ff6b35;letter-spacing:-0.5px">🎯 Best Trades Right Now <span style="font-size:11px;color:#aaa;font-weight:400">— AI Probability Engine</span></div>
       <div id="probeLastUpdated" style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px">Scanning markets for high-probability setups...</div>
       <div id="autoScanStatus" style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:1px;display:none"></div>
+      <div id="serverScanStatus" style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:1px;display:none"></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       <select id="probeTimeframe" style="font-size:9px;padding:6px 10px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:6px;font-family:'Space Mono',monospace">
@@ -16616,6 +16617,18 @@ function confirmAutoTradeSettings() {
   // Save to localStorage
   localStorage.setItem('dash_autoTrade', JSON.stringify({ on, mode, minProb, size, maxOpen }));
 
+  // Sync to backend server-side scanner (runs 24/7 even when browser is closed)
+  const tf = $('probeTimeframe')?.value || '4h';
+  const lev = parseInt($('probeLeverage')?.value || 1);
+  fetch((window.CBP_BACKEND || 'http://localhost:3001') + '/best-trades/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('dash_token') },
+    body: JSON.stringify({ enabled: on, mode, timeframe: tf, minProb: parseInt(minProb), tradeSizeUsd: parseFloat(size), maxOpen: parseInt(maxOpen), leverage: lev }),
+  }).then(r => r.json()).then(d => {
+    if (d.success) console.log('[AutoTrade] Settings synced to server — scanner runs 24/7');
+    else console.warn('[AutoTrade] Server sync failed:', d.error);
+  }).catch(e => console.warn('[AutoTrade] Server sync error:', e.message));
+
   // Apply toggle state
   toggleAutoTrade();
 
@@ -22555,11 +22568,40 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 900);
 });
 
+// ── Server-Side Scanner Status Check ────────────────────────────
+// Polls the backend Best Trades scanner status and displays it
+function checkServerScannerStatus() {
+  const token = localStorage.getItem('dash_token');
+  if (!token) return;
+  fetch((window.CBP_BACKEND || 'http://localhost:3001') + '/best-trades/status', {
+    headers: { 'Authorization': 'Bearer ' + token },
+  }).then(r => r.json()).then(d => {
+    const el = document.getElementById('serverScanStatus');
+    if (!el) return;
+    if (d.enabled && d.running) {
+      el.style.display = 'block';
+      el.innerHTML = '🖥️ <span style="color:#00f5a0">Server scanner ACTIVE</span> — scanning every <span style="color:#ff6b35">' + d.scanInterval + '</span> on ' + d.timeframe + ' · ' + (d.qualifyingCount || 0) + ' qualifying' + (d.lastScanTime ? ' · Last: ' + new Date(d.lastScanTime).toLocaleTimeString() : '') + ' <span style="color:#5a7a68">(runs 24/7 even when browser is closed)</span>';
+    } else if (d.enabled) {
+      el.style.display = 'block';
+      el.innerHTML = '🖥️ <span style="color:#f5c400">Server scanner enabled but starting...</span>';
+    } else {
+      el.style.display = 'block';
+      el.innerHTML = '🖥️ <span style="color:#5a7a68">Server scanner OFF</span> — <span style="color:#ff6b35">enable auto-trade below to scan 24/7</span>';
+    }
+  }).catch(() => {
+    const el = document.getElementById('serverScanStatus');
+    if (el) { el.style.display = 'block'; el.innerHTML = '🖥️ <span style="color:#5a7a68">Server scanner: unable to connect</span>'; }
+  });
+}
+// Check server scanner status every 60s + on page load
+setInterval(checkServerScannerStatus, 60000);
+
 // ── Auto-Trade Background Scanner Init ─────────────────────────
 // Load auto-trade settings on page load (not just when visiting Best Trades tab)
 // This ensures background scanning starts even if user opens a different tab first
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => {
+    checkServerScannerStatus(); // Check server scanner on load
     try {
       const saved = JSON.parse(localStorage.getItem('dash_autoTrade') || '{}');
       if (saved.on) {

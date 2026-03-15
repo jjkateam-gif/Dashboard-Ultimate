@@ -150,6 +150,17 @@ async function initDB() {
       console.error('Prediction engine init error (core routes still working):', predErr.message);
     }
 
+    // Load Best Trades server-side scanner (separate try/catch)
+    try {
+      const bestTradesScanner = require('./services/bestTradesScanner');
+      const bestTradesRoutes = require('./routes/bestTrades');
+      app.use('/best-trades', bestTradesRoutes);
+      bestTradesScanner.start();
+      console.log('Best Trades scanner started.');
+    } catch (btErr) {
+      console.error('Best Trades scanner init error (core routes still working):', btErr.message);
+    }
+
     // Start recommendation tracker (resolves pending recs every 5 min)
     try {
       const recommendationTracker = require('./services/recommendationTracker');
