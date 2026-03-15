@@ -22580,7 +22580,8 @@ function checkServerScannerStatus() {
     if (!el) return;
     if (d.enabled && d.running) {
       el.style.display = 'block';
-      el.innerHTML = '🖥️ <span style="color:#00f5a0">Server scanner ACTIVE</span> — scanning every <span style="color:#ff6b35">' + d.scanInterval + '</span> on ' + d.timeframe + ' · ' + (d.qualifyingCount || 0) + ' qualifying' + (d.lastScanTime ? ' · Last: ' + new Date(d.lastScanTime).toLocaleTimeString() : '') + ' <span style="color:#5a7a68">(runs 24/7 even when browser is closed)</span>';
+      var tfs = d.timeframes || []; var tfList = tfs.join(', '); var activeTFs = d.activeTimers || tfs.length;
+      el.innerHTML = '🖥️ <span style="color:#00f5a0">Server scanner ACTIVE</span> — scanning <span style="color:#ff6b35">' + activeTFs + ' timeframes</span> (' + tfList + ') · ' + (d.qualifyingCount || 0) + ' qualifying setups' + (d.lastScanTime ? ' · Last: ' + new Date(d.lastScanTime).toLocaleTimeString() : '') + ' <span style="color:#5a7a68">(runs 24/7 even when browser is closed)</span>';
     } else if (d.enabled) {
       el.style.display = 'block';
       el.innerHTML = '🖥️ <span style="color:#f5c400">Server scanner enabled but starting...</span>';

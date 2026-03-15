@@ -36,12 +36,15 @@ const ASSETS = [
   { sym: 'RENDERUSDT', label: 'RENDER' },
 ];
 
-// Scan intervals matching frontend AUTO_SCAN_INTERVALS
+// Scan intervals per timeframe (how often to re-scan each TF)
 const SCAN_INTERVALS = {
   '1m': 60_000, '3m': 2 * 60_000, '5m': 3 * 60_000,
   '15m': 10 * 60_000, '30m': 15 * 60_000, '1h': 30 * 60_000,
   '4h': 60 * 60_000, '1d': 4 * 60 * 60_000,
 };
+
+// All timeframes to scan (server covers every TF)
+const ALL_TIMEFRAMES = ['5m', '15m', '30m', '1h', '4h', '1d'];
 
 const TRADING_FEE_PCT = 0.06; // BloFin taker fee per side
 
@@ -490,29 +493,32 @@ class BestTradesScanner {
     this.settings = {
       enabled: false,
       mode: 'confirm',  // 'confirm' or 'auto'
-      timeframe: '4h',
+      timeframe: '4h',  // kept for frontend display, but server scans ALL TFs
       minProb: 70,
       tradeSizeUsd: 100,
       maxOpen: 3,
       leverage: 1,
     };
-    this.scanTimer = null;
-    this.lastResults = [];
+    this.scanTimers = {};       // { '5m': timer, '15m': timer, ... }
+    this.lastResults = [];      // combined results across all TFs
+    this.lastResultsByTF = {};  // { '5m': [...], '4h': [...], ... }
     this.lastScanTime = null;
+    this.lastScanTimeByTF = {}; // { '5m': '...', '4h': '...', ... }
     this.openTradeCount = 0;
+    this.recentTrades = new Set(); // 'BTC_long' — prevent duplicate trades across TFs
     this.sseClients = [];
   }
 
   async start() {
     await this._loadSettings();
     if (this.settings.enabled) {
-      this._startTimer();
+      this._startAllTimers();
     }
-    console.log(`[BestTrades] Scanner initialized. Enabled: ${this.settings.enabled}, TF: ${this.settings.timeframe}, Mode: ${this.settings.mode}`);
+    console.log(`[BestTrades] Scanner initialized. Enabled: ${this.settings.enabled}, Mode: ${this.settings.mode}, Scanning ALL timeframes: ${ALL_TIMEFRAMES.join(', ')}`);
   }
 
   stop() {
-    this._stopTimer();
+    this._stopAllTimers();
     console.log('[BestTrades] Scanner stopped.');
   }
 
@@ -526,11 +532,11 @@ class BestTradesScanner {
     Object.assign(this.settings, newSettings);
     await this._saveSettings();
 
-    // Restart timer with new interval
-    this._stopTimer();
+    // Restart all timers
+    this._stopAllTimers();
     if (this.settings.enabled) {
-      this._startTimer();
-      console.log(`[BestTrades] Scanner enabled — scanning every ${this._getIntervalLabel()}`);
+      this._startAllTimers();
+      console.log(`[BestTrades] Scanner enabled — scanning ALL timeframes (${ALL_TIMEFRAMES.join(', ')})`);
     } else {
       console.log('[BestTrades] Scanner disabled.');
     }
@@ -539,71 +545,77 @@ class BestTradesScanner {
     return this.settings;
   }
 
-  // ── Timer Management ──
+  // ── Timer Management (one timer per timeframe) ──
 
-  _startTimer() {
-    this._stopTimer();
-    const intervalMs = SCAN_INTERVALS[this.settings.timeframe] || 60 * 60_000;
-    console.log(`[BestTrades] Starting scan timer: every ${this._getIntervalLabel()} for ${this.settings.timeframe}`);
+  _startAllTimers() {
+    this._stopAllTimers();
+    console.log(`[BestTrades] Starting scan timers for ALL timeframes: ${ALL_TIMEFRAMES.join(', ')}`);
 
-    // Run first scan after 30s (let server warm up)
-    setTimeout(() => this.scan().catch(e => console.error('[BestTrades] Initial scan error:', e.message)), 30000);
+    // Stagger initial scans to spread Binance API load
+    let delay = 15000; // start first scan after 15s
+    for (const tf of ALL_TIMEFRAMES) {
+      const intervalMs = SCAN_INTERVALS[tf] || 60 * 60_000;
+      const intervalLabel = intervalMs < 60000 ? `${intervalMs / 1000}s` : `${intervalMs / 60000}m`;
 
-    this.scanTimer = setInterval(() => {
-      this.scan().catch(e => console.error('[BestTrades] Scan error:', e.message));
-    }, intervalMs);
-  }
+      // Initial scan (staggered by 10s per TF)
+      setTimeout(() => {
+        this._scanTimeframe(tf).catch(e => console.error(`[BestTrades] ${tf} initial scan error:`, e.message));
+      }, delay);
+      delay += 10000;
 
-  _stopTimer() {
-    if (this.scanTimer) {
-      clearInterval(this.scanTimer);
-      this.scanTimer = null;
+      // Recurring scan
+      this.scanTimers[tf] = setInterval(() => {
+        this._scanTimeframe(tf).catch(e => console.error(`[BestTrades] ${tf} scan error:`, e.message));
+      }, intervalMs);
+
+      console.log(`[BestTrades]   ${tf}: every ${intervalLabel}`);
     }
   }
 
-  _getIntervalLabel() {
-    const ms = SCAN_INTERVALS[this.settings.timeframe] || 60 * 60_000;
-    return ms < 60000 ? `${ms / 1000}s` : `${ms / 60000}m`;
+  _stopAllTimers() {
+    for (const [tf, timer] of Object.entries(this.scanTimers)) {
+      clearInterval(timer);
+    }
+    this.scanTimers = {};
   }
 
-  // ── Main Scan ──
+  // ── Scan a Single Timeframe ──
 
-  async scan() {
+  async _scanTimeframe(tf) {
     if (!this.settings.enabled) return [];
-    console.log(`[BestTrades] Scanning ${ASSETS.length} assets on ${this.settings.timeframe}...`);
+    console.log(`[BestTrades] Scanning ${ASSETS.length} assets on ${tf}...`);
 
     const results = [];
     let btcRegime = 'neutral';
 
     // Scan BTC first for macro regime
     try {
-      const btcCandles = await fetchKlines('BTCUSDT', this.settings.timeframe, 200);
+      const btcCandles = await fetchKlines('BTCUSDT', tf, 200);
       if (btcCandles && btcCandles.length > 50) {
         btcRegime = detectRegime(btcCandles);
       }
     } catch (e) {
-      console.warn('[BestTrades] BTC regime fetch error:', e.message);
+      console.warn(`[BestTrades] BTC regime fetch error (${tf}):`, e.message);
     }
 
     // Scan all assets
     for (const asset of ASSETS) {
       try {
-        const candles = await fetchKlines(asset.sym, this.settings.timeframe, 200);
+        const candles = await fetchKlines(asset.sym, tf, 200);
         if (!candles || candles.length < 50) continue;
 
-        const analysis = computeSignals(candles, this.settings.timeframe);
+        const analysis = computeSignals(candles, tf);
         const { signals, atr: atrVal, price, marketQuality, entryEfficiency } = analysis;
 
         // Detect local regime, blend with BTC
         const localRegime = detectRegime(candles);
-        // 60% BTC-heavy for alts, 50/50 for majors
         const isMajor = ['BTC', 'ETH', 'SOL', 'BNB'].includes(asset.label);
         const regime = asset.label === 'BTC' ? btcRegime
-          : (isMajor ? localRegime : btcRegime); // simplified blend
+          : (isMajor ? localRegime : btcRegime);
 
         // Score both directions
-        const longScore = scoreConfluence(signals, 'long', regime, this.settings.timeframe, marketQuality);
-        const shortScore = scoreConfluence(signals, 'short', regime, this.settings.timeframe, marketQuality);
+        const longScore = scoreConfluence(signals, 'long', regime, tf, marketQuality);
+        const shortScore = scoreConfluence(signals, 'short', regime, tf, marketQuality);
 
         // Pick best direction
         const best = longScore.prob >= shortScore.prob ? longScore : shortScore;
@@ -616,6 +628,7 @@ class BestTradesScanner {
         results.push({
           asset: asset.label,
           sym: asset.sym,
+          timeframe: tf,
           direction,
           prob: best.prob,
           longProb: longScore.prob,
@@ -641,43 +654,97 @@ class BestTradesScanner {
         // Small delay to avoid Binance rate limits
         await new Promise(r => setTimeout(r, 200));
       } catch (e) {
-        console.warn(`[BestTrades] ${asset.label} scan error:`, e.message);
+        console.warn(`[BestTrades] ${asset.label} ${tf} scan error:`, e.message);
       }
     }
 
     // Sort by probability (highest first)
     results.sort((a, b) => b.prob - a.prob);
-    this.lastResults = results;
-    this.lastScanTime = new Date().toISOString();
+
+    // Store per-TF results
+    this.lastResultsByTF[tf] = results;
+    this.lastScanTimeByTF[tf] = new Date().toISOString();
+
+    // Merge all TF results into combined lastResults (deduplicate: keep highest prob per asset)
+    this._mergeResults();
 
     // Log results to DB
     await this._logResults(results);
 
-    // Process auto-trades
-    await this._processAutoTrades(results);
+    // Process auto-trades (with cross-TF dedup)
+    await this._processAutoTrades(results, tf);
 
     // Broadcast to SSE clients
-    this._broadcast('scan', { results: results.slice(0, 10), timestamp: this.lastScanTime });
+    this._broadcast('scan', {
+      timeframe: tf,
+      results: results.slice(0, 10),
+      combined: this.lastResults.slice(0, 10),
+      timestamp: this.lastScanTimeByTF[tf],
+    });
 
     const qualifying = results.filter(r => r.prob >= this.settings.minProb);
-    console.log(`[BestTrades] Scan complete: ${results.length} assets, ${qualifying.length} qualifying (>=${this.settings.minProb}%), top: ${results[0]?.asset} ${results[0]?.direction} ${results[0]?.prob}%`);
+    console.log(`[BestTrades] ${tf} scan complete: ${results.length} assets, ${qualifying.length} qualifying (>=${this.settings.minProb}%), top: ${results[0]?.asset} ${results[0]?.direction} ${results[0]?.prob}%`);
 
     return results;
   }
 
+  /**
+   * Merge results from all timeframes into a single ranked list.
+   * For each asset, keep the entry with the highest probability across all TFs.
+   */
+  _mergeResults() {
+    const bestByAsset = new Map(); // asset -> best result
+
+    for (const [tf, tfResults] of Object.entries(this.lastResultsByTF)) {
+      for (const r of tfResults) {
+        const existing = bestByAsset.get(r.asset);
+        if (!existing || r.prob > existing.prob) {
+          bestByAsset.set(r.asset, r);
+        }
+      }
+    }
+
+    this.lastResults = [...bestByAsset.values()].sort((a, b) => b.prob - a.prob);
+    this.lastScanTime = new Date().toISOString();
+  }
+
+  // ── Legacy single-TF scan (for manual trigger / API compat) ──
+  async scan() {
+    if (!this.settings.enabled) return [];
+    // Scan the user's preferred TF first, then all others
+    const tf = this.settings.timeframe || '4h';
+    await this._scanTimeframe(tf);
+    return this.lastResults;
+  }
+
   // ── Auto-Trade Execution ──
 
-  async _processAutoTrades(results) {
+  async _processAutoTrades(results, tf) {
     if (this.settings.mode !== 'auto') return;
 
+    // Clean stale trade dedup keys (expire after 30 min for short TFs, 4h for long TFs)
+    const dedupeExpiry = ['5m', '15m', '30m'].includes(tf) ? 30 * 60_000 : 4 * 60 * 60_000;
+    const now = Date.now();
+    for (const key of this.recentTrades) {
+      const [, , ts] = key.split('|');
+      if (ts && now - parseInt(ts) > dedupeExpiry) this.recentTrades.delete(key);
+    }
+
     // Filter qualifying setups
-    const qualifying = results.filter(r =>
-      r.prob >= this.settings.minProb &&
-      r.marketQuality !== 'No-Trade' &&
-      r.confidence !== 'Low' &&
-      r.entryEfficiency !== 'Chasing' &&
-      r.ev > 0
-    );
+    const qualifying = results.filter(r => {
+      if (r.prob < this.settings.minProb) return false;
+      if (r.marketQuality === 'No-Trade') return false;
+      if (r.confidence === 'Low') return false;
+      if (r.entryEfficiency === 'Chasing') return false;
+      if (r.ev <= 0) return false;
+
+      // Cross-TF dedup: don't trade same asset+direction if recently traded on another TF
+      const dedupeKey = `${r.asset}|${r.direction}`;
+      for (const existing of this.recentTrades) {
+        if (existing.startsWith(dedupeKey + '|')) return false;
+      }
+      return true;
+    });
 
     if (qualifying.length === 0) return;
 
@@ -748,6 +815,8 @@ class BestTradesScanner {
         await this._executeTradeOnBloFin(setup, posSize, userId, creds, demo);
         availableBalance -= posSize;
         openCount++;
+        // Mark as recently traded to prevent duplicate trades from other TFs
+        this.recentTrades.add(`${setup.asset}|${setup.direction}|${Date.now()}`);
       } catch (e) {
         console.error(`[BestTrades] Trade execution failed for ${setup.asset}:`, e.message);
       }
@@ -892,11 +961,28 @@ class BestTradesScanner {
   isRunning() { return this.settings.enabled && this.scanTimer !== null; }
 
   getStatus() {
+    const activeTimers = Object.keys(this.scanTimers);
+    const tfStatus = {};
+    for (const tf of ALL_TIMEFRAMES) {
+      const intervalMs = SCAN_INTERVALS[tf] || 60 * 60_000;
+      const intervalLabel = intervalMs < 60000 ? `${intervalMs / 1000}s` : `${intervalMs / 60000}m`;
+      const tfResults = this.lastResultsByTF[tf] || [];
+      tfStatus[tf] = {
+        active: !!this.scanTimers[tf],
+        interval: intervalLabel,
+        lastScan: this.lastScanTimeByTF[tf] || null,
+        resultsCount: tfResults.length,
+        qualifying: tfResults.filter(r => r.prob >= this.settings.minProb).length,
+        topSetup: tfResults[0] ? `${tfResults[0].asset} ${tfResults[0].direction} ${tfResults[0].prob}%` : null,
+      };
+    }
+
     return {
       enabled: this.settings.enabled,
-      running: this.scanTimer !== null,
+      running: activeTimers.length > 0,
       mode: this.settings.mode,
-      timeframe: this.settings.timeframe,
+      timeframes: ALL_TIMEFRAMES,
+      activeTimers: activeTimers.length,
       minProb: this.settings.minProb,
       tradeSizeUsd: this.settings.tradeSizeUsd,
       maxOpen: this.settings.maxOpen,
@@ -905,7 +991,8 @@ class BestTradesScanner {
       resultsCount: this.lastResults.length,
       qualifyingCount: this.lastResults.filter(r => r.prob >= this.settings.minProb).length,
       topSetup: this.lastResults[0] || null,
-      scanInterval: this._getIntervalLabel(),
+      tfStatus,
+      scanInterval: 'multi-TF',
     };
   }
 }
