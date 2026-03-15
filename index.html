@@ -16654,64 +16654,101 @@ function _recApplyOutcomeFilter() {
 }
 
 function _rebuildRecCalibrationFromFilter(filtered) {
-  // Only build from resolved trades
-  const resolved = filtered.filter(r => r.outcome === 'win' || r.outcome === 'loss');
-  if (resolved.length === 0 && _recOutcomeFilter === 'pending') {
-    // Pending trades don't have calibration data
-    const el = document.getElementById('recCalibrationChart');
-    if (el) el.innerHTML = '<div style="text-align:center;padding:16px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:9px">Pending trades have no calibration data yet.</div>';
+  const el = document.getElementById('recCalibrationChart');
+  if (!el) return;
+
+  // Pending trades — no calibration data
+  if (_recOutcomeFilter === 'pending') {
+    el.innerHTML = '<div style="text-align:center;padding:16px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:9px">Pending trades have no calibration data yet.</div>';
     return;
   }
+
+  // No filter or "all" — show full calibration (predicted vs actual)
   if (!_recOutcomeFilter || _recOutcomeFilter === 'all') {
-    // No filter or show all — use full server data
     if (_recCalibrationData) _renderRecCalibrationChart(_recCalibrationData);
     return;
   }
 
-  // Build client-side buckets from the filtered resolved trades
+  // WINS or LOSSES filter — show DISTRIBUTION chart instead of calibration
+  // "Where did your wins/losses come from by probability bucket?"
+  const trades = filtered.filter(r => r.outcome === 'win' || r.outcome === 'loss');
+  if (trades.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:16px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:9px">No resolved trades to display.</div>';
+    return;
+  }
+
+  // Build probability bucket distribution
   const bucketMap = {};
-  for (const r of resolved) {
+  for (const r of trades) {
     const p = parseFloat(r.probability) || 0;
     let bucket, mid;
-    if (p < 35) { bucket = '30-34'; mid = 32; }
-    else if (p < 40) { bucket = '35-39'; mid = 37; }
-    else if (p < 45) { bucket = '40-44'; mid = 42; }
-    else if (p < 50) { bucket = '45-49'; mid = 47; }
-    else if (p < 55) { bucket = '50-54'; mid = 52; }
-    else if (p < 60) { bucket = '55-59'; mid = 57; }
-    else if (p < 65) { bucket = '60-64'; mid = 62; }
-    else if (p < 70) { bucket = '65-69'; mid = 67; }
-    else if (p < 75) { bucket = '70-74'; mid = 72; }
-    else if (p < 80) { bucket = '75-79'; mid = 77; }
-    else { bucket = '80+'; mid = 82; }
-    if (!bucketMap[bucket]) bucketMap[bucket] = { bucket, bucketMid: mid, total: 0, wins: 0 };
-    bucketMap[bucket].total++;
-    if (r.outcome === 'win') bucketMap[bucket].wins++;
+    if (p < 35) { bucket = '30-34%'; mid = 32; }
+    else if (p < 40) { bucket = '35-39%'; mid = 37; }
+    else if (p < 45) { bucket = '40-44%'; mid = 42; }
+    else if (p < 50) { bucket = '45-49%'; mid = 47; }
+    else if (p < 55) { bucket = '50-54%'; mid = 52; }
+    else if (p < 60) { bucket = '55-59%'; mid = 57; }
+    else if (p < 65) { bucket = '60-64%'; mid = 62; }
+    else if (p < 70) { bucket = '65-69%'; mid = 67; }
+    else if (p < 75) { bucket = '70-74%'; mid = 72; }
+    else if (p < 80) { bucket = '75-79%'; mid = 77; }
+    else { bucket = '80+%'; mid = 82; }
+    if (!bucketMap[bucket]) bucketMap[bucket] = { bucket, mid, count: 0 };
+    bucketMap[bucket].count++;
   }
-  const buckets = Object.values(bucketMap).sort((a, b) => a.bucketMid - b.bucketMid);
-  for (const b of buckets) b.winRate = b.total > 0 ? parseFloat((b.wins / b.total * 100).toFixed(1)) : 0;
+  const buckets = Object.values(bucketMap).sort((a, b) => a.mid - b.mid);
 
-  // Build TF cal from filtered
+  // Build timeframe distribution
   const tfMap = {};
-  for (const r of resolved) {
+  for (const r of trades) {
     const tf = r.timeframe || 'unknown';
-    if (!tfMap[tf]) tfMap[tf] = { timeframe: tf, total: 0, wins: 0 };
-    tfMap[tf].total++;
-    if (r.outcome === 'win') tfMap[tf].wins++;
+    if (!tfMap[tf]) tfMap[tf] = { tf, count: 0 };
+    tfMap[tf].count++;
   }
-  const tfCal = Object.values(tfMap).sort((a, b) => b.total - a.total);
-  for (const t of tfCal) t.winRate = t.total > 0 ? parseFloat((t.wins / t.total * 100).toFixed(1)) : 0;
+  const tfs = Object.values(tfMap).sort((a, b) => b.count - a.count);
 
-  const totalW = resolved.filter(r => r.outcome === 'win').length;
-  const totalL = resolved.filter(r => r.outcome === 'loss').length;
-  const filteredData = {
-    wins: totalW,
-    losses: totalL,
-    winRate: (totalW + totalL) > 0 ? parseFloat((totalW / (totalW + totalL) * 100).toFixed(1)) : null,
-    byProbBucket: buckets,
-    byTimeframeCal: tfCal,
-  };
-  _renderRecCalibrationChart(filteredData);
+  const isWins = _recOutcomeFilter === 'win';
+  const barColor = isWins ? '#00f5a0' : '#ff4d6d';
+  const label = isWins ? 'WINS' : 'LOSSES';
+  const maxCount = Math.max(...buckets.map(b => b.count), 1);
+  const maxHeight = 70;
+
+  const bars = buckets.map(b => {
+    const barH = Math.max(8, (b.count / maxCount) * maxHeight);
+    const pct = (b.count / trades.length * 100).toFixed(0);
+    return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:60px">
+      <div style="font-size:10px;font-weight:700;color:${barColor}">${b.count}</div>
+      <div style="font-size:6px;color:#5a7a68">${pct}%</div>
+      <div style="width:100%;max-width:40px;height:${barH}px;background:${barColor};border-radius:4px 4px 0 0;transition:height 0.5s;margin:3px 0;opacity:0.8"></div>
+      <div style="font-size:8px;color:#a78bfa;font-weight:700">${b.bucket}</div>
+      <div style="font-size:6px;color:#5a7a68">predicted</div>
+    </div>`;
+  }).join('');
+
+  const tfSummary = tfs.map(t => {
+    const color = isWins ? '#00f5a0' : '#ff4d6d';
+    const pct = (t.count / trades.length * 100).toFixed(0);
+    return `<span style="color:${color}">${t.tf}: ${t.count} (${pct}%)</span>`;
+  }).join(' · ');
+
+  el.innerHTML = `
+    <div style="background:rgba(0,0,0,0.2);border:1px solid ${isWins ? 'rgba(0,245,160,0.15)' : 'rgba(255,77,109,0.15)'};border-radius:8px;padding:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:${barColor};font-family:'Space Mono',monospace">📊 ${label} DISTRIBUTION BY PROBABILITY</div>
+          <div style="font-size:8px;color:#3a5a48;font-family:'Space Mono',monospace;margin-top:2px">Where your ${label.toLowerCase()} came from — which probability ranges produced the most ${label.toLowerCase()}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:14px;font-weight:800;color:${barColor};font-family:'Space Mono',monospace">${trades.length}</div>
+          <div style="font-size:7px;color:#5a7a68">TOTAL ${label}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:flex-end;padding:12px 0;min-height:80px">${bars}</div>
+      <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:8px;font-size:9px;font-family:'Space Mono',monospace">
+        <div><span style="color:#5a7a68">By Timeframe:</span> ${tfSummary || '<span style="color:#3a5a48">No data</span>'}</div>
+      </div>
+    </div>
+  `;
 }
 
 function _renderRecRows(recs) {
