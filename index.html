@@ -2764,6 +2764,23 @@ function switchAuthView(view) {
     </div>
   </div>
 
+  <!-- Server-Side Calibration (per-TF win rates) -->
+  <div style="margin-top:20px;border-top:1px solid rgba(255,255,255,0.05);padding-top:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#00f5a0">🖥️ SERVER-SIDE CALIBRATION</div>
+        <div style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;margin-top:2px">Win rates from the 24/7 server scanner — broken down by timeframe, confidence, quality & regime</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button onclick="fetchServerStats()" style="font-size:8px;padding:5px 12px;background:rgba(0,245,160,0.1);border:1px solid rgba(0,245,160,0.25);color:#00f5a0;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">↻ Refresh</button>
+        <button onclick="triggerServerResolve()" style="font-size:8px;padding:5px 12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">⚡ Resolve Now</button>
+      </div>
+    </div>
+    <div id="serverCalibrationContent" style="background:rgba(0,0,0,0.2);border:1px solid rgba(0,245,160,0.1);border-radius:8px;padding:12px;font-family:'Space Mono',monospace;font-size:10px;color:#5a7a68">
+      Loading server calibration data...
+    </div>
+  </div>
+
   <!-- Active Positions (from BloFin) -->
   <div id="atLivePositions" style="display:none;margin-top:20px;border-top:1px solid rgba(255,255,255,0.05);padding-top:16px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -9525,6 +9542,7 @@ function switchPageTab(tab) {
     refreshBtPositions();
     liveRefreshBalance();
     renderScanHistory();
+    fetchServerStats();
   } else if (tab === 'alerts') {
     renderAlertList();
     loadTgCredentialsIntoForm();
@@ -22567,6 +22585,150 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }, 900);
 });
+
+// ── Server-Side Stats / Calibration ─────────────────────────────
+function fetchServerStats() {
+  const token = localStorage.getItem('dash_token');
+  if (!token) return;
+  const el = document.getElementById('serverCalibrationContent');
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center;padding:10px;color:#5a7a68">Loading...</div>';
+
+  fetch((window.CBP_BACKEND || 'http://localhost:3001') + '/best-trades/stats', {
+    headers: { 'Authorization': 'Bearer ' + token },
+  }).then(r => r.json()).then(data => {
+    if (data.error) { el.innerHTML = '<div style="color:#ff4d6d">Error: ' + data.error + '</div>'; return; }
+    renderServerCalibration(data);
+  }).catch(e => {
+    el.innerHTML = '<div style="color:#ff4d6d">Failed to load stats: ' + e.message + '</div>';
+  });
+}
+
+function triggerServerResolve() {
+  const token = localStorage.getItem('dash_token');
+  if (!token) return;
+  fetch((window.CBP_BACKEND || 'http://localhost:3001') + '/best-trades/resolve', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token },
+  }).then(r => r.json()).then(() => {
+    setTimeout(fetchServerStats, 2000); // Refresh stats after resolution
+  }).catch(() => {});
+}
+
+function renderServerCalibration(data) {
+  const el = document.getElementById('serverCalibrationContent');
+  if (!el) return;
+
+  const o = data.overall || {};
+  const totalWL = (o.wins || 0) + (o.losses || 0);
+  const wrColor = o.winRate >= 55 ? '#00f5a0' : o.winRate >= 45 ? '#f5c400' : '#ff4d6d';
+
+  // Overall summary cards
+  let html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:14px">';
+  html += _statCard('Win Rate', totalWL > 0 ? o.winRate.toFixed(1) + '%' : 'N/A', wrColor);
+  html += _statCard('Resolved', o.totalResolved || 0, '#a78bfa');
+  html += _statCard('Wins', o.wins || 0, '#00f5a0');
+  html += _statCard('Losses', o.losses || 0, '#ff4d6d');
+  html += _statCard('Pending', o.pending || 0, '#f5c400');
+  html += _statCard('Avg PnL', o.avgPnl ? o.avgPnl.toFixed(2) + '%' : 'N/A', o.avgPnl >= 0 ? '#00f5a0' : '#ff4d6d');
+  html += '</div>';
+
+  // Per-Timeframe breakdown
+  html += '<div style="margin-bottom:14px">';
+  html += '<div style="font-size:11px;font-weight:700;color:#ff6b35;margin-bottom:6px">Win Rate by Timeframe</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px">';
+  const tfs = data.byTimeframe || [];
+  if (tfs.length === 0) {
+    html += '<div style="color:#5a7a68;font-size:9px">No data yet — scanner needs to log & resolve predictions first</div>';
+  }
+  for (const tf of tfs) {
+    const tfTotal = tf.wins + tf.losses;
+    const tfWr = tfTotal > 0 ? tf.winRate : null;
+    const tfWrColor = tfWr === null ? '#5a7a68' : tfWr >= 55 ? '#00f5a0' : tfWr >= 45 ? '#f5c400' : '#ff4d6d';
+    const barWidth = tfWr !== null ? Math.max(5, tfWr) : 0;
+    html += '<div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,107,53,0.12);border-radius:6px;padding:8px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
+    html += '<span style="font-weight:700;color:#ff6b35;font-size:11px">' + tf.timeframe + '</span>';
+    html += '<span style="color:' + tfWrColor + ';font-weight:700;font-size:12px">' + (tfWr !== null ? tfWr.toFixed(1) + '%' : '—') + '</span>';
+    html += '</div>';
+    html += '<div style="background:rgba(255,255,255,0.05);border-radius:3px;height:6px;overflow:hidden;margin-bottom:4px">';
+    html += '<div style="height:100%;width:' + barWidth + '%;background:' + tfWrColor + ';border-radius:3px;transition:width 0.5s"></div></div>';
+    html += '<div style="font-size:8px;color:#5a7a68">' + tf.wins + 'W / ' + tf.losses + 'L · ' + tf.pending + ' pending · avg ' + (tf.avgPnl ? tf.avgPnl.toFixed(2) + '%' : '0%') + '</div>';
+    html += '</div>';
+  }
+  html += '</div></div>';
+
+  // Per-Confidence breakdown
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">';
+
+  html += '<div>';
+  html += '<div style="font-size:10px;font-weight:700;color:#a78bfa;margin-bottom:6px">By Confidence</div>';
+  const confs = data.byConfidence || [];
+  for (const c of confs) {
+    const cWr = c.total > 0 ? c.winRate : null;
+    const cColor = cWr === null ? '#5a7a68' : cWr >= 55 ? '#00f5a0' : cWr >= 45 ? '#f5c400' : '#ff4d6d';
+    html += '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.03)">';
+    html += '<span>' + c.confidence + '</span>';
+    html += '<span style="color:' + cColor + '">' + (cWr !== null ? cWr.toFixed(1) + '%' : '—') + ' <span style="color:#5a7a68">(' + c.total + ')</span></span>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Per-Quality breakdown
+  html += '<div>';
+  html += '<div style="font-size:10px;font-weight:700;color:#a78bfa;margin-bottom:6px">By Market Quality</div>';
+  const quals = data.byQuality || [];
+  for (const q of quals) {
+    const qWr = q.total > 0 ? q.winRate : null;
+    const qColor = qWr === null ? '#5a7a68' : qWr >= 55 ? '#00f5a0' : qWr >= 45 ? '#f5c400' : '#ff4d6d';
+    html += '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.03)">';
+    html += '<span>Grade ' + q.quality + '</span>';
+    html += '<span style="color:' + qColor + '">' + (qWr !== null ? qWr.toFixed(1) + '%' : '—') + ' <span style="color:#5a7a68">(' + q.total + ')</span></span>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  html += '</div>';
+
+  // Per-Regime + Per-Probability Bucket
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+
+  html += '<div>';
+  html += '<div style="font-size:10px;font-weight:700;color:#a78bfa;margin-bottom:6px">By Regime</div>';
+  const regimes = data.byRegime || [];
+  for (const r of regimes) {
+    const rWr = r.total > 0 ? r.winRate : null;
+    const rColor = rWr === null ? '#5a7a68' : rWr >= 55 ? '#00f5a0' : rWr >= 45 ? '#f5c400' : '#ff4d6d';
+    html += '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.03)">';
+    html += '<span>' + r.regime + '</span>';
+    html += '<span style="color:' + rColor + '">' + (rWr !== null ? rWr.toFixed(1) + '%' : '—') + ' <span style="color:#5a7a68">(' + r.total + ')</span></span>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  html += '<div>';
+  html += '<div style="font-size:10px;font-weight:700;color:#a78bfa;margin-bottom:6px">By Probability Bucket</div>';
+  const buckets = data.byProbBucket || [];
+  for (const b of buckets) {
+    const bWr = b.total > 0 ? b.winRate : null;
+    const bColor = bWr === null ? '#5a7a68' : bWr >= 55 ? '#00f5a0' : bWr >= 45 ? '#f5c400' : '#ff4d6d';
+    html += '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.03)">';
+    html += '<span>' + b.bucket + '%</span>';
+    html += '<span style="color:' + bColor + '">' + (bWr !== null ? bWr.toFixed(1) + '%' : '—') + ' <span style="color:#5a7a68">(' + b.total + ')</span></span>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  html += '</div>';
+
+  el.innerHTML = html;
+}
+
+function _statCard(label, value, color) {
+  return '<div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:8px;text-align:center">'
+    + '<div style="font-size:8px;color:#5a7a68;margin-bottom:3px">' + label + '</div>'
+    + '<div style="font-size:14px;font-weight:700;color:' + color + '">' + value + '</div></div>';
+}
 
 // ── Server-Side Scanner Status Check ────────────────────────────
 // Polls the backend Best Trades scanner status and displays it

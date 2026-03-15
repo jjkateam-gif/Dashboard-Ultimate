@@ -60,6 +60,28 @@ router.get('/results', (req, res) => {
   });
 });
 
+// GET /best-trades/stats — win rates broken down by timeframe, confidence, quality, regime
+router.get('/stats', async (req, res) => {
+  try {
+    const stats = await scanner.getStats();
+    res.json(stats);
+  } catch (err) {
+    console.error('[BestTrades] Stats error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /best-trades/resolve — trigger manual resolution check
+router.post('/resolve', async (req, res) => {
+  try {
+    await scanner._resolveOpenPredictions();
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[BestTrades] Manual resolve error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /best-trades/history — scan log from DB
 router.get('/history', async (req, res) => {
   try {

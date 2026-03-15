@@ -514,6 +514,8 @@ class BestTradesScanner {
     if (this.settings.enabled) {
       this._startAllTimers();
     }
+    // Always start resolution tracker (resolves predictions even if scanner is disabled)
+    this._startResolutionTimer();
     console.log(`[BestTrades] Scanner initialized. Enabled: ${this.settings.enabled}, Mode: ${this.settings.mode}, Scanning ALL timeframes: ${ALL_TIMEFRAMES.join(', ')}`);
   }
 
@@ -871,11 +873,11 @@ class BestTradesScanner {
         await pool.query(
           `INSERT INTO best_trades_log
            (asset, direction, probability, confidence, market_quality, rr_ratio,
-            entry_price, stop_price, target_price, stop_pct, target_pct, regime, executed, order_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+            entry_price, stop_price, target_price, stop_pct, target_pct, regime, executed, order_id, timeframe)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
           [setup.asset, setup.direction, setup.prob, setup.confidence,
            setup.marketQuality, setup.rr, setup.price, setup.stopPrice, setup.targetPrice,
-           setup.stopPct, setup.targetPct, setup.regime, true, result.orderId || null]
+           setup.stopPct, setup.targetPct, setup.regime, true, result.orderId || null, setup.timeframe || '4h']
         );
       } catch {}
     }
@@ -932,11 +934,11 @@ class BestTradesScanner {
         await pool.query(
           `INSERT INTO best_trades_log
            (asset, direction, probability, confidence, market_quality, rr_ratio,
-            entry_price, stop_price, target_price, stop_pct, target_pct, regime, executed)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+            entry_price, stop_price, target_price, stop_pct, target_pct, regime, executed, timeframe)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
           [r.asset, r.direction, r.prob, r.confidence,
            r.marketQuality, r.rr, r.price, r.stopPrice, r.targetPrice,
-           r.stopPct, r.targetPct, r.regime, false]
+           r.stopPct, r.targetPct, r.regime, false, r.timeframe || '4h']
         );
       } catch {}
     }
@@ -952,6 +954,345 @@ class BestTradesScanner {
     this.sseClients = this.sseClients.filter(res => {
       try { res.write(msg); return true; } catch { return false; }
     });
+  }
+
+  // ── Resolution Checker ──
+  // Periodically checks unresolved predictions to see if price hit TP or SL
+
+  _startResolutionTimer() {
+    if (this.resolutionTimer) clearInterval(this.resolutionTimer);
+    // Check every 5 minutes
+    this.resolutionTimer = setInterval(() => {
+      this._resolveOpenPredictions().catch(e =>
+        console.error('[BestTrades] Resolution check error:', e.message));
+    }, 5 * 60_000);
+    // Run first check after 60s
+    setTimeout(() => this._resolveOpenPredictions().catch(() => {}), 60_000);
+    console.log('[BestTrades] Resolution tracker started (every 5 min)');
+  }
+
+  async _resolveOpenPredictions() {
+    if (!pool) return;
+
+    // Get unresolved predictions (max 100 at a time, oldest first)
+    let pending;
+    try {
+      const result = await pool.query(
+        `SELECT id, asset, direction, entry_price, stop_price, target_price, timeframe, created_at
+         FROM best_trades_log
+         WHERE outcome IS NULL AND entry_price IS NOT NULL AND stop_price IS NOT NULL AND target_price IS NOT NULL
+         ORDER BY created_at ASC LIMIT 100`
+      );
+      pending = result.rows;
+    } catch (e) {
+      console.warn('[BestTrades] Resolution query error:', e.message);
+      return;
+    }
+
+    if (pending.length === 0) return;
+
+    // Group by asset to minimize API calls
+    const byAsset = {};
+    for (const row of pending) {
+      if (!byAsset[row.asset]) byAsset[row.asset] = [];
+      byAsset[row.asset].push(row);
+    }
+
+    let resolved = 0;
+    for (const [asset, rows] of Object.entries(byAsset)) {
+      try {
+        const sym = asset + 'USDT';
+        // Fetch recent 1m candles to check high/low range since entry
+        // Use the oldest pending entry's creation time to determine how far back to look
+        const oldestEntry = rows.reduce((a, b) =>
+          new Date(a.created_at) < new Date(b.created_at) ? a : b);
+        const ageMs = Date.now() - new Date(oldestEntry.created_at).getTime();
+
+        // For each pending prediction, fetch candles from its timeframe to check resolution
+        for (const row of rows) {
+          const entryPrice = parseFloat(row.entry_price);
+          const stopPrice = parseFloat(row.stop_price);
+          const targetPrice = parseFloat(row.target_price);
+          const tf = row.timeframe || '4h';
+
+          // How many candles since this prediction was created?
+          const predAgeMs = Date.now() - new Date(row.created_at).getTime();
+          const tfMs = { '1m': 60e3, '5m': 5*60e3, '15m': 15*60e3, '30m': 30*60e3,
+                         '1h': 60*60e3, '4h': 4*60*60e3, '1d': 24*60*60e3 };
+          const candlesNeeded = Math.min(200, Math.ceil(predAgeMs / (tfMs[tf] || 4*60*60e3)) + 2);
+
+          // Skip if too young (need at least 1 candle after entry)
+          if (candlesNeeded < 2) continue;
+
+          // Expire very old predictions (>7 days for short TFs, >30 days for long TFs)
+          const maxAgeMs = ['5m', '15m', '30m'].includes(tf) ? 7 * 24 * 60 * 60e3 : 30 * 24 * 60 * 60e3;
+          if (predAgeMs > maxAgeMs) {
+            // Expire as "expired" — neither win nor loss
+            await pool.query(
+              `UPDATE best_trades_log SET outcome='expired', resolved_at=NOW() WHERE id=$1`,
+              [row.id]
+            );
+            resolved++;
+            continue;
+          }
+
+          const candles = await fetchKlines(sym, tf, candlesNeeded);
+          if (!candles || candles.length < 2) continue;
+
+          // Find candles AFTER the prediction was created
+          const predTime = new Date(row.created_at).getTime();
+          const postEntryCandles = candles.filter(c => c.t > predTime);
+          if (postEntryCandles.length === 0) continue;
+
+          // Check if any candle hit SL or TP
+          let outcome = null;
+          let pnl = 0;
+
+          for (const c of postEntryCandles) {
+            if (row.direction === 'long') {
+              // Long: SL hit if low <= stopPrice, TP hit if high >= targetPrice
+              const hitSL = c.l <= stopPrice;
+              const hitTP = c.h >= targetPrice;
+              if (hitSL && hitTP) {
+                // Both hit in same candle — use open to determine which came first
+                // If open is closer to stop, likely SL first
+                outcome = (c.o - stopPrice) < (targetPrice - c.o) ? 'loss' : 'win';
+              } else if (hitSL) {
+                outcome = 'loss';
+              } else if (hitTP) {
+                outcome = 'win';
+              }
+            } else {
+              // Short: SL hit if high >= stopPrice, TP hit if low <= targetPrice
+              const hitSL = c.h >= stopPrice;
+              const hitTP = c.l <= targetPrice;
+              if (hitSL && hitTP) {
+                outcome = (stopPrice - c.o) < (c.o - targetPrice) ? 'loss' : 'win';
+              } else if (hitSL) {
+                outcome = 'loss';
+              } else if (hitTP) {
+                outcome = 'win';
+              }
+            }
+
+            if (outcome) break;
+          }
+
+          if (outcome) {
+            // Calculate PnL percentage
+            if (outcome === 'win') {
+              pnl = row.direction === 'long'
+                ? ((targetPrice - entryPrice) / entryPrice) * 100
+                : ((entryPrice - targetPrice) / entryPrice) * 100;
+            } else {
+              pnl = row.direction === 'long'
+                ? ((stopPrice - entryPrice) / entryPrice) * 100
+                : ((entryPrice - stopPrice) / entryPrice) * 100;
+            }
+
+            await pool.query(
+              `UPDATE best_trades_log SET outcome=$1, pnl=$2, resolved_at=NOW() WHERE id=$3`,
+              [outcome, parseFloat(pnl.toFixed(4)), row.id]
+            );
+            resolved++;
+          }
+
+          // Small delay between API calls
+          await new Promise(r => setTimeout(r, 200));
+        }
+      } catch (e) {
+        console.warn(`[BestTrades] Resolution error for ${asset}:`, e.message);
+      }
+    }
+
+    if (resolved > 0) {
+      console.log(`[BestTrades] Resolved ${resolved} predictions`);
+      this._broadcast('resolution', { resolved });
+    }
+  }
+
+  // ── Stats / Win Rate API ──
+
+  async getStats() {
+    if (!pool) return { error: 'No database' };
+
+    try {
+      // Overall stats
+      const overall = await pool.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE outcome IS NOT NULL) AS total_resolved,
+          COUNT(*) FILTER (WHERE outcome = 'win') AS wins,
+          COUNT(*) FILTER (WHERE outcome = 'loss') AS losses,
+          COUNT(*) FILTER (WHERE outcome = 'expired') AS expired,
+          COUNT(*) FILTER (WHERE outcome IS NULL) AS pending,
+          ROUND(AVG(pnl) FILTER (WHERE outcome IN ('win','loss')), 4) AS avg_pnl,
+          ROUND(AVG(pnl) FILTER (WHERE outcome = 'win'), 4) AS avg_win_pnl,
+          ROUND(AVG(pnl) FILTER (WHERE outcome = 'loss'), 4) AS avg_loss_pnl
+        FROM best_trades_log
+      `);
+
+      // Per-timeframe win rates
+      const byTimeframe = await pool.query(`
+        SELECT
+          COALESCE(timeframe, '4h') AS timeframe,
+          COUNT(*) FILTER (WHERE outcome IS NOT NULL) AS total_resolved,
+          COUNT(*) FILTER (WHERE outcome = 'win') AS wins,
+          COUNT(*) FILTER (WHERE outcome = 'loss') AS losses,
+          COUNT(*) FILTER (WHERE outcome = 'expired') AS expired,
+          COUNT(*) FILTER (WHERE outcome IS NULL) AS pending,
+          ROUND(
+            CASE WHEN COUNT(*) FILTER (WHERE outcome IN ('win','loss')) > 0
+              THEN COUNT(*) FILTER (WHERE outcome = 'win')::DECIMAL / COUNT(*) FILTER (WHERE outcome IN ('win','loss')) * 100
+              ELSE 0
+            END, 1
+          ) AS win_rate,
+          ROUND(AVG(pnl) FILTER (WHERE outcome IN ('win','loss')), 4) AS avg_pnl
+        FROM best_trades_log
+        GROUP BY COALESCE(timeframe, '4h')
+        ORDER BY COALESCE(timeframe, '4h')
+      `);
+
+      // Per-confidence win rates
+      const byConfidence = await pool.query(`
+        SELECT
+          confidence,
+          COUNT(*) FILTER (WHERE outcome IN ('win','loss')) AS total,
+          COUNT(*) FILTER (WHERE outcome = 'win') AS wins,
+          ROUND(
+            CASE WHEN COUNT(*) FILTER (WHERE outcome IN ('win','loss')) > 0
+              THEN COUNT(*) FILTER (WHERE outcome = 'win')::DECIMAL / COUNT(*) FILTER (WHERE outcome IN ('win','loss')) * 100
+              ELSE 0
+            END, 1
+          ) AS win_rate,
+          ROUND(AVG(pnl) FILTER (WHERE outcome IN ('win','loss')), 4) AS avg_pnl
+        FROM best_trades_log
+        WHERE confidence IS NOT NULL
+        GROUP BY confidence
+        ORDER BY confidence
+      `);
+
+      // Per-market quality win rates
+      const byQuality = await pool.query(`
+        SELECT
+          market_quality,
+          COUNT(*) FILTER (WHERE outcome IN ('win','loss')) AS total,
+          COUNT(*) FILTER (WHERE outcome = 'win') AS wins,
+          ROUND(
+            CASE WHEN COUNT(*) FILTER (WHERE outcome IN ('win','loss')) > 0
+              THEN COUNT(*) FILTER (WHERE outcome = 'win')::DECIMAL / COUNT(*) FILTER (WHERE outcome IN ('win','loss')) * 100
+              ELSE 0
+            END, 1
+          ) AS win_rate,
+          ROUND(AVG(pnl) FILTER (WHERE outcome IN ('win','loss')), 4) AS avg_pnl
+        FROM best_trades_log
+        WHERE market_quality IS NOT NULL
+        GROUP BY market_quality
+        ORDER BY market_quality
+      `);
+
+      // Per-regime win rates
+      const byRegime = await pool.query(`
+        SELECT
+          regime,
+          COUNT(*) FILTER (WHERE outcome IN ('win','loss')) AS total,
+          COUNT(*) FILTER (WHERE outcome = 'win') AS wins,
+          ROUND(
+            CASE WHEN COUNT(*) FILTER (WHERE outcome IN ('win','loss')) > 0
+              THEN COUNT(*) FILTER (WHERE outcome = 'win')::DECIMAL / COUNT(*) FILTER (WHERE outcome IN ('win','loss')) * 100
+              ELSE 0
+            END, 1
+          ) AS win_rate,
+          ROUND(AVG(pnl) FILTER (WHERE outcome IN ('win','loss')), 4) AS avg_pnl
+        FROM best_trades_log
+        WHERE regime IS NOT NULL
+        GROUP BY regime
+        ORDER BY regime
+      `);
+
+      // Per probability bucket (60-65, 65-70, 70-75, 75-80, 80+)
+      const byProbBucket = await pool.query(`
+        SELECT
+          CASE
+            WHEN probability < 60 THEN '<60'
+            WHEN probability < 65 THEN '60-64'
+            WHEN probability < 70 THEN '65-69'
+            WHEN probability < 75 THEN '70-74'
+            WHEN probability < 80 THEN '75-79'
+            ELSE '80+'
+          END AS prob_bucket,
+          COUNT(*) FILTER (WHERE outcome IN ('win','loss')) AS total,
+          COUNT(*) FILTER (WHERE outcome = 'win') AS wins,
+          ROUND(
+            CASE WHEN COUNT(*) FILTER (WHERE outcome IN ('win','loss')) > 0
+              THEN COUNT(*) FILTER (WHERE outcome = 'win')::DECIMAL / COUNT(*) FILTER (WHERE outcome IN ('win','loss')) * 100
+              ELSE 0
+            END, 1
+          ) AS win_rate,
+          ROUND(AVG(pnl) FILTER (WHERE outcome IN ('win','loss')), 4) AS avg_pnl
+        FROM best_trades_log
+        GROUP BY prob_bucket
+        ORDER BY prob_bucket
+      `);
+
+      const o = overall.rows[0];
+      const totalWL = parseInt(o.wins) + parseInt(o.losses);
+      const overallWinRate = totalWL > 0 ? (parseInt(o.wins) / totalWL * 100).toFixed(1) : '0.0';
+
+      return {
+        overall: {
+          totalResolved: parseInt(o.total_resolved),
+          wins: parseInt(o.wins),
+          losses: parseInt(o.losses),
+          expired: parseInt(o.expired),
+          pending: parseInt(o.pending),
+          winRate: parseFloat(overallWinRate),
+          avgPnl: parseFloat(o.avg_pnl) || 0,
+          avgWinPnl: parseFloat(o.avg_win_pnl) || 0,
+          avgLossPnl: parseFloat(o.avg_loss_pnl) || 0,
+        },
+        byTimeframe: byTimeframe.rows.map(r => ({
+          timeframe: r.timeframe,
+          resolved: parseInt(r.total_resolved),
+          wins: parseInt(r.wins),
+          losses: parseInt(r.losses),
+          expired: parseInt(r.expired),
+          pending: parseInt(r.pending),
+          winRate: parseFloat(r.win_rate),
+          avgPnl: parseFloat(r.avg_pnl) || 0,
+        })),
+        byConfidence: byConfidence.rows.map(r => ({
+          confidence: r.confidence,
+          total: parseInt(r.total),
+          wins: parseInt(r.wins),
+          winRate: parseFloat(r.win_rate),
+          avgPnl: parseFloat(r.avg_pnl) || 0,
+        })),
+        byQuality: byQuality.rows.map(r => ({
+          quality: r.market_quality,
+          total: parseInt(r.total),
+          wins: parseInt(r.wins),
+          winRate: parseFloat(r.win_rate),
+          avgPnl: parseFloat(r.avg_pnl) || 0,
+        })),
+        byRegime: byRegime.rows.map(r => ({
+          regime: r.regime,
+          total: parseInt(r.total),
+          wins: parseInt(r.wins),
+          winRate: parseFloat(r.win_rate),
+          avgPnl: parseFloat(r.avg_pnl) || 0,
+        })),
+        byProbBucket: byProbBucket.rows.map(r => ({
+          bucket: r.prob_bucket,
+          total: parseInt(r.total),
+          wins: parseInt(r.wins),
+          winRate: parseFloat(r.win_rate),
+          avgPnl: parseFloat(r.avg_pnl) || 0,
+        })),
+      };
+    } catch (e) {
+      console.error('[BestTrades] Stats query error:', e.message);
+      return { error: e.message };
+    }
   }
 
   // ── Public API ──

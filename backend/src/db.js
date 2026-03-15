@@ -16,7 +16,7 @@ pool.on('error', (err) => {
 async function runMigrations() {
   const fs = require('fs');
   const path = require('path');
-  const migrations = ['001_init.sql', '002_live_trading.sql', '003_blofin_migration.sql', '004_recommendations.sql', '005_auth_tokens.sql', '006_trade_log.sql', '008_prediction_state.sql', '009_best_trades.sql'];
+  const migrations = ['001_init.sql', '002_live_trading.sql', '003_blofin_migration.sql', '004_recommendations.sql', '005_auth_tokens.sql', '006_trade_log.sql', '008_prediction_state.sql', '009_best_trades.sql', '010_best_trades_timeframe.sql'];
   try {
     for (const file of migrations) {
       const sql = fs.readFileSync(path.join(__dirname, '..', 'migrations', file), 'utf8');
