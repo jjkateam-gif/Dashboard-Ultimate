@@ -7,6 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js" defer></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 
 /* === PREDICTIONS TAB TEXT BOOST === */
@@ -28,8 +29,8 @@
 
 /* === GLOBAL TEXT SIZE BOOST === */
 body { font-size: 14px !important; }
-#pageTabs button { font-size: 14px !important; padding: 12px 20px !important; transition: all 0.2s ease; }
-#pageTabs button:hover { background: rgba(0,245,160,0.08) !important; color: #00f5a0 !important; }
+#pageTabs button { font-size: 13px !important; padding: 10px 18px !important; transition: all var(--dur-normal) var(--ease-out); font-family: var(--font-ui) !important; font-weight: 500 !important; border-radius: var(--radius-sm) !important; }
+#pageTabs button:hover { background: rgba(255,255,255,0.04) !important; color: var(--text-primary) !important; }
 .card-title, .intel-section-title { font-size: 14px !important; }
 .intel-sub-tab { font-size: 12px !important; padding: 10px 20px !important; }
 input, select, textarea { font-size: 13px !important; }
@@ -76,35 +77,62 @@ button,[onclick],select{min-height:32px}
 .ticker-item{font-size:10px!important}
 
 :root{
-  --primary:#00f5a0;--primary-dim:rgba(0,245,160,0.12);--primary-glow:rgba(0,245,160,0.3);
-  --accent:#ff3cac;--accent2:#00c9ff;--warn:#ffd60a;
-  --bg:#04040f;--panel:rgba(8,8,28,0.9);--panel2:rgba(12,12,35,0.85);
-  --border:rgba(0,245,160,0.12);--border-bright:rgba(0,245,160,0.35);
-  --text:#dff5ea;--text-muted:#8aaa98;
-  --red:#ff4d6d;--green:#00f5a0;--blue:#00c9ff;--yellow:#ffd60a;
+  /* ── NEW DESIGN SYSTEM COLORS ── */
+  --primary:#00d68f;--primary-dim:rgba(0,214,143,0.12);--primary-glow:rgba(0,214,143,0.25);
+  --accent:#5b8def;--accent2:#5b8def;--warn:#f0b232;
+  --bg:#0a0e17;--panel:rgba(17,24,39,0.92);--panel2:rgba(26,34,53,0.88);
+  --border:rgba(255,255,255,0.06);--border-bright:rgba(0,214,143,0.3);
+  --text:#e2e8f0;--text-muted:#94a3b8;
+  --red:#ff6b6b;--green:#00d68f;--blue:#5b8def;--yellow:#f0b232;
+
+  /* ── SURFACE DEPTH ── */
+  --bg-base:#0a0e17;--bg-surface:#111827;--bg-elevated:#1a2235;--bg-hover:#222d42;
+
+  /* ── TEXT HIERARCHY ── */
+  --text-primary:#e2e8f0;--text-secondary:#94a3b8;--text-tertiary:#64748b;--text-disabled:#475569;
+
+  /* ── BORDERS ── */
+  --border-subtle:rgba(255,255,255,0.06);--border-default:rgba(255,255,255,0.10);--border-strong:rgba(255,255,255,0.16);
+
+  /* ── RADIUS ── */
+  --radius-xs:4px;--radius-sm:6px;--radius-md:10px;--radius-lg:12px;--radius-pill:20px;
+
+  /* ── SPACING ── */
+  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-7:32px;
+
+  /* ── TYPOGRAPHY ── */
+  --font-ui:'Inter','Syne',-apple-system,BlinkMacSystemFont,sans-serif;
+  --font-mono:'JetBrains Mono','Space Mono',monospace;
+
+  /* ── SHADOWS ── */
+  --shadow-sm:0 2px 4px rgba(0,0,0,0.35),0 1px 2px rgba(0,0,0,0.2);
+  --shadow-md:0 4px 12px rgba(0,0,0,0.4),0 2px 4px rgba(0,0,0,0.25);
+  --shadow-lg:0 8px 24px rgba(0,0,0,0.45),0 4px 8px rgba(0,0,0,0.3);
+
+  /* ── TRANSITIONS ── */
+  --ease-out:cubic-bezier(0.16,1,0.3,1);--ease-spring:cubic-bezier(0.34,1.56,0.64,1);
+  --dur-fast:120ms;--dur-normal:200ms;--dur-slow:350ms;
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth}
-body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);line-height:1.5;min-height:100vh;overflow-x:hidden}
+body{font-family:var(--font-ui);background:var(--bg-base);color:var(--text);line-height:1.5;min-height:100vh;overflow-x:hidden}
 body::before{content:'';position:fixed;inset:0;
   background:
-    radial-gradient(ellipse 900px 600px at 5% 10%,rgba(0,245,160,0.03) 0%,transparent 60%),
-    radial-gradient(ellipse 700px 500px at 95% 90%,rgba(120,60,200,0.05) 0%,transparent 60%),
-    radial-gradient(ellipse 500px 400px at 50% 50%,rgba(0,201,255,0.02) 0%,transparent 60%);
+    radial-gradient(ellipse 900px 600px at 50% 0%,rgba(0,214,143,0.03) 0%,transparent 60%),
+    radial-gradient(ellipse 700px 500px at 95% 90%,rgba(91,141,239,0.02) 0%,transparent 60%);
   pointer-events:none;z-index:0}
 body::after{content:'';position:fixed;inset:0;
-  background-image:linear-gradient(rgba(0,245,160,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,245,160,0.025) 1px,transparent 1px);
-  background-size:44px 44px;pointer-events:none;z-index:0}
+  background-image:none;
+  pointer-events:none;z-index:0}
 .container{max-width:1960px;margin:0 auto;padding:16px 20px;position:relative;z-index:1}
 
 /* ===== HEADER ===== */
-header{padding:28px 20px 12px;text-align:center;position:relative;z-index:1}
-h1{font-family:'Syne',sans-serif;font-size:36px;font-weight:800;letter-spacing:-1.5px;
-  background:linear-gradient(135deg,#00f5a0 0%,#00c9ff 40%,#ff3cac 80%);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:6px}
-.subtitle{color:var(--text-muted);font-family:'Space Mono',monospace;font-size:10px;letter-spacing:2.5px;text-transform:uppercase}
-.live-dot{display:inline-block;width:7px;height:7px;background:var(--primary);border-radius:50%;margin-right:5px;
-  animation:pulse 2s infinite;box-shadow:0 0 6px var(--primary)}
+header{padding:20px 20px 10px;text-align:center;position:relative;z-index:1}
+h1{font-family:var(--font-ui);font-size:22px;font-weight:700;letter-spacing:-0.5px;
+  color:var(--text-primary);margin-bottom:4px}
+.subtitle{color:var(--text-tertiary);font-family:var(--font-mono);font-size:11px;letter-spacing:2px;text-transform:uppercase}
+.live-dot{display:inline-block;width:8px;height:8px;background:var(--primary);border-radius:50%;margin-right:5px;
+  animation:pulse 2s ease-in-out infinite;box-shadow:0 0 6px rgba(0,214,143,0.4)}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(0.7)}}
 
 /* ===== TICKER ===== */
@@ -119,47 +147,52 @@ h1{font-family:'Syne',sans-serif;font-size:36px;font-weight:800;letter-spacing:-
 /* ===== LAYOUT ===== */
 .main-grid{display:grid;grid-template-columns:300px 1fr;gap:14px;margin-top:6px}
 .sidebar{display:flex;flex-direction:column;gap:10px}
-.panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;
-  backdrop-filter:blur(20px);position:relative;overflow:hidden;transition:border-color 0.3s}
-.panel:hover{border-color:rgba(0,245,160,0.25)}
-.panel::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;
-  background:linear-gradient(90deg,transparent,var(--primary),transparent);opacity:0.2}
+.panel{background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:16px;
+  position:relative;overflow:hidden;transition:border-color var(--dur-normal) var(--ease-out),box-shadow var(--dur-normal) var(--ease-out);
+  box-shadow:var(--shadow-sm)}
+.panel:hover{border-color:var(--border-default)}
+.panel::before{content:'';position:absolute;top:0;left:12px;right:12px;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.08),transparent)}
 
 /* ===== SECTION TITLES ===== */
-.section-title{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
-  color:var(--primary);margin-bottom:10px;display:flex;align-items:center;gap:8px;font-family:'Space Mono',monospace}
-.section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+.section-title{font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;
+  color:var(--text-secondary);margin-bottom:12px;display:flex;align-items:center;gap:8px;font-family:var(--font-ui)}
+.section-title::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--border-default),transparent)}
 
 /* ===== FORM ELEMENTS ===== */
-label{display:block;font-size:9px;font-weight:700;color:var(--text-muted);margin:6px 0 3px;
-  text-transform:uppercase;letter-spacing:1px;font-family:'Space Mono',monospace}
-input,select{padding:7px 10px;border-radius:6px;border:1px solid var(--border);
-  background:rgba(0,245,160,0.025);color:var(--text);font-size:11px;width:100%;
-  font-family:'Space Mono',monospace;transition:border-color 0.2s;outline:none}
-input:focus,select:focus{border-color:var(--primary);background:rgba(0,245,160,0.05);
-  box-shadow:0 0 0 2px rgba(0,245,160,0.08)}
+label{display:block;font-size:11px;font-weight:500;color:var(--text-secondary);margin:6px 0 3px;
+  text-transform:uppercase;letter-spacing:0.05em;font-family:var(--font-ui)}
+input,select{padding:8px 12px;border-radius:var(--radius-sm);border:1px solid var(--border-default);
+  background:var(--bg-elevated);color:var(--text);font-size:13px;width:100%;
+  font-family:var(--font-mono);transition:border-color var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out);outline:none}
+input:focus,select:focus{border-color:var(--primary);
+  box-shadow:0 0 0 3px rgba(0,214,143,0.12)}
 input[type="date"]{color-scheme:dark}
 input[type="checkbox"]{width:auto;accent-color:var(--primary)}
-select option{background:#0a0a1e}
+select option{background:var(--bg-surface)}
 input[type="range"]{padding:4px 0;accent-color:var(--primary);cursor:pointer}
-button{cursor:pointer;font-weight:700;transition:all 0.2s;border:none;margin-top:6px;
-  font-family:'Syne',sans-serif;border-radius:8px;width:100%;padding:9px 12px;font-size:11px;letter-spacing:0.5px}
-button.primary{background:linear-gradient(135deg,var(--primary),#00c9ff);color:#030310;font-weight:800}
-button.primary:hover{transform:translateY(-1px);box-shadow:0 4px 18px rgba(0,245,160,0.35)}
-button.secondary{background:rgba(0,245,160,0.04);border:1px solid var(--border);color:var(--text-muted)}
-button.secondary:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-dim)}
-button.danger{background:rgba(255,77,109,0.12);border:1px solid rgba(255,77,109,0.3);color:var(--red);font-size:10px;padding:6px 10px}
-button.accent{background:linear-gradient(135deg,#ff3cac,#8b00ff);color:#fff}
-button.accent:hover{transform:translateY(-1px);box-shadow:0 4px 18px rgba(255,60,172,0.35)}
+button{cursor:pointer;font-weight:600;transition:all var(--dur-normal) var(--ease-out);border:none;margin-top:6px;
+  font-family:var(--font-ui);border-radius:var(--radius-sm);width:100%;padding:10px 14px;font-size:13px;letter-spacing:0.01em}
+button:active{transform:scale(0.97)}
+button.primary{background:linear-gradient(135deg,var(--primary),#00b377);color:#0a0e17;font-weight:700;
+  box-shadow:0 2px 8px rgba(0,214,143,0.2)}
+button.primary:hover{box-shadow:0 4px 16px rgba(0,214,143,0.3);transform:translateY(-1px)}
+button.secondary{background:rgba(255,255,255,0.04);border:1px solid var(--border-default);color:var(--text-secondary)}
+button.secondary:hover{border-color:var(--border-strong);color:var(--text-primary);background:rgba(255,255,255,0.08)}
+button.danger{background:rgba(255,107,107,0.12);border:1px solid rgba(255,107,107,0.25);color:var(--red);font-size:12px;padding:8px 12px}
+button.danger:hover{background:rgba(255,107,107,0.2);box-shadow:0 0 16px rgba(255,107,107,0.12)}
+button.accent{background:linear-gradient(135deg,var(--accent),#3d6fdb);color:#fff}
+button.accent:hover{transform:translateY(-1px);box-shadow:0 4px 18px rgba(91,141,239,0.3)}
 
 /* ===== METRICS ===== */
-.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:10px}
-.metric-card{background:rgba(0,0,0,0.45);border:1px solid var(--border);border-radius:10px;padding:10px 9px;transition:all 0.3s}
-.metric-card:hover{border-color:var(--border-bright);transform:translateY(-1px)}
-.metric-label{font-size:8px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:4px;font-family:'Space Mono',monospace}
-.metric-value{font-size:21px;font-weight:800;margin-bottom:2px;font-family:'Space Mono',monospace}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-3);margin-bottom:12px}
+.metric-card{background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:14px 12px;
+  transition:all var(--dur-normal) var(--ease-out);box-shadow:var(--shadow-sm)}
+.metric-card:hover{border-color:var(--border-default);transform:translateY(-1px);box-shadow:var(--shadow-md)}
+.metric-label{font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;font-family:var(--font-ui);font-weight:500}
+.metric-value{font-size:22px;font-weight:700;margin-bottom:3px;font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:-0.02em}
 .metric-value.pos{color:var(--primary)}.metric-value.neg{color:var(--red)}.metric-value.neutral{color:var(--blue)}
-.metric-sub{font-size:9px;color:var(--text-muted);font-family:'Space Mono',monospace}
+.metric-sub{font-size:11px;color:var(--text-tertiary);font-family:var(--font-mono)}
 
 /* ===== INDICATORS / CHECKBOXES ===== */
 .checkbox-group{display:flex;flex-direction:column;gap:4px;margin-top:6px}
@@ -198,10 +231,11 @@ canvas{width:100%!important}
 
 /* ===== TABLES ===== */
 .scroll-table{overflow:auto;max-height:600px}
-table{width:100%;border-collapse:separate;border-spacing:0;font-size:10px;font-family:'Space Mono',monospace}
-th,td{padding:8px 7px;text-align:left;border-bottom:1px solid rgba(0,245,160,0.04)}
-th{background:rgba(0,0,0,0.55);color:var(--primary);font-size:8px;text-transform:uppercase;letter-spacing:1px;position:sticky;top:0;z-index:2}
-tr:hover td{background:rgba(0,245,160,0.035)}
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;font-family:var(--font-mono)}
+th,td{padding:10px 10px;text-align:left;border-bottom:1px solid var(--border-subtle);font-variant-numeric:tabular-nums}
+th{background:var(--bg-surface);color:var(--text-tertiary);font-size:11px;text-transform:uppercase;letter-spacing:0.06em;
+  position:sticky;top:0;z-index:2;font-family:var(--font-ui);font-weight:600}
+tr:hover td{background:rgba(255,255,255,0.03)}
 tr:last-child td{border-bottom:none}
 .rank1 td{background:rgba(0,245,160,0.07);border-left:2px solid var(--primary)}
 .rank2 td{background:rgba(66,153,225,0.06);border-left:2px solid #4299e1}
@@ -297,26 +331,28 @@ details[open] summary::before{transform:rotate(90deg)}
 .mtf-sig.neutral{background:rgba(255,255,255,0.05);color:var(--text-muted)}
 
 /* ===== LOADING ===== */
-.loading-overlay{display:none;position:fixed;inset:0;background:rgba(4,4,15,0.92);z-index:100;
-  align-items:center;justify-content:center;flex-direction:column;gap:14px;backdrop-filter:blur(10px)}
+.loading-overlay{display:none;position:fixed;inset:0;background:rgba(10,14,23,0.92);z-index:100;
+  align-items:center;justify-content:center;flex-direction:column;gap:16px}
 .loading-overlay.active{display:flex}
-.loading-spinner{width:44px;height:44px;border:3px solid var(--border);border-top-color:var(--primary);
+.loading-spinner{width:44px;height:44px;border:3px solid var(--border-default);border-top-color:var(--primary);
   border-radius:50%;animation:spin 0.9s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.loading-text{font-family:'Space Mono',monospace;font-size:11px;color:var(--primary);letter-spacing:2px}
+.loading-text{font-family:var(--font-ui);font-size:13px;color:var(--primary);letter-spacing:0.05em;font-weight:500}
 
 /* ===== TOAST ===== */
-.toast{position:fixed;bottom:20px;right:20px;background:rgba(0,245,160,0.08);border:1px solid var(--primary);
-  border-radius:10px;padding:11px 18px;font-family:'Space Mono',monospace;font-size:11px;color:var(--primary);
-  z-index:200;transform:translateY(100px);opacity:0;transition:all 0.3s;backdrop-filter:blur(20px);max-width:280px}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--bg-elevated);border:1px solid var(--primary);
+  border-radius:var(--radius-md);padding:12px 20px;font-family:var(--font-ui);font-size:13px;color:var(--primary);
+  z-index:200;transform:translateY(100px);opacity:0;transition:all 0.3s var(--ease-spring);max-width:320px;
+  box-shadow:var(--shadow-lg)}
 .toast.show{transform:translateY(0);opacity:1}
-.toast.error{border-color:var(--red);color:var(--red);background:rgba(255,77,109,0.08)}
+.toast.error{border-color:var(--red);color:var(--red);background:var(--bg-elevated)}
 
 .text-success{color:var(--primary)}.text-error{color:var(--red)}.text-warn{color:var(--yellow)}
 .text-right{text-align:right}.text-center{text-align:center}
-::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.2)}
 
 /* ===== LEVERAGE OPTIMIZER ===== */
 .lev-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:10px 0}
@@ -476,23 +512,24 @@ details[open] summary::before{transform:rotate(90deg)}
 }
 
 /* ===== CYCLE DASHBOARD ===== */
-.cycle-panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;
-  padding:20px 24px;margin:0 0 18px;backdrop-filter:blur(20px);position:relative;overflow:hidden}
-.cycle-panel::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
-  background:linear-gradient(90deg,transparent,var(--primary),#00c9ff,var(--accent),transparent);opacity:0.6}
+.cycle-panel{background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);
+  padding:20px 24px;margin:0 0 18px;position:relative;overflow:hidden;box-shadow:var(--shadow-md)}
+.cycle-panel::before{content:'';position:absolute;top:0;left:12px;right:12px;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,214,143,0.2),transparent)}
 .cycle-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:12px}
-.cycle-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:800;letter-spacing:1px;
-  text-transform:uppercase;color:var(--primary)}
+.cycle-title{font-family:var(--font-ui);font-size:14px;font-weight:700;letter-spacing:0.02em;
+  text-transform:uppercase;color:var(--text-primary)}
 
 /* Score dial */
 .score-wrap{display:flex;align-items:center;gap:24px;flex-wrap:wrap}
 .score-dial{position:relative;width:110px;height:110px;flex-shrink:0}
 .score-dial svg{width:110px;height:110px;transform:rotate(-90deg)}
 .score-track{fill:none;stroke:rgba(255,255,255,0.06);stroke-width:10}
-.score-fill{fill:none;stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1),stroke 0.6s}
+.score-fill{fill:none;stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1),stroke 0.6s;
+  filter:drop-shadow(0 0 6px currentColor)}
 .score-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.score-num{font-family:'Space Mono',monospace;font-size:26px;font-weight:700;line-height:1}
-.score-label{font-family:'Space Mono',monospace;font-size:7px;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-top:2px}
+.score-num{font-family:var(--font-mono);font-size:28px;font-weight:700;line-height:1;letter-spacing:-0.02em}
+.score-label{font-family:var(--font-ui);font-size:10px;color:var(--text-tertiary);letter-spacing:0.08em;text-transform:uppercase;margin-top:4px}
 
 /* Verdict badge */
 .verdict-wrap{display:flex;flex-direction:column;gap:6px}
@@ -510,8 +547,9 @@ details[open] summary::before{transform:rotate(90deg)}
 .cycle-indicators{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
 @media(max-width:900px){.cycle-indicators{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:600px){.cycle-indicators{grid-template-columns:1fr}}
-.ci-card{background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:9px;padding:11px 13px;transition:border-color 0.3s}
-.ci-card:hover{border-color:rgba(0,245,160,0.2)}
+.ci-card{background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:14px 16px;
+  transition:all var(--dur-normal) var(--ease-out);box-shadow:var(--shadow-sm)}
+.ci-card:hover{border-color:var(--border-default);box-shadow:var(--shadow-md)}
 .ci-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
 .ci-name{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px}
 .ci-val{font-family:'Space Mono',monospace;font-size:12px;font-weight:700}
@@ -538,9 +576,11 @@ details[open] summary::before{transform:rotate(90deg)}
 .degen-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
 .degen-tier-section{margin-bottom:20px}
 .degen-tier-header{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px}
-.degen-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;position:relative;overflow:hidden;transition:border-color 0.3s,transform 0.15s}
-.degen-card:hover{border-color:rgba(255,107,53,0.4);transform:translateY(-1px)}
-.degen-card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#ff6b35,transparent);opacity:0.3}
+.degen-card{background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:16px;position:relative;overflow:hidden;
+  transition:border-color var(--dur-normal) var(--ease-out),transform var(--dur-normal) var(--ease-spring),box-shadow var(--dur-normal) var(--ease-out);
+  box-shadow:var(--shadow-sm)}
+.degen-card:hover{border-color:var(--border-default);transform:translateY(-2px);box-shadow:var(--shadow-lg)}
+.degen-card::before{content:'';position:absolute;top:0;left:12px;right:12px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.08),transparent)}
 .degen-score-ring{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;font-family:'Space Mono',monospace;flex-shrink:0;border:2px solid}
 .score-hot{border-color:#ff6b35;background:rgba(255,107,53,0.15);color:#ff6b35}
 .score-warm{border-color:#f5c400;background:rgba(245,196,0,0.12);color:#f5c400}
@@ -558,7 +598,7 @@ details[open] summary::before{transform:rotate(90deg)}
 .flag-red{font-size:8px;color:#ff4d6d;font-family:'Space Mono',monospace;line-height:1.6}
 .degen-bar{height:4px;border-radius:2px;background:rgba(255,255,255,0.08);margin-top:3px;overflow:hidden}
 .degen-bar-fill{height:100%;border-radius:2px;transition:width 0.5s}
-.page-tab-active{background:rgba(0,245,160,0.12)!important;border-color:rgba(0,245,160,0.4)!important;color:#00f5a0!important}
+.page-tab-active{background:rgba(0,214,143,0.12)!important;border-color:rgba(0,214,143,0.3)!important;color:#00d68f!important}
 .degen-tab-btn-active{background:rgba(255,107,53,0.2)!important;border-color:rgba(255,107,53,0.5)!important;color:#ff6b35!important}
 
 /* ===== DEGEN v2 ADDITIONS ===== */
@@ -576,13 +616,15 @@ details[open] summary::before{transform:rotate(90deg)}
 
 /* ===== MARKET INTEL TAB ===== */
 .intel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:16px}
-.intel-kpi{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 14px;position:relative;overflow:hidden}
-.intel-kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--primary),transparent);opacity:0.2}
-.intel-kpi-label{font-size:7px;color:#5a7a68;text-transform:uppercase;letter-spacing:1.5px;font-family:'Space Mono',monospace;margin-bottom:4px}
-.intel-kpi-value{font-size:18px;font-weight:800;font-family:'Space Mono',monospace;line-height:1}
-.intel-kpi-sub{font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:3px}
-.intel-section{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px}
-.intel-section-title{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#aaa;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.intel-kpi{background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:14px 16px;position:relative;overflow:hidden;
+  box-shadow:var(--shadow-sm);transition:all var(--dur-normal) var(--ease-out)}
+.intel-kpi:hover{border-color:var(--border-default);transform:translateY(-1px);box-shadow:var(--shadow-md)}
+.intel-kpi::before{content:'';position:absolute;top:0;left:12px;right:12px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.08),transparent)}
+.intel-kpi-label{font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.06em;font-family:var(--font-ui);margin-bottom:6px;font-weight:500}
+.intel-kpi-value{font-size:20px;font-weight:700;font-family:var(--font-mono);line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-0.02em}
+.intel-kpi-sub{font-size:11px;color:var(--text-tertiary);font-family:var(--font-mono);margin-top:4px}
+.intel-section{background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:16px;margin-bottom:14px;box-shadow:var(--shadow-sm)}
+.intel-section-title{font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:14px;display:flex;align-items:center;gap:8px;font-family:var(--font-ui)}
 .screener-table{width:100%;border-collapse:collapse;font-family:'Space Mono',monospace;font-size:8px}
 .screener-table th{text-align:left;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.06);color:#5a7a68;font-size:7px;text-transform:uppercase;letter-spacing:1px;cursor:pointer;user-select:none;white-space:nowrap}
 .screener-table th:hover{color:#aaa}
@@ -619,16 +661,14 @@ details[open] summary::before{transform:rotate(90deg)}
 .signal-dot{width:6px;height:6px;border-radius:50%;display:inline-block;vertical-align:middle;margin-right:4px}
 
 /* ===== LOGIN GATE ===== */
-.login-overlay{position:fixed;inset:0;z-index:99999;background:var(--bg);display:flex;align-items:center;justify-content:center;flex-direction:column}
+.login-overlay{position:fixed;inset:0;z-index:99999;background:var(--bg-base);display:flex;align-items:center;justify-content:center;flex-direction:column}
 .login-overlay::before{content:'';position:fixed;inset:0;
-  background:radial-gradient(ellipse 900px 600px at 50% 40%,rgba(0,245,160,0.06) 0%,transparent 60%);pointer-events:none}
-.login-box{background:var(--panel);border:1px solid var(--border-bright);border-radius:16px;padding:40px 36px;
-  width:380px;max-width:90vw;text-align:center;position:relative;backdrop-filter:blur(20px)}
-.login-box::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
-  background:linear-gradient(90deg,transparent,var(--primary),var(--accent),transparent);border-radius:16px 16px 0 0}
-.login-box h2{font-family:'Syne',sans-serif;font-size:24px;font-weight:800;margin-bottom:6px;
-  background:linear-gradient(135deg,#00f5a0 0%,#00c9ff 40%,#ff3cac 80%);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  background:radial-gradient(ellipse 900px 600px at 50% 40%,rgba(0,214,143,0.04) 0%,transparent 60%);pointer-events:none}
+.login-box{background:var(--bg-surface);border:1px solid var(--border-strong);border-radius:var(--radius-lg);padding:40px 36px;
+  width:380px;max-width:90vw;text-align:center;position:relative;box-shadow:var(--shadow-lg)}
+.login-box::before{content:'';position:absolute;top:0;left:16px;right:16px;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,214,143,0.3),transparent);border-radius:var(--radius-lg) var(--radius-lg) 0 0}
+.login-box h2{font-family:var(--font-ui);font-size:24px;font-weight:800;margin-bottom:6px;color:var(--text-primary)}
 .login-box .login-sub{color:var(--text-muted);font-family:'Space Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;margin-bottom:24px}
 .login-box input{width:100%;padding:10px 14px;margin-bottom:12px;background:rgba(0,245,160,0.04);
   border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Space Mono',monospace;font-size:13px;outline:none;transition:border-color 0.3s}
@@ -1701,9 +1741,17 @@ function switchAuthView(view) {
       <div class="metric-card"><div class="metric-label">Final Value</div><div class="metric-value neutral" id="metricFinal">—</div><div class="metric-sub" id="metricFinalSub">—</div></div>
       <div class="metric-card"><div class="metric-label">Leveraged Return</div><div class="metric-value neutral" id="metricLevReturn">—</div><div class="metric-sub" id="metricLevSub">—</div></div>
       <div class="metric-card"><div class="metric-label">Avg Trade P&amp;L</div><div class="metric-value neutral" id="metricAvgTrade">—</div><div class="metric-sub" id="metricAvgSub">Avg win/loss</div></div>
+      <div class="metric-card"><div class="metric-label">Sortino Ratio</div><div class="metric-value neutral" id="metricSortino">—</div><div class="metric-sub">Downside risk</div></div>
+      <div class="metric-card"><div class="metric-label">Profit Factor</div><div class="metric-value neutral" id="metricPF">—</div><div class="metric-sub" id="metricPFSub">Gross W/L</div></div>
+      <div class="metric-card"><div class="metric-label">Calmar Ratio</div><div class="metric-value neutral" id="metricCalmar">—</div><div class="metric-sub">Return / MaxDD</div></div>
+      <div class="metric-card"><div class="metric-label">Avg Recovery</div><div class="metric-value neutral" id="metricRecovery">—</div><div class="metric-sub" id="metricRecoverySub">Bars to recover</div></div>
     </div>
     <!-- Sats stacker result box -->
     <div id="satsResult" style="display:none;background:rgba(245,196,0,0.06);border:1px solid rgba(245,196,0,0.25);border-radius:8px;padding:10px;margin-bottom:8px"></div>
+    <!-- Monte Carlo simulation results -->
+    <div id="monteCarloResult" style="display:none;background:rgba(99,179,237,0.06);border:1px solid rgba(99,179,237,0.2);border-radius:8px;padding:10px;margin-bottom:8px"></div>
+    <!-- Drawdown recovery details -->
+    <div id="ddRecoveryResult" style="display:none;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.2);border-radius:8px;padding:10px;margin-bottom:8px"></div>
 
     <div id="statBars" style="display:none;margin-top:6px;border-top:1px solid var(--border);padding-top:8px">
       <div class="stat-bar"><span class="stat-bar-label">Win Rate</span><div class="stat-bar-track"><div class="stat-bar-fill" id="barWR" style="width:0%"></div></div><span class="stat-bar-val" id="barWRVal">—</span></div>
@@ -2551,9 +2599,34 @@ function switchAuthView(view) {
   <div style="margin-top:16px;padding:12px;background:rgba(255,107,53,0.04);border:1px solid rgba(255,107,53,0.12);border-radius:8px;font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace">
     <span style="color:#ff6b35;font-weight:700">How probability is calculated: </span>
     Fetches live OHLCV → runs all 7 indicators → counts bullish/bearish signals → weights by historical win rate from your backtests →
-    applies regime multiplier (bull market = higher base rate) → applies funding rate bias → 
+    applies regime multiplier (bull market = higher base rate) → applies funding rate bias (percentile-adaptive) →
+    checks ETF flow momentum (🏦 institutional inflows/outflows) →
     outputs probability + estimated R/R based on ATR-derived targets. Higher confluence = higher probability.
+    Every scan is logged for historical calibration — see Scan History below.
     <span style="color:#3a5a48"> · Not financial advice.</span>
+  </div>
+
+  <!-- Scan History & Prediction Accuracy -->
+  <div style="margin-top:20px;border-top:1px solid rgba(255,255,255,0.05);padding-top:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#a78bfa">📜 SCAN HISTORY & ACCURACY</div>
+        <div style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;margin-top:2px">Every scan is logged. Predictions auto-resolve against live price. Build calibration data over time.</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button onclick="renderScanHistory()" style="font-size:8px;padding:5px 12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">↻ Refresh</button>
+        <button onclick="exportScanLog()" style="font-size:8px;padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:#5a7a68;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">📥 Export CSV</button>
+        <button onclick="if(confirm('Clear all scan history? This cannot be undone.')){localStorage.removeItem('bestTradesScanLog_v1');renderScanHistory()}" style="font-size:8px;padding:5px 12px;background:rgba(255,77,109,0.06);border:1px solid rgba(255,77,109,0.15);color:#ff4d6d;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">🗑 Clear</button>
+      </div>
+    </div>
+    <!-- Accuracy Summary -->
+    <div id="scanAccuracySummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px"></div>
+    <!-- Accuracy by Probability Bucket -->
+    <div id="scanCalibrationChart" style="margin-bottom:12px"></div>
+    <!-- Recent Scans Table -->
+    <div id="scanHistoryTable" style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-radius:8px;padding:12px;font-family:'Space Mono',monospace;font-size:10px;color:#5a7a68;max-height:400px;overflow-y:auto">
+      No scan history yet. Run a scan to start building calibration data.
+    </div>
   </div>
 
   <!-- Active Positions (from BloFin) -->
@@ -2932,6 +3005,30 @@ function switchAuthView(view) {
       </div><!-- end ptDetailLoaded -->
     </div><!-- end detail panel -->
   </div><!-- end grid -->
+
+  <!-- Portfolio Correlation View (#3 Priority) -->
+  <div style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#63b3ed;font-family:'Space Mono',monospace">🔗 PORTFOLIO OVERVIEW & CORRELATION</div>
+        <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px">Aggregate metrics across all strategies. Detects overlapping exposure and correlated bets.</div>
+      </div>
+      <button onclick="renderPortfolioCorrelation()" style="font-size:8px;padding:5px 12px;background:rgba(99,179,237,0.1);border:1px solid rgba(99,179,237,0.25);color:#63b3ed;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">↻ Refresh</button>
+    </div>
+    <!-- Portfolio KPIs -->
+    <div id="portfolioKPIs" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:10px"></div>
+    <!-- Correlation Matrix -->
+    <div id="portfolioCorrelation" style="margin-bottom:10px"></div>
+    <!-- Exposure Breakdown -->
+    <div id="portfolioExposure" style="margin-bottom:10px"></div>
+    <!-- Combined Equity Curve -->
+    <div id="portfolioCombinedEquity" style="background:rgba(255,255,255,0.02);border:1px solid rgba(99,179,237,0.12);border-radius:8px;padding:12px;display:none">
+      <div style="font-size:8px;font-weight:700;color:#63b3ed;font-family:'Space Mono',monospace;letter-spacing:2px;margin-bottom:8px">📈 COMBINED EQUITY CURVE</div>
+      <div style="height:160px;position:relative">
+        <canvas id="portfolioEquityChart" style="width:100%;height:100%"></canvas>
+      </div>
+    </div>
+  </div>
 
   <!-- Trading Wallet + Go Live section (full width, unchanged) -->
   <div id="ptWalletSection" style="background:rgba(0,245,160,0.03);border:1px solid rgba(0,245,160,0.12);border-radius:10px;padding:16px">
@@ -4377,6 +4474,11 @@ function backtest(d, sig, cap, opts={}, qualityArr=null, regimes=null){
     shortCount: shortTrades.length,
     longWR: longTrades.length ? longTrades.filter(t=>t.win).length/longTrades.length*100 : 0,
     shortWR: shortTrades.length ? shortTrades.filter(t=>t.win).length/shortTrades.length*100 : 0,
+    sortino: calcSortino(equity),
+    profitFactor: calcProfitFactor(trades),
+    calmar: calcCalmar(ret, calcMaxDD(equity, cap)),
+    ddRecovery: calcDrawdownRecovery(equity, cap),
+    monteCarlo: runMonteCarlo(trades, cap),
   }
 }
 
@@ -4420,7 +4522,25 @@ function walkForwardTest(d, parts, cap, opts, windows){
   }
   const passing = results.filter(r=>r.pass).length;
   const consistency = results.length ? (passing/results.length*100) : 0;
-  return { windows: results, consistency, passing, total: results.length };
+
+  // Out-of-sample analysis (#9): compare first half (in-sample) vs second half (out-of-sample)
+  const midpoint = Math.floor(results.length / 2);
+  const inSample = results.slice(0, midpoint);
+  const outOfSample = results.slice(midpoint);
+  const isAvgRet = inSample.length ? inSample.reduce((s, r) => s + r.ret, 0) / inSample.length : 0;
+  const oosAvgRet = outOfSample.length ? outOfSample.reduce((s, r) => s + r.ret, 0) / outOfSample.length : 0;
+  const isAvgWR = inSample.length ? inSample.reduce((s, r) => s + r.wr, 0) / inSample.length : 0;
+  const oosAvgWR = outOfSample.length ? outOfSample.reduce((s, r) => s + r.wr, 0) / outOfSample.length : 0;
+  const degradation = isAvgRet !== 0 ? ((oosAvgRet - isAvgRet) / Math.abs(isAvgRet) * 100) : 0;
+  const isOverfit = degradation < -40; // >40% degradation suggests overfitting
+
+  return { windows: results, consistency, passing, total: results.length,
+    outOfSample: {
+      inSampleReturn: isAvgRet, outOfSampleReturn: oosAvgRet,
+      inSampleWR: isAvgWR, outOfSampleWR: oosAvgWR,
+      degradation, isOverfit,
+    }
+  };
 }
 
 function renderWalkForward(wf){
@@ -4428,12 +4548,32 @@ function renderWalkForward(wf){
   $('wfPanel').style.display='block';
   const colour = wf.consistency >= 70 ? '#00f5a0' : wf.consistency >= 50 ? '#ffd60a' : '#ff4d6d';
   const grade = wf.consistency >= 80 ? 'ROBUST ✅' : wf.consistency >= 60 ? 'MODERATE ⚠️' : 'FRAGILE ❌';
+  // Out-of-sample analysis (#9)
+  const oos = wf.outOfSample;
+  const oosHtml = oos ? `
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;padding:8px;background:rgba(99,179,237,0.06);border:1px solid rgba(99,179,237,0.15);border-radius:6px;font-family:'Space Mono',monospace;font-size:8px">
+    <div>
+      <div style="color:#5a7a68;font-size:7px">IN-SAMPLE (1st half)</div>
+      <div style="color:#aaa;font-size:11px;font-weight:700">${oos.inSampleReturn >= 0 ? '+' : ''}${oos.inSampleReturn.toFixed(1)}% · WR ${oos.inSampleWR.toFixed(0)}%</div>
+    </div>
+    <div>
+      <div style="color:#5a7a68;font-size:7px">OUT-OF-SAMPLE (2nd half)</div>
+      <div style="color:${oos.outOfSampleReturn >= 0 ? '#00f5a0' : '#ff4d6d'};font-size:11px;font-weight:700">${oos.outOfSampleReturn >= 0 ? '+' : ''}${oos.outOfSampleReturn.toFixed(1)}% · WR ${oos.outOfSampleWR.toFixed(0)}%</div>
+    </div>
+    <div>
+      <div style="color:#5a7a68;font-size:7px">DEGRADATION</div>
+      <div style="color:${oos.isOverfit ? '#ff4d6d' : Math.abs(oos.degradation) < 20 ? '#00f5a0' : '#f5c400'};font-size:11px;font-weight:700">${oos.degradation >= 0 ? '+' : ''}${oos.degradation.toFixed(0)}%</div>
+      <div style="color:${oos.isOverfit ? '#ff4d6d' : '#00f5a0'};font-size:7px">${oos.isOverfit ? '⚠ Likely overfit' : '✓ Stable'}</div>
+    </div>
+  </div>` : '';
+
   let html = `<div class="consistency-score" style="background:rgba(0,0,0,0.3);border:1px solid ${colour}40;color:${colour}">
     ${wf.consistency.toFixed(0)}% <span style="font-size:12px;font-weight:400">CONSISTENCY — ${grade}</span>
   </div>
   <div style="font-size:9px;color:var(--text-muted);font-family:'Space Mono',monospace;margin-bottom:8px">
     ${wf.passing}/${wf.total} time windows were profitable. Higher = more reliable strategy.
   </div>
+  ${oosHtml}
   <div class="wf-grid">`;
 
   const maxAbs = Math.max(...wf.windows.map(w=>Math.abs(w.ret)), 1);
@@ -4454,6 +4594,132 @@ function renderWalkForward(wf){
 
 function calcMaxDD(eq,cap){let peak=cap,maxDD=0;for(const v of eq){if(v>peak)peak=v;const dd=(peak-v)/peak*100;if(dd>maxDD)maxDD=dd}return maxDD}
 function calcSharpe(eq){if(eq.length<3)return 0;const rets=[];for(let i=1;i<eq.length;i++){if(eq[i-1]>0&&eq[i]>0)rets.push(eq[i]/eq[i-1]-1)}if(rets.length<3)return 0;const mean=rets.reduce((a,b)=>a+b,0)/rets.length,varr=rets.reduce((a,b)=>a+(b-mean)**2,0)/(rets.length-1),sd=Math.sqrt(varr);return sd===0?0:Math.sqrt(252)*(mean/sd)}
+
+// ══════════════════════════════════════════════════════════════
+// EXTENDED RISK METRICS (#8) — Sortino, Profit Factor, Calmar, Recovery
+// ══════════════════════════════════════════════════════════════
+function calcSortino(eq) {
+  if (eq.length < 3) return 0;
+  const rets = [];
+  for (let i = 1; i < eq.length; i++) { if (eq[i-1] > 0 && eq[i] > 0) rets.push(eq[i]/eq[i-1] - 1); }
+  if (rets.length < 3) return 0;
+  const mean = rets.reduce((a, b) => a + b, 0) / rets.length;
+  const downside = rets.filter(r => r < 0);
+  if (downside.length === 0) return mean > 0 ? 99 : 0;
+  const dsVar = downside.reduce((a, b) => a + b * b, 0) / downside.length;
+  const dsDev = Math.sqrt(dsVar);
+  return dsDev === 0 ? 0 : Math.sqrt(252) * (mean / dsDev);
+}
+
+function calcProfitFactor(trades) {
+  const grossProfit = trades.filter(t => t.pct > 0).reduce((s, t) => s + t.pct, 0);
+  const grossLoss = Math.abs(trades.filter(t => t.pct < 0).reduce((s, t) => s + t.pct, 0));
+  return grossLoss === 0 ? (grossProfit > 0 ? 99 : 0) : grossProfit / grossLoss;
+}
+
+function calcCalmar(ret, maxDD) {
+  return maxDD === 0 ? 0 : ret / maxDD;
+}
+
+// Drawdown recovery tracking (#11) — time-to-recovery for each drawdown
+function calcDrawdownRecovery(eq, cap) {
+  const drawdowns = [];
+  let peak = cap, ddStart = null, ddPeak = cap, maxDDPct = 0;
+  for (let i = 0; i < eq.length; i++) {
+    if (eq[i] > peak) {
+      // New peak — if we were in a drawdown, record recovery
+      if (ddStart !== null) {
+        drawdowns.push({
+          startBar: ddStart,
+          endBar: i,
+          recoveryBars: i - ddStart,
+          peakValue: ddPeak,
+          troughValue: ddPeak * (1 - maxDDPct / 100),
+          ddPct: maxDDPct,
+        });
+        ddStart = null;
+        maxDDPct = 0;
+      }
+      peak = eq[i];
+      ddPeak = peak;
+    } else {
+      const dd = (peak - eq[i]) / peak * 100;
+      if (dd > 1 && ddStart === null) { // >1% drawdown threshold
+        ddStart = i;
+        ddPeak = peak;
+      }
+      if (dd > maxDDPct) maxDDPct = dd;
+    }
+  }
+  // If still in drawdown at end, record as unrecovered
+  if (ddStart !== null) {
+    drawdowns.push({
+      startBar: ddStart,
+      endBar: eq.length - 1,
+      recoveryBars: null, // unrecovered
+      peakValue: ddPeak,
+      troughValue: ddPeak * (1 - maxDDPct / 100),
+      ddPct: maxDDPct,
+    });
+  }
+  const recovered = drawdowns.filter(d => d.recoveryBars !== null);
+  const avgRecovery = recovered.length > 0 ? recovered.reduce((s, d) => s + d.recoveryBars, 0) / recovered.length : null;
+  const maxRecovery = recovered.length > 0 ? Math.max(...recovered.map(d => d.recoveryBars)) : null;
+  const worstDD = drawdowns.length > 0 ? Math.max(...drawdowns.map(d => d.ddPct)) : 0;
+  return { drawdowns, avgRecovery, maxRecovery, worstDD, count: drawdowns.length, unrecovered: drawdowns.filter(d => d.recoveryBars === null).length };
+}
+
+// Monte Carlo simulation (#6) — shuffle trades, measure outcome distribution
+function runMonteCarlo(trades, capital, iterations = 1000) {
+  if (trades.length < 5) return null;
+  const pctReturns = trades.map(t => t.pct / 100); // as decimals
+  const results = [];
+
+  for (let i = 0; i < iterations; i++) {
+    // Fisher-Yates shuffle of trade returns
+    const shuffled = [...pctReturns];
+    for (let j = shuffled.length - 1; j > 0; j--) {
+      const k = Math.floor(Math.random() * (j + 1));
+      [shuffled[j], shuffled[k]] = [shuffled[k], shuffled[j]];
+    }
+
+    // Simulate equity curve
+    let eq = capital, peak = capital, maxDD = 0;
+    for (const r of shuffled) {
+      eq *= (1 + r);
+      if (eq > peak) peak = eq;
+      const dd = (peak - eq) / peak * 100;
+      if (dd > maxDD) maxDD = dd;
+    }
+
+    results.push({
+      finalEquity: eq,
+      returnPct: (eq - capital) / capital * 100,
+      maxDD,
+    });
+  }
+
+  // Sort by return for percentile calculation
+  results.sort((a, b) => a.returnPct - b.returnPct);
+  const pctile = p => results[Math.floor(p / 100 * (results.length - 1))];
+
+  return {
+    iterations,
+    tradeCount: trades.length,
+    p5:  pctile(5),
+    p25: pctile(25),
+    p50: pctile(50),  // median
+    p75: pctile(75),
+    p95: pctile(95),
+    mean: {
+      returnPct: results.reduce((s, r) => s + r.returnPct, 0) / results.length,
+      maxDD: results.reduce((s, r) => s + r.maxDD, 0) / results.length,
+      finalEquity: results.reduce((s, r) => s + r.finalEquity, 0) / results.length,
+    },
+    profitProb: (results.filter(r => r.returnPct > 0).length / results.length * 100).toFixed(1),
+    ruinProb: (results.filter(r => r.maxDD > 50).length / results.length * 100).toFixed(1),
+  };
+}
 
 // ===== TICKER =====
 async function fetchTicker(){
@@ -5808,6 +6074,66 @@ function updateMetrics(res,cap,parts,opts={}){
   } else if (satsEl) {
     satsEl.style.display = 'none';
   }
+
+  // Extended risk metrics (#8)
+  $('metricSortino').textContent = f(res.sortino, 2);
+  $('metricSortino').className = 'metric-value ' + (res.sortino >= 1.5 ? 'pos' : res.sortino >= 0 ? 'neutral' : 'neg');
+  $('metricPF').textContent = f(res.profitFactor, 2);
+  $('metricPF').className = 'metric-value ' + (res.profitFactor >= 1.5 ? 'pos' : res.profitFactor >= 1 ? 'neutral' : 'neg');
+  $('metricPFSub').textContent = res.profitFactor >= 1 ? 'Edge confirmed' : 'No edge';
+  $('metricCalmar').textContent = f(res.calmar, 2);
+  $('metricCalmar').className = 'metric-value ' + (res.calmar >= 2 ? 'pos' : res.calmar >= 0.5 ? 'neutral' : 'neg');
+
+  // Drawdown recovery (#11)
+  if (res.ddRecovery) {
+    const ddr = res.ddRecovery;
+    $('metricRecovery').textContent = ddr.avgRecovery != null ? Math.round(ddr.avgRecovery) + ' bars' : 'N/A';
+    $('metricRecovery').className = 'metric-value ' + (ddr.avgRecovery != null && ddr.avgRecovery < 50 ? 'pos' : 'neutral');
+    $('metricRecoverySub').textContent = ddr.count + ' drawdowns' + (ddr.unrecovered ? ', ' + ddr.unrecovered + ' open' : '');
+
+    const ddEl = $('ddRecoveryResult');
+    if (ddEl && ddr.drawdowns.length > 0) {
+      const top5 = [...ddr.drawdowns].sort((a, b) => b.ddPct - a.ddPct).slice(0, 5);
+      ddEl.style.display = 'block';
+      ddEl.innerHTML = `
+        <div style="font-size:9px;font-weight:700;color:#a78bfa;margin-bottom:6px">📉 DRAWDOWN RECOVERY ANALYSIS</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+          <div><div style="font-size:8px;color:#5a7a68">Total Drawdowns</div><div style="font-size:13px;font-weight:700;color:#aaa">${ddr.count}</div></div>
+          <div><div style="font-size:8px;color:#5a7a68">Avg Recovery</div><div style="font-size:13px;font-weight:700;color:${ddr.avgRecovery && ddr.avgRecovery < 50 ? '#00f5a0' : '#f5c400'}">${ddr.avgRecovery != null ? Math.round(ddr.avgRecovery) + ' bars' : 'N/A'}</div></div>
+          <div><div style="font-size:8px;color:#5a7a68">Max Recovery</div><div style="font-size:13px;font-weight:700;color:#ff4d6d">${ddr.maxRecovery != null ? ddr.maxRecovery + ' bars' : 'N/A'}</div></div>
+        </div>
+        <div style="font-size:8px;color:#5a7a68;margin-bottom:4px">Top 5 worst drawdowns:</div>
+        <div style="font-size:7px;font-family:'Space Mono',monospace;color:#aaa">
+          ${top5.map((d, i) => `<div style="margin-bottom:2px">${i+1}. <span style="color:#ff4d6d">-${d.ddPct.toFixed(1)}%</span> · ${d.recoveryBars != null ? '<span style="color:#00f5a0">recovered in ' + d.recoveryBars + ' bars</span>' : '<span style="color:#f5c400">⚠ not recovered</span>'}</div>`).join('')}
+        </div>`;
+    } else if (ddEl) { ddEl.style.display = 'none'; }
+  }
+
+  // Monte Carlo results (#6)
+  const mcEl = $('monteCarloResult');
+  if (mcEl && res.monteCarlo) {
+    const mc = res.monteCarlo;
+    mcEl.style.display = 'block';
+    mcEl.innerHTML = `
+      <div style="font-size:9px;font-weight:700;color:#63b3ed;margin-bottom:6px">🎲 MONTE CARLO SIMULATION (${mc.iterations} iterations, ${mc.tradeCount} trades shuffled)</div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:8px">
+        <div><div style="font-size:7px;color:#5a7a68">5th Pctile</div><div style="font-size:11px;font-weight:700;color:#ff4d6d">${mc.p5.returnPct >= 0 ? '+' : ''}${f(mc.p5.returnPct,1)}%</div></div>
+        <div><div style="font-size:7px;color:#5a7a68">25th Pctile</div><div style="font-size:11px;font-weight:700;color:#ff8c69">${mc.p25.returnPct >= 0 ? '+' : ''}${f(mc.p25.returnPct,1)}%</div></div>
+        <div><div style="font-size:7px;color:#5a7a68">Median</div><div style="font-size:11px;font-weight:700;color:#f5c400">${mc.p50.returnPct >= 0 ? '+' : ''}${f(mc.p50.returnPct,1)}%</div></div>
+        <div><div style="font-size:7px;color:#5a7a68">75th Pctile</div><div style="font-size:11px;font-weight:700;color:#00f5a0">${mc.p75.returnPct >= 0 ? '+' : ''}${f(mc.p75.returnPct,1)}%</div></div>
+        <div><div style="font-size:7px;color:#5a7a68">95th Pctile</div><div style="font-size:11px;font-weight:700;color:#00f5a0">${mc.p95.returnPct >= 0 ? '+' : ''}${f(mc.p95.returnPct,1)}%</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:6px">
+        <div><div style="font-size:7px;color:#5a7a68">Profit Probability</div><div style="font-size:13px;font-weight:700;color:${parseFloat(mc.profitProb) >= 60 ? '#00f5a0' : '#f5c400'}">${mc.profitProb}%</div></div>
+        <div><div style="font-size:7px;color:#5a7a68">Ruin Risk (>50% DD)</div><div style="font-size:13px;font-weight:700;color:${parseFloat(mc.ruinProb) <= 5 ? '#00f5a0' : '#ff4d6d'}">${mc.ruinProb}%</div></div>
+        <div><div style="font-size:7px;color:#5a7a68">Mean MaxDD</div><div style="font-size:13px;font-weight:700;color:#ff8c69">${f(mc.mean.maxDD,1)}%</div></div>
+        <div><div style="font-size:7px;color:#5a7a68">Mean Return</div><div style="font-size:13px;font-weight:700;color:${mc.mean.returnPct >= 0 ? '#00f5a0' : '#ff4d6d'}">${mc.mean.returnPct >= 0 ? '+' : ''}${f(mc.mean.returnPct,1)}%</div></div>
+      </div>
+      <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">
+        ${parseFloat(mc.profitProb) >= 70 ? '✅ Strong edge — profitable in most trade orderings' : parseFloat(mc.profitProb) >= 50 ? '⚠ Marginal edge — sensitive to trade sequence' : '❌ Weak edge — result likely driven by luck/trade ordering'}
+        · Actual: ${f(res.ret,1)}% vs Median: ${f(mc.p50.returnPct,1)}% ${Math.abs(res.ret - mc.p50.returnPct) > 15 ? '⚠ Large deviation from median — sequence-dependent' : '✓ Close to median — robust'}
+      </div>`;
+  } else if (mcEl) { mcEl.style.display = 'none'; }
 
   // Auto-trigger strategy explainer after each backtest
   generateStrategyExplainer(res, cap, parts, opts);
@@ -9063,6 +9389,7 @@ function switchPageTab(tab) {
     checkBlofinConnection();
     refreshBtPositions();
     liveRefreshBalance();
+    renderScanHistory();
   } else if (tab === 'alerts') {
     renderAlertList();
     loadTgCredentialsIntoForm();
@@ -9070,6 +9397,7 @@ function switchPageTab(tab) {
   } else if (tab === 'paper') {
     restorePaperPolls();
     renderPaperDashboard();
+    renderPortfolioCorrelation();
     checkWalletLoaded();
   } else if (tab === 'live') {
     liveRefreshAll();
@@ -10322,17 +10650,74 @@ function renderWindowView(data, window, el) {
   el.innerHTML = html;
 }
 
+// ── P100-derived sigmoid midpoints (#4 Priority) ──────────────
+// Analyzes historical P100 + watchlist data to find the degen score
+// at which tokens had a ~50% chance of hitting each milestone
+// Falls back to research-based defaults when insufficient data
+function deriveP100Midpoints() {
+  const DEFAULT = { mid2x: 50, mid5x: 70, mid10x: 78, slope: 0.10 };
+  try {
+    const p100 = Object.values(p100Load());
+    const wl = Object.values(wlLoad());
+    const all = [...p100, ...wl].filter(t =>
+      t.degenScore != null && t.degenScore > 0 &&
+      (Object.keys(t.milestones || {}).length > 0 ||
+       (Date.now() - new Date(t.capturedAt || t.addedAt || 0).getTime()) / 3600000 > 24)
+    );
+
+    if (all.length < 10) return DEFAULT; // need minimum sample
+
+    // For each milestone, find the score threshold where ~50% of tokens above it hit the milestone
+    function findMidpoint(milestone, fallback) {
+      const withMilestone = all.filter(t => t.milestones?.[milestone]);
+      const without = all.filter(t => !t.milestones?.[milestone]);
+      if (withMilestone.length < 3 || without.length < 3) return fallback;
+
+      // Average score of tokens that hit vs missed
+      const avgHit = withMilestone.reduce((s, t) => s + t.degenScore, 0) / withMilestone.length;
+      const avgMiss = without.reduce((s, t) => s + t.degenScore, 0) / without.length;
+
+      // Midpoint = weighted average between hit and miss averages
+      // Weight toward the miss average since we want the crossover point
+      const mid = avgMiss * 0.4 + avgHit * 0.6;
+      // Clamp to reasonable range
+      return Math.max(30, Math.min(90, Math.round(mid)));
+    }
+
+    const mid2x  = findMidpoint('2x',  DEFAULT.mid2x);
+    const mid5x  = findMidpoint('5x',  DEFAULT.mid5x);
+    const mid10x = findMidpoint('10x', DEFAULT.mid10x);
+
+    // Adaptive slope: steeper when we have more data (more confident in discrimination)
+    const slope = all.length >= 30 ? 0.12 : all.length >= 15 ? 0.10 : 0.08;
+
+    // Enforce ordering: 2x < 5x < 10x
+    const ordered = {
+      mid2x: Math.min(mid2x, mid5x - 5),
+      mid5x: Math.min(mid5x, mid10x - 5),
+      mid10x,
+      slope,
+    };
+
+    console.log(`[MemeProb] P100-derived midpoints: 2x@${ordered.mid2x}, 5x@${ordered.mid5x}, 10x@${ordered.mid10x} (n=${all.length}, slope=${slope})`);
+    return ordered;
+  } catch (e) {
+    return DEFAULT;
+  }
+}
+
 // ── Probability weighting for meme coin cards ─────────────────
 // Uses degen score + learned success rates from P100/watchlist history
 function calcMemeProbability(c) {
   // Base probability from degen score (sigmoid curve)
   const s = c.degenScore || 0;
   // Sigmoid: maps 0-100 score to probability range
-  // Research: actual meme coin base rates ~15% for 2x, ~5% for 5x, ~2% for 10x
-  // Midpoints shifted to 50/70/78; steeper slope (0.10) for sharper discrimination
-  const base2x  = 1 / (1 + Math.exp(-0.10 * (s - 50)));  // 50% at score 50
-  const base5x  = 1 / (1 + Math.exp(-0.10 * (s - 70)));  // 50% at score 70
-  const base10x = 1 / (1 + Math.exp(-0.10 * (s - 78)));  // 50% at score 78
+  // (#4 Priority) Midpoints derived from P100 history instead of hardcoded
+  // Uses actual hit rates from tracked tokens to calibrate where 50% probability falls
+  const p100Midpoints = deriveP100Midpoints();
+  const base2x  = 1 / (1 + Math.exp(-p100Midpoints.slope * (s - p100Midpoints.mid2x)));
+  const base5x  = 1 / (1 + Math.exp(-p100Midpoints.slope * (s - p100Midpoints.mid5x)));
+  const base10x = 1 / (1 + Math.exp(-p100Midpoints.slope * (s - p100Midpoints.mid10x)));
 
   // Adjust based on learned rates from P100 history
   const p100 = Object.values(p100Load());
@@ -13023,8 +13408,15 @@ function computeLiveSignals(d, tf) {
     label: rsiVal == null ? '—' : rsiVal <= rsiOversold ? `RSI ${rsiVal?.toFixed(0)} — Oversold (≤${rsiOversold}) ▲` : rsiVal >= rsiOverbought ? `RSI ${rsiVal?.toFixed(0)} — Overbought (≥${rsiOverbought}) ▼` : `RSI ${rsiVal?.toFixed(0)} — Neutral`,
   };
 
-  // EMA 21/55 — with neutral zone when spread < 0.5% (research: markets range 60-70% of time)
-  const emaF = ema(c, 21), emaS = ema(c, 55);
+  // EMA — regime-adaptive periods (#10) + neutral zone when spread < 0.5%
+  // Bull: use faster EMAs (13/34) to catch momentum. Bear: slower (21/55) for noise filtering.
+  // Volatile: widen to 34/89 to avoid whipsaws. Squeeze: tighten to 13/34 for breakout speed.
+  const _emaVolatile = last > 0 && atr(d, 14).slice(-20).filter(v => v != null).reduce((s,v) => s+v, 0) /
+    Math.max(1, atr(d, 14).slice(-20).filter(v => v != null).length) >
+    atr(d, 14).slice(-50, -20).filter(v => v != null).reduce((s,v) => s+v, 0) /
+    Math.max(1, atr(d, 14).slice(-50, -20).filter(v => v != null).length) * 1.3;
+  const _emaPeriods = _emaVolatile ? { fast: 34, slow: 89 } : macro_bull ? { fast: 13, slow: 34 } : macro_bear ? { fast: 21, slow: 55 } : { fast: 21, slow: 55 };
+  const emaF = ema(c, _emaPeriods.fast), emaS = ema(c, _emaPeriods.slow);
   const emaSpread = emaF[last] != null && emaS[last] != null ? Math.abs(emaF[last] - emaS[last]) / emaS[last] : 0;
   const emaIsFlat = emaSpread < 0.005; // Within 0.5% = ranging, no clear trend
   const emaBull = !emaIsFlat && emaF[last] != null && emaS[last] != null && emaF[last] > emaS[last];
@@ -13037,7 +13429,7 @@ function computeLiveSignals(d, tf) {
     bear: emaBear,
     crossBull: emaCross,
     crossBear: emaBearCross,
-    label: emaIsFlat ? `EMA 21/55 — Flat (${(emaSpread*100).toFixed(2)}% spread, ranging)` : emaCross ? 'EMA 21/55 — Golden Cross ▲' : emaBearCross ? 'EMA 21/55 — Death Cross ▼' : emaBull ? 'EMA 21/55 — Bull trend ▲' : 'EMA 21/55 — Bear trend ▼',
+    label: emaIsFlat ? `EMA ${_emaPeriods.fast}/${_emaPeriods.slow} — Flat (${(emaSpread*100).toFixed(2)}% spread, ranging)` : emaCross ? `EMA ${_emaPeriods.fast}/${_emaPeriods.slow} — Golden Cross ▲` : emaBearCross ? `EMA ${_emaPeriods.fast}/${_emaPeriods.slow} — Death Cross ▼` : emaBull ? `EMA ${_emaPeriods.fast}/${_emaPeriods.slow} — Bull trend ▲` : `EMA ${_emaPeriods.fast}/${_emaPeriods.slow} — Bear trend ▼`,
   };
 
   // MACD — 4-tier TF-adaptive parameters (research: eliminates 5.4× lookback cliff at 15m→30m)
@@ -13461,6 +13853,518 @@ function getCalibratedProb(rawProb, currentRegime) {
   } catch (e) { return rawProb; }
 }
 
+// ══════════════════════════════════════════════════════════════
+// BEST TRADES SCAN LOG — Complete Historical Record (#1 Priority)
+// Logs EVERY scan result (not just high-confidence) for full calibration
+// Resolves predictions against live price to build accuracy dataset
+// ══════════════════════════════════════════════════════════════
+const SCAN_LOG_KEY = 'bestTradesScanLog_v1';
+const SCAN_LOG_MAX = 2000; // max individual signal entries
+
+function logScanResults(results, tf, leverage) {
+  try {
+    const log = JSON.parse(localStorage.getItem(SCAN_LOG_KEY) || '[]');
+    const scanId = Date.now();
+
+    for (const r of results) {
+      log.push({
+        scanId,
+        ts: scanId,
+        asset: r.asset,
+        sym: r.sym,
+        tf,
+        leverage,
+        direction: r.direction,
+        prob: r.prob,
+        price: r.price,
+        stopPrice: r.rrData ? parseFloat(r.rrData.stop) : null,
+        targetPrice: r.rrData ? parseFloat(r.rrData.target) : null,
+        rr: r.rr,
+        ev: parseFloat(r.ev) || 0,
+        confidence: r.confidence,
+        marketQuality: r.marketQuality,
+        mqScore: r.mqScore,
+        regime: r.regimeData?.regime || 'unknown',
+        btcRegime: r.regimeData?._btcRegime || null,
+        localRegime: r.regimeData?._localRegime || null,
+        entryEfficiency: r.entryEfficiency || null,
+        calibratedProb: r.calibratedProb || null,
+        hitsCount: r.hits?.length || 0,
+        missesCount: r.misses?.length || 0,
+        fundingRate: r.fundingRate,
+        longProb: r.longProb,
+        shortProb: r.shortProb,
+        correlationDiscount: r._correlationDiscount || 0,
+        entryPenalty: r._entryPenalty || 0,
+        // Resolution fields — filled later
+        resolved: false,
+        outcome: null, // 'win', 'loss', 'expired'
+        resolvedPrice: null,
+        resolvedAt: null,
+        maxFavorable: null,  // max price move in favorable direction (MFE)
+        maxAdverse: null,    // max price move against (MAE)
+      });
+    }
+
+    // Cap log size — remove oldest entries
+    if (log.length > SCAN_LOG_MAX) {
+      log.splice(0, log.length - SCAN_LOG_MAX);
+    }
+
+    localStorage.setItem(SCAN_LOG_KEY, JSON.stringify(log));
+    console.log(`[ScanLog] Logged ${results.length} signals (total: ${log.length})`);
+  } catch (e) {
+    console.warn('[ScanLog] Failed to log:', e.message);
+  }
+}
+
+// Resolve unresolved scan log entries against current prices
+// Called during each scan when we already have live prices
+function resolveScanLogEntries(currentPrices) {
+  try {
+    const log = JSON.parse(localStorage.getItem(SCAN_LOG_KEY) || '[]');
+    let resolved = 0;
+    const now = Date.now();
+    const maxAge = 14 * 24 * 60 * 60 * 1000; // 14 days max for resolution
+
+    for (const entry of log) {
+      if (entry.resolved) continue;
+      if (!entry.stopPrice || !entry.targetPrice) continue;
+
+      const currentPrice = currentPrices[entry.sym];
+      if (!currentPrice) continue;
+
+      const age = now - entry.ts;
+
+      // Track MFE/MAE (Maximum Favorable/Adverse Excursion)
+      if (entry.direction === 'long') {
+        const favorable = ((currentPrice - entry.price) / entry.price) * 100;
+        if (entry.maxFavorable === null || favorable > entry.maxFavorable) entry.maxFavorable = favorable;
+        if (entry.maxAdverse === null || -favorable > entry.maxAdverse) entry.maxAdverse = -favorable;
+      } else {
+        const favorable = ((entry.price - currentPrice) / entry.price) * 100;
+        if (entry.maxFavorable === null || favorable > entry.maxFavorable) entry.maxFavorable = favorable;
+        if (entry.maxAdverse === null || -favorable > entry.maxAdverse) entry.maxAdverse = -favorable;
+      }
+
+      // Check target/stop hit
+      let hitTarget = false, hitStop = false;
+      if (entry.direction === 'long') {
+        if (currentPrice >= entry.targetPrice) hitTarget = true;
+        if (currentPrice <= entry.stopPrice) hitStop = true;
+      } else {
+        if (currentPrice <= entry.targetPrice) hitTarget = true;
+        if (currentPrice >= entry.stopPrice) hitStop = true;
+      }
+
+      if (hitTarget) {
+        entry.resolved = true;
+        entry.outcome = 'win';
+        entry.resolvedPrice = currentPrice;
+        entry.resolvedAt = now;
+        resolved++;
+      } else if (hitStop) {
+        entry.resolved = true;
+        entry.outcome = 'loss';
+        entry.resolvedPrice = currentPrice;
+        entry.resolvedAt = now;
+        resolved++;
+      } else if (age > maxAge) {
+        // Expired — mark as expired with current P&L
+        entry.resolved = true;
+        entry.outcome = 'expired';
+        entry.resolvedPrice = currentPrice;
+        entry.resolvedAt = now;
+        resolved++;
+      }
+    }
+
+    if (resolved > 0) {
+      localStorage.setItem(SCAN_LOG_KEY, JSON.stringify(log));
+      console.log(`[ScanLog] Resolved ${resolved} entries`);
+    }
+  } catch (e) {
+    console.warn('[ScanLog] Resolve failed:', e.message);
+  }
+}
+
+// Get scan log statistics for UI
+function getScanLogStats() {
+  try {
+    const log = JSON.parse(localStorage.getItem(SCAN_LOG_KEY) || '[]');
+    const resolved = log.filter(e => e.resolved && e.outcome !== 'expired');
+    const wins = resolved.filter(e => e.outcome === 'win');
+    const losses = resolved.filter(e => e.outcome === 'loss');
+    const pending = log.filter(e => !e.resolved);
+    const expired = log.filter(e => e.outcome === 'expired');
+
+    // Accuracy by probability bucket (5% increments)
+    const buckets = {};
+    for (const e of resolved) {
+      const bucket = Math.floor(e.prob / 5) * 5;
+      const key = `${bucket}-${bucket + 5}%`;
+      if (!buckets[key]) buckets[key] = { total: 0, wins: 0, bucket };
+      buckets[key].total++;
+      if (e.outcome === 'win') buckets[key].wins++;
+    }
+
+    // Accuracy by asset
+    const byAsset = {};
+    for (const e of resolved) {
+      if (!byAsset[e.asset]) byAsset[e.asset] = { total: 0, wins: 0 };
+      byAsset[e.asset].total++;
+      if (e.outcome === 'win') byAsset[e.asset].wins++;
+    }
+
+    // Accuracy by regime
+    const byRegime = {};
+    for (const e of resolved) {
+      const regime = (e.regime || 'unknown').split('_')[0];
+      if (!byRegime[regime]) byRegime[regime] = { total: 0, wins: 0 };
+      byRegime[regime].total++;
+      if (e.outcome === 'win') byRegime[regime].wins++;
+    }
+
+    // Accuracy by market quality
+    const byMQ = {};
+    for (const e of resolved) {
+      const mq = e.marketQuality || '?';
+      if (!byMQ[mq]) byMQ[mq] = { total: 0, wins: 0 };
+      byMQ[mq].total++;
+      if (e.outcome === 'win') byMQ[mq].wins++;
+    }
+
+    // Accuracy by timeframe
+    const byTF = {};
+    for (const e of resolved) {
+      if (!byTF[e.tf]) byTF[e.tf] = { total: 0, wins: 0 };
+      byTF[e.tf].total++;
+      if (e.outcome === 'win') byTF[e.tf].wins++;
+    }
+
+    // Average MFE/MAE for resolved trades
+    const mfeValues = resolved.filter(e => e.maxFavorable != null).map(e => e.maxFavorable);
+    const maeValues = resolved.filter(e => e.maxAdverse != null).map(e => e.maxAdverse);
+    const avgMFE = mfeValues.length ? mfeValues.reduce((s, v) => s + v, 0) / mfeValues.length : 0;
+    const avgMAE = maeValues.length ? maeValues.reduce((s, v) => s + v, 0) / maeValues.length : 0;
+
+    return {
+      total: log.length,
+      resolved: resolved.length,
+      wins: wins.length,
+      losses: losses.length,
+      pending: pending.length,
+      expired: expired.length,
+      winRate: resolved.length > 0 ? (wins.length / resolved.length * 100).toFixed(1) : 'N/A',
+      buckets,
+      byAsset,
+      byRegime,
+      byMQ,
+      byTF,
+      avgMFE: avgMFE.toFixed(2),
+      avgMAE: avgMAE.toFixed(2),
+      recentEntries: log.slice(-50).reverse(), // last 50 for table display
+    };
+  } catch (e) {
+    return { total: 0, resolved: 0, wins: 0, losses: 0, pending: 0, expired: 0, winRate: 'N/A', buckets: {}, byAsset: {}, byRegime: {}, byMQ: {}, byTF: {}, avgMFE: '0', avgMAE: '0', recentEntries: [] };
+  }
+}
+
+// Render scan history UI
+function renderScanHistory() {
+  const stats = getScanLogStats();
+
+  // Summary cards
+  const summaryEl = document.getElementById('scanAccuracySummary');
+  if (summaryEl) {
+    const wrColor = stats.winRate === 'N/A' ? '#5a7a68' : parseFloat(stats.winRate) >= 55 ? '#00f5a0' : parseFloat(stats.winRate) >= 45 ? '#f5c400' : '#ff4d6d';
+    summaryEl.innerHTML = `
+      <div style="background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:800;color:${wrColor};font-family:'Space Mono',monospace">${stats.winRate}${stats.winRate !== 'N/A' ? '%' : ''}</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">WIN RATE</div>
+      </div>
+      <div style="background:rgba(0,245,160,0.06);border:1px solid rgba(0,245,160,0.12);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:800;color:#00f5a0;font-family:'Space Mono',monospace">${stats.wins}</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">WINS</div>
+      </div>
+      <div style="background:rgba(255,77,109,0.06);border:1px solid rgba(255,77,109,0.12);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:800;color:#ff4d6d;font-family:'Space Mono',monospace">${stats.losses}</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">LOSSES</div>
+      </div>
+      <div style="background:rgba(245,196,0,0.06);border:1px solid rgba(245,196,0,0.12);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:800;color:#f5c400;font-family:'Space Mono',monospace">${stats.pending}</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">PENDING</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:800;color:#aaa;font-family:'Space Mono',monospace">${stats.total}</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">TOTAL LOGGED</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:14px;font-weight:800;font-family:'Space Mono',monospace">
+          <span style="color:#00f5a0">+${stats.avgMFE}%</span> / <span style="color:#ff4d6d">-${stats.avgMAE}%</span>
+        </div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">AVG MFE / MAE</div>
+      </div>
+    `;
+  }
+
+  // Calibration chart — probability bucket accuracy
+  const chartEl = document.getElementById('scanCalibrationChart');
+  if (chartEl && Object.keys(stats.buckets).length > 0) {
+    const sortedBuckets = Object.entries(stats.buckets)
+      .sort((a, b) => a[1].bucket - b[1].bucket);
+
+    const bars = sortedBuckets.map(([label, data]) => {
+      const actualWR = (data.wins / data.total * 100).toFixed(0);
+      const expectedMid = data.bucket + 2.5;
+      const barHeight = Math.max(4, data.total * 3);
+      const wrColor = parseFloat(actualWR) >= expectedMid ? '#00f5a0' : parseFloat(actualWR) >= expectedMid - 10 ? '#f5c400' : '#ff4d6d';
+      const isCalibrated = Math.abs(parseFloat(actualWR) - expectedMid) <= 10;
+      return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;min-width:40px">
+        <div style="font-size:7px;color:${wrColor};font-weight:700;font-family:'Space Mono',monospace">${actualWR}%</div>
+        <div style="width:100%;max-width:30px;height:${barHeight}px;background:${wrColor};border-radius:3px;opacity:0.7"></div>
+        <div style="font-size:6px;color:#5a7a68;font-family:'Space Mono',monospace">${label}</div>
+        <div style="font-size:6px;color:#3a5a48;font-family:'Space Mono',monospace">n=${data.total}</div>
+        <div style="font-size:6px;color:${isCalibrated ? '#00f5a0' : '#ff8c69'};font-family:'Space Mono',monospace">${isCalibrated ? '✓' : '⚠'}</div>
+      </div>`;
+    }).join('');
+
+    // Breakdown rows for regime, MQ, TF
+    const regimeRows = Object.entries(stats.byRegime).map(([regime, d]) =>
+      `<span style="color:${regime === 'bull' ? '#00f5a0' : regime === 'bear' ? '#ff4d6d' : '#f5c400'}">${regime}: ${(d.wins/d.total*100).toFixed(0)}% (${d.total})</span>`
+    ).join(' · ');
+
+    const mqRows = Object.entries(stats.byMQ).sort((a,b) => a[0].localeCompare(b[0])).map(([mq, d]) =>
+      `<span style="color:${mq === 'A' ? '#00f5a0' : mq === 'B' ? '#f5c400' : '#ff8c69'}">${mq}: ${(d.wins/d.total*100).toFixed(0)}% (${d.total})</span>`
+    ).join(' · ');
+
+    const tfRows = Object.entries(stats.byTF).map(([tf, d]) =>
+      `<span style="color:#a78bfa">${tf}: ${(d.wins/d.total*100).toFixed(0)}% (${d.total})</span>`
+    ).join(' · ');
+
+    chartEl.innerHTML = `
+      <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-radius:8px;padding:12px">
+        <div style="font-size:9px;font-weight:700;color:#a78bfa;font-family:'Space Mono',monospace;margin-bottom:8px">📊 CALIBRATION: PREDICTED vs ACTUAL WIN RATE</div>
+        <div style="font-size:7px;color:#3a5a48;font-family:'Space Mono',monospace;margin-bottom:8px">✓ = well-calibrated (actual within ±10% of predicted) · ⚠ = miscalibrated</div>
+        <div style="display:flex;gap:4px;align-items:flex-end;padding:8px 0">${bars}</div>
+        <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:8px;margin-top:8px;font-size:7px;font-family:'Space Mono',monospace">
+          <div style="margin-bottom:3px"><span style="color:#5a7a68">By Regime:</span> ${regimeRows || '<span style="color:#3a5a48">No data</span>'}</div>
+          <div style="margin-bottom:3px"><span style="color:#5a7a68">By Quality:</span> ${mqRows || '<span style="color:#3a5a48">No data</span>'}</div>
+          <div><span style="color:#5a7a68">By Timeframe:</span> ${tfRows || '<span style="color:#3a5a48">No data</span>'}</div>
+        </div>
+      </div>
+    `;
+  } else if (chartEl) {
+    chartEl.innerHTML = '';
+  }
+
+  // Recent scans table
+  const tableEl = document.getElementById('scanHistoryTable');
+  if (tableEl) {
+    if (stats.recentEntries.length === 0) {
+      tableEl.innerHTML = '<div style="text-align:center;padding:20px;color:#3a5a48;font-family:\'Space Mono\',monospace;font-size:9px">No scan history yet. Run a scan to start building calibration data.</div>';
+      return;
+    }
+
+    const rows = stats.recentEntries.map(e => {
+      const dirColor = e.direction === 'long' ? '#00f5a0' : '#ff4d6d';
+      const dirArrow = e.direction === 'long' ? '▲' : '▼';
+      const probColor = e.prob >= 70 ? '#00f5a0' : e.prob >= 60 ? '#f5c400' : e.prob >= 50 ? '#ff8c69' : '#5a7a68';
+      const outcomeLabel = !e.resolved ? '<span style="color:#f5c400">⏳ Pending</span>' :
+        e.outcome === 'win' ? '<span style="color:#00f5a0">✅ Win</span>' :
+        e.outcome === 'loss' ? '<span style="color:#ff4d6d">❌ Loss</span>' :
+        '<span style="color:#5a7a68">⏰ Expired</span>';
+      const pnl = e.resolved && e.resolvedPrice
+        ? ((e.direction === 'long' ? (e.resolvedPrice - e.price) : (e.price - e.resolvedPrice)) / e.price * 100).toFixed(2)
+        : null;
+      const pnlStr = pnl !== null ? `<span style="color:${parseFloat(pnl) >= 0 ? '#00f5a0' : '#ff4d6d'}">${parseFloat(pnl) >= 0 ? '+' : ''}${pnl}%</span>` : '';
+      const timeAgo = formatTimeAgo(e.ts);
+      const mqColor = e.marketQuality === 'A' ? '#00f5a0' : e.marketQuality === 'B' ? '#f5c400' : '#ff8c69';
+
+      return `<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+        <td style="padding:4px 6px;color:#5a7a68;font-size:7px;white-space:nowrap">${timeAgo}</td>
+        <td style="padding:4px 6px;font-weight:700">${e.asset}</td>
+        <td style="padding:4px 6px;color:${dirColor}">${dirArrow} ${e.direction.toUpperCase()}</td>
+        <td style="padding:4px 6px;color:${probColor};font-weight:700">${e.prob}%</td>
+        <td style="padding:4px 6px">${e.rr}:1</td>
+        <td style="padding:4px 6px;color:${mqColor}">${e.marketQuality}</td>
+        <td style="padding:4px 6px">${e.confidence}</td>
+        <td style="padding:4px 6px;color:#5a7a68">${(e.regime || '').split('_')[0]}</td>
+        <td style="padding:4px 6px">${e.tf}</td>
+        <td style="padding:4px 6px">${outcomeLabel}</td>
+        <td style="padding:4px 6px">${pnlStr}</td>
+      </tr>`;
+    }).join('');
+
+    tableEl.innerHTML = `
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-family:'Space Mono',monospace;font-size:8px">
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">TIME</td>
+            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">ASSET</td>
+            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">DIR</td>
+            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">PROB</td>
+            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">R:R</td>
+            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">MQ</td>
+            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">CONF</td>
+            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">REGIME</td>
+            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">TF</td>
+            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">OUTCOME</td>
+            <td style="padding:5px 6px;color:#5a7a68;font-weight:700">P&L</td>
+          </tr>
+          ${rows}
+        </table>
+      </div>
+    `;
+  }
+}
+
+// Helper: format timestamp as relative time
+function formatTimeAgo(ts) {
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(ts).toLocaleDateString();
+}
+
+// Export scan log to CSV for external analysis
+function exportScanLog() {
+  try {
+    const log = JSON.parse(localStorage.getItem(SCAN_LOG_KEY) || '[]');
+    if (log.length === 0) { alert('No scan data to export.'); return; }
+
+    const headers = ['timestamp','asset','symbol','timeframe','direction','probability','entry_price','stop_price','target_price','rr','ev','confidence','market_quality','mq_score','regime','btc_regime','entry_efficiency','calibrated_prob','hits','misses','funding_rate','resolved','outcome','resolved_price','pnl_pct','max_favorable','max_adverse'];
+    const rows = log.map(e => {
+      const pnl = e.resolved && e.resolvedPrice
+        ? ((e.direction === 'long' ? (e.resolvedPrice - e.price) : (e.price - e.resolvedPrice)) / e.price * 100).toFixed(4)
+        : '';
+      return [
+        new Date(e.ts).toISOString(), e.asset, e.sym, e.tf, e.direction, e.prob, e.price,
+        e.stopPrice, e.targetPrice, e.rr, e.ev, e.confidence, e.marketQuality, e.mqScore,
+        e.regime, e.btcRegime || '', e.entryEfficiency || '', e.calibratedProb || '',
+        e.hitsCount, e.missesCount, e.fundingRate || '', e.resolved, e.outcome || '',
+        e.resolvedPrice || '', pnl, e.maxFavorable || '', e.maxAdverse || ''
+      ].join(',');
+    });
+
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `scan_log_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('Export failed: ' + e.message);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// ETF FLOW BIAS — Extract macro signal from cached ETF data (#2 Priority)
+// Maps ETF net flows into a bull/bear/neutral signal for confluence scoring
+// Only applies to BTC, ETH (assets with ETFs). Alts get BTC ETF as macro proxy.
+// ══════════════════════════════════════════════════════════════
+const ETF_ASSET_MAP = {
+  'BTCUSDT': 'bitcoin', 'ETHUSDT': 'ethereum', 'SOLUSDT': 'solana',
+};
+
+function getEtfFlowBias(symbol) {
+  // Direct ETF match or BTC as macro proxy for alts
+  const etfAsset = ETF_ASSET_MAP[symbol] || 'bitcoin';
+
+  // Use cached ETF data if available and matches the asset
+  // ETF_STATE stores the last loaded asset's data
+  if (!ETF_STATE.loaded || !ETF_STATE.data) return null;
+
+  // Only use if the cached data is for this asset (or BTC as proxy)
+  // We always cache the last-viewed ETF tab — for scoring, we primarily want BTC
+  // since BTC ETF flows drive the macro environment for all crypto
+  try {
+    let series = [];
+    if (Array.isArray(ETF_STATE.data)) {
+      series = ETF_STATE.data.map(d => ({
+        flow: parseFloat(d.totalNetFlow ?? d.netFlow ?? d.value ?? d.flow ?? 0),
+      })).filter(d => !isNaN(d.flow));
+    }
+    if (series.length < 3) return null;
+
+    const last7 = series.slice(-7);
+    const last3 = series.slice(-3);
+    const net7 = last7.reduce((s, d) => s + d.flow, 0);
+    const net3 = last3.reduce((s, d) => s + d.flow, 0);
+    const inflowDays7 = last7.filter(d => d.flow > 0).length;
+    const outflowDays7 = last7.filter(d => d.flow < 0).length;
+
+    // Signal strength: large sustained flows are more meaningful
+    // Thresholds based on BTC ETF flow magnitudes (typically $50-500M/day)
+    let bias = 'neutral', strength = 0;
+
+    if (net7 > 500 && inflowDays7 >= 4) {
+      bias = 'strong_inflow';
+      strength = Math.min(1.0, net7 / 2000); // normalize: $2B/week = max strength
+    } else if (net7 > 200 && inflowDays7 >= 3) {
+      bias = 'inflow';
+      strength = Math.min(0.7, net7 / 1500);
+    } else if (net7 < -300 && outflowDays7 >= 4) {
+      bias = 'strong_outflow';
+      strength = Math.min(1.0, Math.abs(net7) / 2000);
+    } else if (net7 < -100 && outflowDays7 >= 3) {
+      bias = 'outflow';
+      strength = Math.min(0.7, Math.abs(net7) / 1500);
+    }
+
+    // Recent momentum (last 3 days) — accelerating or decelerating?
+    const momentum = net3 > 0 ? 'accelerating' : 'decelerating';
+
+    return {
+      bias,
+      strength,
+      net7,
+      net3,
+      momentum,
+      inflowDays7,
+      isDirect: !!ETF_ASSET_MAP[symbol], // direct ETF or proxy
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// LIVE FUNDING RATE FETCH — For assets not in FUNDING_ASSETS cache
+// Fetches current funding rate on-demand during Best Trades scan
+// ══════════════════════════════════════════════════════════════
+async function fetchLiveFundingRate(symbol) {
+  // If we already have cached funding history, use it
+  if (fundingHistory[symbol]?.length > 0) {
+    return fundingHistory[symbol].slice(-1)[0].rate ?? null;
+  }
+
+  // Try to fetch from BloFin API
+  try {
+    const url = `https://openapi.blofin.com/api/v1/public/funding-rate?instId=${symbol.replace('USDT', '-USDT')}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
+    if (res.ok) {
+      const json = await res.json();
+      const rate = parseFloat(json?.data?.[0]?.fundingRate ?? json?.data?.[0]?.curFundingRate);
+      if (!isNaN(rate)) {
+        // Cache it for future use
+        if (!fundingHistory[symbol]) fundingHistory[symbol] = [];
+        fundingHistory[symbol].push({ time: Date.now(), rate: rate * 100 }); // convert to percentage
+        return rate * 100;
+      }
+    }
+  } catch (e) { /* timeout or CORS — expected for some assets */ }
+
+  return null;
+}
+
 // ── Score confluence → probability ───────────────────────────
 // Global cache for timeframe win rate data (populated from recommendations summary)
 let _tfWinRateCache = {};  // { '1h': { winRate: 54, resolved: 24, avgPnl: 0.71 }, ... }
@@ -13548,7 +14452,7 @@ async function fetchCrossTFBias(sym, baseTf) {
     .map(r => r.value);
 }
 
-function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFData, marketQuality) {
+function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFData, marketQuality, etfFlowBias) {
   const dir = direction === 'long' ? 'bull' : 'bear';
   const opp = direction === 'long' ? 'bear' : 'bull';
 
@@ -13774,6 +14678,31 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
     const optAdj = (avgWR - 50) * 0.3;
     if (Math.abs(optAdj) > 1) {
       applyAdj(optAdj, `Personal optimizer avg WR ${avgWR.toFixed(0)}%`, optAdj > 0, 4);
+    }
+  }
+
+  // ── Priority 6: ETF flow bias (sub-cap ±4) — Institutional flows (#2 Priority) ──
+  // Strong sustained inflows = institutional accumulation → bullish tailwind
+  // Strong outflows = institutional distribution → bearish headwind
+  // Only for 1h+ timeframes (ETF flows are slow-moving, irrelevant for scalps)
+  if (etfFlowBias && !isShortTF) {
+    const isInflow = etfFlowBias.bias === 'strong_inflow' || etfFlowBias.bias === 'inflow';
+    const isOutflow = etfFlowBias.bias === 'strong_outflow' || etfFlowBias.bias === 'outflow';
+    const isStrong = etfFlowBias.bias.startsWith('strong_');
+    const proxyNote = etfFlowBias.isDirect ? '' : ' (BTC proxy)';
+
+    if (isInflow && direction === 'long') {
+      const adj = isStrong ? 3 + Math.round(etfFlowBias.strength * 2) : 2;
+      applyAdj(adj, `ETF inflows: $${(etfFlowBias.net7/1000).toFixed(1)}B/7d${proxyNote}`, true, 4);
+    } else if (isInflow && direction === 'short') {
+      const adj = isStrong ? -(2 + Math.round(etfFlowBias.strength)) : -1;
+      applyAdj(adj, `ETF inflows oppose shorts${proxyNote}`, false, 4);
+    } else if (isOutflow && direction === 'short') {
+      const adj = isStrong ? 3 + Math.round(etfFlowBias.strength * 2) : 2;
+      applyAdj(adj, `ETF outflows: $${(Math.abs(etfFlowBias.net7)/1000).toFixed(1)}B/7d${proxyNote}`, true, 4);
+    } else if (isOutflow && direction === 'long') {
+      const adj = isStrong ? -(2 + Math.round(etfFlowBias.strength)) : -1;
+      applyAdj(adj, `ETF outflows oppose longs${proxyNote}`, false, 4);
     }
   }
 
@@ -14005,6 +14934,13 @@ async function runProbEngine() {
   const btn = $('probeBtn');
   if (btn) { btn.disabled = true; btn.textContent = '⟳ Scanning...'; }
 
+  // Pre-load BTC ETF flow data if not already cached (non-blocking)
+  if (!ETF_STATE.loaded && !ETF_STATE.loading) {
+    const prevAsset = etfCurrentAsset;
+    etfCurrentAsset = 'bitcoin'; // BTC ETF flows = macro proxy
+    loadEtfFlows().finally(() => { etfCurrentAsset = prevAsset; });
+  }
+
   const tf = $('probeTimeframe')?.value || '4h';
   const leverage = parseInt($('probeLeverage')?.value || 1);
   const setupsEl = $('probeSetups');
@@ -14073,13 +15009,17 @@ async function runProbEngine() {
         };
       }
 
-      // Get live funding rate if cached from funding monitor
-      const fundingRate = fundingHistory[asset.sym]?.slice(-1)[0]?.rate ?? null;
+      // Get live funding rate — use cached history or fetch on-demand
+      let fundingRate = fundingHistory[asset.sym]?.slice(-1)[0]?.rate ?? null;
+      if (fundingRate === null) {
+        fundingRate = await fetchLiveFundingRate(asset.sym);
+      }
 
-      // Score both directions with cross-TF data
+      // Score both directions with cross-TF data + ETF flows
       _currentScoringSymbol = asset.sym; // Set for funding percentile lookup
-      const longScore  = scoreConfluence(signals, 'long',  regimeData.regime, fundingRate, tf, crossTFData, marketQuality);
-      const shortScore = scoreConfluence(signals, 'short', regimeData.regime, fundingRate, tf, crossTFData, marketQuality);
+      const etfBias = getEtfFlowBias(asset.sym);
+      const longScore  = scoreConfluence(signals, 'long',  regimeData.regime, fundingRate, tf, crossTFData, marketQuality, etfBias);
+      const shortScore = scoreConfluence(signals, 'short', regimeData.regime, fundingRate, tf, crossTFData, marketQuality, etfBias);
 
       const best = longScore.prob >= shortScore.prob ? { ...longScore, direction: 'long' } : { ...shortScore, direction: 'short' };
 
@@ -14132,6 +15072,7 @@ async function runProbEngine() {
         entryEfficiency,
         calibratedProb:  rrData.calibratedProb,
         mqSizeMult:      rrData.mqSizeMult,
+        etfFlowBias:     etfBias,
       });
     } catch (e) {
       console.warn(`[Probe] ${asset.label} failed:`, e.message);
@@ -14182,6 +15123,13 @@ async function runProbEngine() {
   results.sort((a, b) => b.prob - a.prob);
   PROBE.results  = results;
   PROBE.lastRun  = new Date();
+
+  // ── Scan Log: Log every scan result + resolve previous predictions ──
+  logScanResults(results, tf, leverage);
+  const currentPrices = {};
+  for (const r of results) { if (r.sym && r.price) currentPrices[r.sym] = r.price; }
+  resolveScanLogEntries(currentPrices);
+  renderScanHistory();
 
   renderProbeResults(results, tf);
 
@@ -14334,11 +15282,12 @@ function renderProbeResults(results, tf) {
         <span style="color:#ff8c69">Fees: ${r.feePct}%</span>
       </div>
 
-      <!-- Both direction probs -->
-      <div style="margin-top:6px;display:flex;gap:8px;font-size:7px;font-family:'Space Mono',monospace">
+      <!-- Both direction probs + ETF flow -->
+      <div style="margin-top:6px;display:flex;gap:8px;font-size:7px;font-family:'Space Mono',monospace;flex-wrap:wrap">
         <span style="color:#00f5a0">▲ Long ${r.longProb}%</span>
         <span style="color:#5a7a68">|</span>
         <span style="color:#ff4d6d">▼ Short ${r.shortProb}%</span>
+        ${r.etfFlowBias && r.etfFlowBias.bias !== 'neutral' ? `<span style="color:#5a7a68">|</span><span style="color:${r.etfFlowBias.bias.includes('inflow') ? '#63b3ed' : '#ff8c69'}">🏦 ETF: $${(Math.abs(r.etfFlowBias.net7)/1000).toFixed(1)}B/7d ${r.etfFlowBias.bias.replace('_', ' ')}${r.etfFlowBias.isDirect ? '' : ' (proxy)'}</span>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -17108,11 +18057,18 @@ function amGetTg() {
 
 // ── Fire a single alert (core implementation) ─────────────────
 async function fireAlertCore(alert, message, detail='') {
+  // Fatigue management (#12) — suppress spam from correlated/burst alerts
+  if (isAlertFatigued(alert)) {
+    console.log(`[Alert] Suppressed (fatigue): ${alert.name} — ${message}`);
+    return;
+  }
+
   const now = Date.now();
   const alerts = amLoad();
   const idx    = alerts.findIndex(a => a.id === alert.id);
   if (idx === -1) return;
 
+  recordAlertFiring(alert);
   alerts[idx].lastFired = now;
   alerts[idx].fireCount = (alerts[idx].fireCount || 0) + 1;
   amSave(alerts);
@@ -17164,20 +18120,175 @@ function amOnCooldown(alert) {
   return (Date.now() - alert.lastFired) < alert.cooldown;
 }
 
+// ══════════════════════════════════════════════════════════════
+// ALERT FATIGUE MANAGEMENT (#12)
+// Groups related alerts, applies global rate limiting,
+// and suppresses correlated signals to prevent alert spam
+// ══════════════════════════════════════════════════════════════
+const _alertFatigueState = {
+  recentFirings: [],       // [{ts, symbol, type, alertId}]
+  globalCooldownMs: 5000,  // Min 5s between any two alerts
+  burstLimit: 5,           // Max 5 alerts per 60s window
+  burstWindowMs: 60000,
+  correlatedSymbols: {     // Known correlated pairs
+    'BTCUSDT': ['ETHUSDT'],
+    'ETHUSDT': ['BTCUSDT'],
+    'SOLUSDT': ['ETHUSDT'],
+    'DOGEUSDT': ['BTCUSDT'],
+    'BONKUSDT': ['SOLUSDT'],
+    'WIFUSDT': ['SOLUSDT'],
+    'PEPEUSDT': ['ETHUSDT'],
+  },
+};
+
+function isAlertFatigued(alert) {
+  const now = Date.now();
+  const recent = _alertFatigueState.recentFirings;
+
+  // Clean old entries
+  while (recent.length > 0 && now - recent[0].ts > _alertFatigueState.burstWindowMs) {
+    recent.shift();
+  }
+
+  // Global burst limit
+  if (recent.length >= _alertFatigueState.burstLimit) return true;
+
+  // Global cooldown between any alerts
+  if (recent.length > 0 && now - recent[recent.length - 1].ts < _alertFatigueState.globalCooldownMs) return true;
+
+  // Correlated symbol suppression: if a correlated symbol just fired same type in last 30s, suppress
+  const correlatedSyms = _alertFatigueState.correlatedSymbols[alert.symbol] || [];
+  if (correlatedSyms.length > 0) {
+    const recentCorrelated = recent.filter(r =>
+      r.type === alert.type &&
+      correlatedSyms.includes(r.symbol) &&
+      now - r.ts < 30000
+    );
+    if (recentCorrelated.length > 0) return true;
+  }
+
+  // Same symbol + same type within 10s (exact duplicate suppression)
+  const exactDupe = recent.filter(r =>
+    r.symbol === alert.symbol && r.type === alert.type && now - r.ts < 10000
+  );
+  if (exactDupe.length > 0) return true;
+
+  return false;
+}
+
+function recordAlertFiring(alert) {
+  _alertFatigueState.recentFirings.push({
+    ts: Date.now(),
+    symbol: alert.symbol,
+    type: alert.type,
+    alertId: alert.id,
+  });
+}
+
 // ════════════════════════════════════════════════════════════════
 // ENGINE — polls every 60s, checks every enabled alert
 // ════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════
+// WEBSOCKET PRICE FEED (#5) — Real-time prices for sub-15m alerts
+// Uses Binance public WebSocket (no auth needed) for instant price updates
+// Falls back to polling if WebSocket fails
+// ══════════════════════════════════════════════════════════════
+let _alertWs = null;
+let _wsReconnectTimer = null;
+const _wsPrices = {}; // { BTCUSDT: 42500.50, ... }
+
+function startAlertWebSocket() {
+  if (_alertWs && _alertWs.readyState <= 1) return; // already open/connecting
+
+  const alerts = amLoad().filter(a => a.enabled);
+  const symbols = [...new Set(alerts.map(a => a.symbol).filter(Boolean))];
+  if (!symbols.length) return;
+
+  // Build combined stream URL (Binance miniTicker for all symbols)
+  const streams = symbols.map(s => s.toLowerCase() + '@miniTicker').join('/');
+  const url = `wss://stream.binance.com:9443/stream?streams=${streams}`;
+
+  try {
+    _alertWs = new WebSocket(url);
+
+    _alertWs.onopen = () => {
+      console.log('[AlertWS] Connected — streaming', symbols.length, 'symbols');
+      updateAlertEngineStatus();
+    };
+
+    _alertWs.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        const data = msg.data;
+        if (data && data.s && data.c) {
+          const price = parseFloat(data.c);
+          _wsPrices[data.s] = price;
+          // Check price alerts immediately
+          checkWsPriceAlerts(data.s, price);
+        }
+      } catch (e) { /* parse error — skip */ }
+    };
+
+    _alertWs.onclose = () => {
+      console.log('[AlertWS] Disconnected — will reconnect in 10s');
+      _alertWs = null;
+      if (!_wsReconnectTimer) {
+        _wsReconnectTimer = setTimeout(() => {
+          _wsReconnectTimer = null;
+          if (alertEngineRunning) startAlertWebSocket();
+        }, 10000);
+      }
+    };
+
+    _alertWs.onerror = (e) => {
+      console.warn('[AlertWS] Error:', e);
+      _alertWs?.close();
+    };
+  } catch (e) {
+    console.warn('[AlertWS] Failed to connect:', e.message);
+  }
+}
+
+function stopAlertWebSocket() {
+  if (_alertWs) { _alertWs.close(); _alertWs = null; }
+  if (_wsReconnectTimer) { clearTimeout(_wsReconnectTimer); _wsReconnectTimer = null; }
+}
+
+// Fast price alert check triggered by WebSocket price updates
+function checkWsPriceAlerts(symbol, price) {
+  const alerts = amLoad().filter(a =>
+    a.enabled && !amOnCooldown(a) && a.type === 'price' && a.symbol === symbol
+  );
+
+  for (const a of alerts) {
+    const target = parseFloat(a.targetPrice);
+    if (!target) continue;
+
+    const crossed = (a.condition === 'above' && price >= target) ||
+                    (a.condition === 'below' && price <= target);
+
+    if (crossed) {
+      fireAlert(a,
+        `${symbol} ${a.condition === 'above' ? '↑ above' : '↓ below'} $${target.toLocaleString()}`,
+        `Current: $${price.toLocaleString(undefined, { maximumFractionDigits: 4 })}`
+      );
+    }
+  }
+}
 
 function startAlertEngine() {
   if (alertPollerTimer) return; // already running
   alertEngineRunning = true;
   runAlertPoll(); // immediate first run
   alertPollerTimer = setInterval(runAlertPoll, 60_000);
+  startAlertWebSocket(); // Start WebSocket for real-time price alerts
   updateAlertEngineStatus();
 }
 
 function stopAlertEngine() {
   if (alertPollerTimer) { clearInterval(alertPollerTimer); alertPollerTimer = null; }
+  stopAlertWebSocket();
   alertEngineRunning = false;
   updateAlertEngineStatus();
 }
@@ -17189,7 +18300,8 @@ function updateAlertEngineStatus() {
   const active = alerts.filter(a => a.enabled).length;
   if (el) {
     if (alertEngineRunning && active > 0) {
-      el.innerHTML = `<span style="color:#00f5a0">● Engine running — ${active} alert${active>1?'s':''} active · checks every 60s</span>`;
+      const wsStatus = _alertWs && _alertWs.readyState === 1 ? ' · ⚡ WebSocket live' : ' · polls every 60s';
+      el.innerHTML = `<span style="color:#00f5a0">● Engine running — ${active} alert${active>1?'s':''} active${wsStatus}</span>`;
     } else if (active === 0) {
       el.textContent = 'No active alerts — enable one to start';
     } else {
@@ -18708,6 +19820,11 @@ function renderPaperDashboard() {
     renderStrategyDetail(PT.selected);
     checkGoLiveUnlock(PT.selected);
   }
+
+  // Update portfolio correlation view if panel exists
+  if (document.getElementById('portfolioKPIs')) {
+    renderPortfolioCorrelation();
+  }
 }
 
 // ── Build strategy card HTML ──────────────────────────────────
@@ -19077,6 +20194,426 @@ function restorePaperPolls() {
   if (restored) updateLiveDot();
 }
 
+
+// ════════════════════════════════════════════════════════════════
+// 🔗 PORTFOLIO CORRELATION VIEW (#3 Priority)
+// Aggregates metrics across all paper strategies
+// Detects overlapping exposure, correlated bets, combined risk
+// ════════════════════════════════════════════════════════════════
+let _portfolioChart = null;
+
+function getPortfolioData() {
+  const reg = ptRegLoad();
+  if (!reg.length) return null;
+
+  const strategies = [];
+  let totalEquity = 0, totalCapital = 0;
+  let totalWins = 0, totalLosses = 0, totalTrades = 0;
+  let allTrades = [];
+  const symbolExposure = {};  // { BTCUSDT: { long: 2, short: 0, strategies: ['RSI...', 'EMA...'] } }
+  const directionExposure = { long: 0, short: 0, flat: 0 };
+
+  for (const def of reg) {
+    const state = ptStateLoad(def.id);
+    if (!state) continue;
+
+    const ret = state.capital > 0 ? ((state.equity - state.capital) / state.capital * 100) : 0;
+    const wins = state.trades.filter(t => t.won).length;
+    const losses = state.trades.filter(t => !t.won).length;
+    const wr = state.trades.length > 0 ? (wins / state.trades.length * 100) : 0;
+
+    // Max drawdown from equity curve
+    let maxDD = 0, peak = state.capital;
+    for (const pt of (state.equityCurve || [])) {
+      if (pt.v > peak) peak = pt.v;
+      const dd = peak > 0 ? ((peak - pt.v) / peak * 100) : 0;
+      if (dd > maxDD) maxDD = dd;
+    }
+
+    strategies.push({
+      id: def.id,
+      label: def.label,
+      symbol: def.symbol,
+      active: def.active,
+      equity: state.equity,
+      capital: state.capital,
+      returnPct: ret,
+      winRate: wr,
+      wins, losses,
+      tradeCount: state.trades.length,
+      maxDD,
+      openPositions: state.positions || [],
+      equityCurve: state.equityCurve || [],
+      trades: state.trades || [],
+    });
+
+    totalEquity += state.equity;
+    totalCapital += state.capital;
+    totalWins += wins;
+    totalLosses += losses;
+    totalTrades += state.trades.length;
+
+    // Tag trades with strategy label for combined analysis
+    for (const t of state.trades) {
+      allTrades.push({ ...t, stratLabel: def.label, symbol: def.symbol });
+    }
+
+    // Track symbol exposure
+    const sym = def.symbol;
+    if (!symbolExposure[sym]) symbolExposure[sym] = { long: 0, short: 0, strategies: [], openSize: 0 };
+    symbolExposure[sym].strategies.push(def.label);
+    for (const pos of (state.positions || [])) {
+      symbolExposure[sym][pos.type]++;
+      symbolExposure[sym].openSize += pos.size || 0;
+      directionExposure[pos.type]++;
+    }
+    if (!state.positions?.length) directionExposure.flat++;
+  }
+
+  // Sort all trades by time for combined P&L curve
+  allTrades.sort((a, b) => new Date(a.exitTime) - new Date(b.exitTime));
+
+  // Calculate return correlation between strategies (Pearson)
+  const correlationMatrix = [];
+  for (let i = 0; i < strategies.length; i++) {
+    correlationMatrix[i] = [];
+    for (let j = 0; j < strategies.length; j++) {
+      if (i === j) { correlationMatrix[i][j] = 1.0; continue; }
+      correlationMatrix[i][j] = calcReturnCorrelation(strategies[i], strategies[j]);
+    }
+  }
+
+  // Combined equity curve (sum of all strategy equities at each timestamp)
+  const combinedCurve = buildCombinedEquityCurve(strategies);
+
+  // Portfolio-level max drawdown
+  let portfolioMaxDD = 0, portfolioPeak = totalCapital;
+  for (const pt of combinedCurve) {
+    if (pt.v > portfolioPeak) portfolioPeak = pt.v;
+    const dd = portfolioPeak > 0 ? ((portfolioPeak - pt.v) / portfolioPeak * 100) : 0;
+    if (dd > portfolioMaxDD) portfolioMaxDD = dd;
+  }
+
+  // Detect correlated clusters (strategies on same symbol or highly correlated returns)
+  const warnings = [];
+  for (const [sym, exp] of Object.entries(symbolExposure)) {
+    if (exp.strategies.length > 1) {
+      warnings.push(`⚠ ${exp.strategies.length} strategies on ${sym} — overlapping exposure`);
+    }
+    if (exp.long > 0 && exp.short > 0) {
+      warnings.push(`🔄 ${sym}: hedged (${exp.long} long + ${exp.short} short open)`);
+    }
+  }
+  for (let i = 0; i < strategies.length; i++) {
+    for (let j = i + 1; j < strategies.length; j++) {
+      if (correlationMatrix[i][j] > 0.7 && strategies[i].tradeCount >= 5 && strategies[j].tradeCount >= 5) {
+        warnings.push(`📊 "${strategies[i].label}" & "${strategies[j].label}" highly correlated (${(correlationMatrix[i][j]*100).toFixed(0)}%)`);
+      }
+    }
+  }
+
+  return {
+    strategies, totalEquity, totalCapital,
+    totalReturn: totalCapital > 0 ? ((totalEquity - totalCapital) / totalCapital * 100) : 0,
+    totalWins, totalLosses, totalTrades,
+    totalWinRate: totalTrades > 0 ? (totalWins / totalTrades * 100) : 0,
+    portfolioMaxDD,
+    symbolExposure, directionExposure,
+    correlationMatrix,
+    combinedCurve,
+    warnings,
+  };
+}
+
+// Pearson correlation of trade returns between two strategies
+function calcReturnCorrelation(s1, s2) {
+  if (s1.trades.length < 3 || s2.trades.length < 3) return 0;
+
+  // Align by overlapping time windows (daily P&L buckets)
+  const bucket = (trades) => {
+    const buckets = {};
+    for (const t of trades) {
+      const day = (t.exitTime || t.entryTime || '').substring(0, 10);
+      if (!day) continue;
+      if (!buckets[day]) buckets[day] = 0;
+      buckets[day] += t.pnlPct || 0;
+    }
+    return buckets;
+  };
+
+  const b1 = bucket(s1.trades), b2 = bucket(s2.trades);
+  const commonDays = Object.keys(b1).filter(d => d in b2);
+  if (commonDays.length < 3) return 0;
+
+  const x = commonDays.map(d => b1[d]);
+  const y = commonDays.map(d => b2[d]);
+  const n = x.length;
+  const mx = x.reduce((s, v) => s + v, 0) / n;
+  const my = y.reduce((s, v) => s + v, 0) / n;
+
+  let cov = 0, sx = 0, sy = 0;
+  for (let i = 0; i < n; i++) {
+    cov += (x[i] - mx) * (y[i] - my);
+    sx += (x[i] - mx) ** 2;
+    sy += (y[i] - my) ** 2;
+  }
+  const denom = Math.sqrt(sx * sy);
+  return denom > 0 ? cov / denom : 0;
+}
+
+// Build combined equity curve by summing all strategies at each timestamp
+function buildCombinedEquityCurve(strategies) {
+  if (!strategies.length) return [];
+
+  // Collect all timestamps across all strategies
+  const allPoints = {};
+  for (const s of strategies) {
+    for (const pt of s.equityCurve) {
+      const t = pt.t;
+      if (!allPoints[t]) allPoints[t] = {};
+      allPoints[t][s.id] = pt.v;
+    }
+  }
+
+  // Sort timestamps
+  const times = Object.keys(allPoints).map(Number).sort((a, b) => a - b);
+  if (!times.length) return [];
+
+  // Forward-fill: for each strategy, carry last known value forward
+  const lastKnown = {};
+  for (const s of strategies) lastKnown[s.id] = s.capital; // start at capital
+
+  const curve = [];
+  for (const t of times) {
+    const pt = allPoints[t];
+    for (const s of strategies) {
+      if (pt[s.id] !== undefined) lastKnown[s.id] = pt[s.id];
+    }
+    const total = Object.values(lastKnown).reduce((s, v) => s + v, 0);
+    curve.push({ t, v: total });
+  }
+  return curve;
+}
+
+function renderPortfolioCorrelation() {
+  const data = getPortfolioData();
+  const kpiEl = document.getElementById('portfolioKPIs');
+  const corrEl = document.getElementById('portfolioCorrelation');
+  const expEl = document.getElementById('portfolioExposure');
+  const eqEl = document.getElementById('portfolioCombinedEquity');
+
+  if (!data || data.strategies.length === 0) {
+    if (kpiEl) kpiEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:16px;color:#3a5a48;font-family:\'Space Mono\',monospace;font-size:9px">No paper strategies to analyze. Start a strategy from the Backtester tab.</div>';
+    if (corrEl) corrEl.innerHTML = '';
+    if (expEl) expEl.innerHTML = '';
+    if (eqEl) eqEl.style.display = 'none';
+    return;
+  }
+
+  // ── KPI Cards ──
+  if (kpiEl) {
+    const retColor = data.totalReturn >= 0 ? '#00f5a0' : '#ff4d6d';
+    const wrColor = data.totalWinRate >= 55 ? '#00f5a0' : data.totalWinRate >= 45 ? '#f5c400' : '#ff4d6d';
+    kpiEl.innerHTML = `
+      <div style="background:rgba(99,179,237,0.06);border:1px solid rgba(99,179,237,0.15);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:16px;font-weight:800;color:#fff;font-family:'Space Mono',monospace">$${data.totalEquity.toLocaleString(undefined,{maximumFractionDigits:0})}</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">TOTAL EQUITY</div>
+      </div>
+      <div style="background:rgba(99,179,237,0.06);border:1px solid rgba(99,179,237,0.15);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:16px;font-weight:800;color:${retColor};font-family:'Space Mono',monospace">${data.totalReturn >= 0 ? '+' : ''}${data.totalReturn.toFixed(2)}%</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">TOTAL RETURN</div>
+      </div>
+      <div style="background:rgba(99,179,237,0.06);border:1px solid rgba(99,179,237,0.15);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:16px;font-weight:800;color:${wrColor};font-family:'Space Mono',monospace">${data.totalWinRate.toFixed(1)}%</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">COMBINED WR</div>
+      </div>
+      <div style="background:rgba(99,179,237,0.06);border:1px solid rgba(99,179,237,0.15);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:16px;font-weight:800;color:#aaa;font-family:'Space Mono',monospace">${data.totalTrades}</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">TOTAL TRADES</div>
+      </div>
+      <div style="background:rgba(99,179,237,0.06);border:1px solid rgba(99,179,237,0.15);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:16px;font-weight:800;color:#ff4d6d;font-family:'Space Mono',monospace">${data.portfolioMaxDD.toFixed(1)}%</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">MAX DRAWDOWN</div>
+      </div>
+      <div style="background:rgba(99,179,237,0.06);border:1px solid rgba(99,179,237,0.15);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:16px;font-weight:800;color:#a78bfa;font-family:'Space Mono',monospace">${data.strategies.length}</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">STRATEGIES</div>
+      </div>
+    `;
+  }
+
+  // ── Correlation Matrix + Warnings ──
+  if (corrEl && data.strategies.length >= 2) {
+    const matrix = data.correlationMatrix;
+    const labels = data.strategies.map(s => s.label.length > 15 ? s.label.substring(0, 15) + '…' : s.label);
+
+    const headerCells = labels.map(l => `<td style="padding:4px 6px;color:#63b3ed;font-weight:700;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:7px">${l}</td>`).join('');
+    const rows = matrix.map((row, i) => {
+      const cells = row.map((val, j) => {
+        const color = i === j ? '#5a7a68' : val > 0.7 ? '#ff4d6d' : val > 0.3 ? '#f5c400' : val > -0.3 ? '#5a7a68' : '#63b3ed';
+        const bg = i === j ? 'transparent' : val > 0.7 ? 'rgba(255,77,109,0.1)' : 'transparent';
+        return `<td style="padding:4px 6px;color:${color};background:${bg};text-align:center;font-size:8px">${i === j ? '—' : val.toFixed(2)}</td>`;
+      }).join('');
+      return `<tr><td style="padding:4px 6px;color:#aaa;font-weight:700;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:7px">${labels[i]}</td>${cells}</tr>`;
+    }).join('');
+
+    const warningHtml = data.warnings.length > 0
+      ? `<div style="margin-top:8px;padding:8px;background:rgba(245,196,0,0.06);border:1px solid rgba(245,196,0,0.15);border-radius:6px;font-size:8px;font-family:'Space Mono',monospace;color:#f5c400;line-height:1.8">${data.warnings.join('<br>')}</div>`
+      : '';
+
+    corrEl.innerHTML = `
+      <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(99,179,237,0.1);border-radius:8px;padding:12px">
+        <div style="font-size:9px;font-weight:700;color:#63b3ed;font-family:'Space Mono',monospace;margin-bottom:8px">📊 RETURN CORRELATION MATRIX</div>
+        <div style="font-size:7px;color:#3a5a48;font-family:'Space Mono',monospace;margin-bottom:8px">
+          <span style="color:#ff4d6d">Red >0.7</span> = highly correlated (same bet).
+          <span style="color:#f5c400">Yellow >0.3</span> = moderate.
+          <span style="color:#5a7a68">Gray</span> = independent.
+          <span style="color:#63b3ed">Blue &lt;-0.3</span> = natural hedge.
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-family:'Space Mono',monospace">
+            <tr><td style="padding:4px 6px"></td>${headerCells}</tr>
+            ${rows}
+          </table>
+        </div>
+        ${warningHtml}
+      </div>
+    `;
+  } else if (corrEl) {
+    const warningHtml = data.warnings.length > 0
+      ? `<div style="padding:8px;background:rgba(245,196,0,0.06);border:1px solid rgba(245,196,0,0.15);border-radius:6px;font-size:8px;font-family:'Space Mono',monospace;color:#f5c400;line-height:1.8">${data.warnings.join('<br>')}</div>`
+      : '<div style="text-align:center;padding:10px;color:#3a5a48;font-family:\'Space Mono\',monospace;font-size:8px">Need 2+ strategies for correlation analysis</div>';
+    corrEl.innerHTML = warningHtml;
+  }
+
+  // ── Exposure Breakdown ──
+  if (expEl) {
+    const symbols = Object.entries(data.symbolExposure);
+    const totalOpen = data.directionExposure.long + data.directionExposure.short;
+
+    // Per-strategy mini table
+    const stratRows = data.strategies.map(s => {
+      const retColor = s.returnPct >= 0 ? '#00f5a0' : '#ff4d6d';
+      const wrColor = s.winRate >= 55 ? '#00f5a0' : s.winRate >= 45 ? '#f5c400' : '#ff4d6d';
+      const openLabel = s.openPositions.length > 0
+        ? s.openPositions.map(p => `<span style="color:${p.type === 'long' ? '#00f5a0' : '#ff4d6d'}">${p.type === 'long' ? '▲' : '▼'} $${p.size?.toLocaleString(undefined,{maximumFractionDigits:0}) || '?'}</span>`).join(' ')
+        : '<span style="color:#3a5a48">flat</span>';
+      return `<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+        <td style="padding:4px 6px;color:#aaa;font-size:7px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.label}</td>
+        <td style="padding:4px 6px;color:#63b3ed;font-size:8px">${s.symbol.replace('USDT','')}</td>
+        <td style="padding:4px 6px;font-size:8px;color:${retColor}">${s.returnPct >= 0 ? '+' : ''}${s.returnPct.toFixed(2)}%</td>
+        <td style="padding:4px 6px;font-size:8px;color:${wrColor}">${s.winRate.toFixed(0)}%</td>
+        <td style="padding:4px 6px;font-size:8px;color:#aaa">${s.tradeCount}</td>
+        <td style="padding:4px 6px;font-size:8px;color:#ff4d6d">${s.maxDD.toFixed(1)}%</td>
+        <td style="padding:4px 6px;font-size:8px">${openLabel}</td>
+        <td style="padding:4px 6px;font-size:8px;color:${s.active ? '#00f5a0' : '#5a7a68'}">${s.active ? '🟢' : '⏸'}</td>
+      </tr>`;
+    }).join('');
+
+    // Symbol exposure bars
+    const maxSize = Math.max(1, ...symbols.map(([, e]) => e.openSize));
+    const symBars = symbols.map(([sym, exp]) => {
+      const barW = exp.openSize > 0 ? Math.max(5, (exp.openSize / maxSize) * 100) : 0;
+      return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+        <span style="font-size:7px;color:#aaa;font-family:'Space Mono',monospace;width:55px">${sym.replace('USDT','')}</span>
+        <div style="flex:1;height:8px;background:rgba(255,255,255,0.04);border-radius:4px;overflow:hidden">
+          ${exp.long > 0 ? `<div style="height:100%;width:${barW}%;background:rgba(0,245,160,0.4);border-radius:4px;display:inline-block"></div>` : ''}
+          ${exp.short > 0 ? `<div style="height:100%;width:${barW}%;background:rgba(255,77,109,0.4);border-radius:4px;display:inline-block"></div>` : ''}
+        </div>
+        <span style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">${exp.strategies.length} strat${exp.strategies.length > 1 ? 's' : ''} · ${exp.long}L ${exp.short}S</span>
+      </div>`;
+    }).join('');
+
+    expEl.innerHTML = `
+      <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(99,179,237,0.1);border-radius:8px;padding:12px">
+        <div style="font-size:9px;font-weight:700;color:#63b3ed;font-family:'Space Mono',monospace;margin-bottom:8px">📋 STRATEGY COMPARISON</div>
+        <div style="overflow-x:auto;margin-bottom:10px">
+          <table style="width:100%;border-collapse:collapse;font-family:'Space Mono',monospace">
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+              <td style="padding:4px 6px;color:#5a7a68;font-weight:700;font-size:7px">STRATEGY</td>
+              <td style="padding:4px 6px;color:#5a7a68;font-weight:700;font-size:7px">SYM</td>
+              <td style="padding:4px 6px;color:#5a7a68;font-weight:700;font-size:7px">RETURN</td>
+              <td style="padding:4px 6px;color:#5a7a68;font-weight:700;font-size:7px">WR</td>
+              <td style="padding:4px 6px;color:#5a7a68;font-weight:700;font-size:7px">#</td>
+              <td style="padding:4px 6px;color:#5a7a68;font-weight:700;font-size:7px">MAX DD</td>
+              <td style="padding:4px 6px;color:#5a7a68;font-weight:700;font-size:7px">OPEN</td>
+              <td style="padding:4px 6px;color:#5a7a68;font-weight:700;font-size:7px">ST</td>
+            </tr>
+            ${stratRows}
+          </table>
+        </div>
+        <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:8px">
+          <div style="font-size:8px;font-weight:700;color:#aaa;font-family:'Space Mono',monospace;margin-bottom:6px">SYMBOL EXPOSURE (${totalOpen} open positions)</div>
+          ${symBars || '<div style="font-size:8px;color:#3a5a48;font-family:\'Space Mono\',monospace">No open positions</div>'}
+        </div>
+      </div>
+    `;
+  }
+
+  // ── Combined Equity Chart ──
+  if (eqEl && data.combinedCurve.length >= 2 && typeof Chart !== 'undefined') {
+    eqEl.style.display = 'block';
+    const canvas = document.getElementById('portfolioEquityChart');
+    if (!canvas) return;
+
+    if (_portfolioChart) { try { _portfolioChart.destroy(); } catch {} }
+
+    const labels = data.combinedCurve.map(p => new Date(p.t).toLocaleDateString());
+    const values = data.combinedCurve.map(p => p.v);
+    const ctx = canvas.getContext('2d');
+    const grad = ctx.createLinearGradient(0, 0, 0, 160);
+    grad.addColorStop(0, 'rgba(99,179,237,0.18)');
+    grad.addColorStop(1, 'rgba(99,179,237,0)');
+
+    _portfolioChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Portfolio Equity',
+            data: values,
+            borderColor: '#63b3ed',
+            backgroundColor: grad,
+            borderWidth: 2,
+            fill: true,
+            pointRadius: 0,
+            tension: 0.2,
+          },
+          {
+            label: 'Starting Capital',
+            data: Array(labels.length).fill(data.totalCapital),
+            borderColor: 'rgba(255,255,255,0.1)',
+            borderWidth: 1,
+            borderDash: [4, 4],
+            pointRadius: 0,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(10,14,23,0.95)',
+            titleFont: { family: "'Space Mono', monospace", size: 9 },
+            bodyFont: { family: "'Space Mono', monospace", size: 9 },
+            callbacks: {
+              label: ctx => `$${ctx.raw.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
+            }
+          }
+        },
+        scales: {
+          x: { display: true, ticks: { font: { family: "'Space Mono', monospace", size: 7 }, color: '#5a7a68', maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.03)' } },
+          y: { display: true, ticks: { font: { family: "'Space Mono', monospace", size: 7 }, color: '#5a7a68', callback: v => '$' + (v/1000).toFixed(1) + 'k' }, grid: { color: 'rgba(255,255,255,0.03)' } },
+        }
+      }
+    });
+  } else if (eqEl) {
+    eqEl.style.display = data.combinedCurve.length >= 2 ? 'block' : 'none';
+  }
+}
 
 // ════════════════════════════════════════════════════════════════
 // 🔐 TRADING WALLET — AES-256-GCM encrypted browser keypair
