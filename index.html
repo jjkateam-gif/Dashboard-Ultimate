@@ -2165,6 +2165,7 @@ function switchAuthView(view) {
     <button class="intel-sub-tab" id="intelTab_astro" onclick="switchIntelTab('astro')">🌙 Astro Cycles</button>
     <button class="intel-sub-tab" id="intelTab_etf" onclick="switchIntelTab('etf')">🏦 ETF Flows</button>
     <button class="intel-sub-tab" id="intelTab_news" onclick="switchIntelTab('news')">📰 News Feed</button>
+    <button class="intel-sub-tab" id="intelTab_portfolio" onclick="switchIntelTab('portfolio')">💼 Portfolio</button>
   </div>
 
   <!-- Overview panel -->
@@ -2420,6 +2421,78 @@ function switchAuthView(view) {
       <div style="text-align:center;padding:40px;color:#5a7a68;font-family:'Space Mono',monospace;font-size:10px">Loading news feed...</div>
     </div>
   </div>
+  <!-- Portfolio Tracker -->
+  <div id="intelView_portfolio" style="display:none">
+
+    <!-- Header + Add button -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-family:'Space Mono',monospace;font-size:14px;font-weight:700;color:#f5c400">💼 Portfolio Tracker</div>
+        <div style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;margin-top:2px">Track your holdings. Get smart recommendations based on market conditions and sector rotation.</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button onclick="refreshPortfolioPrices()" style="font-size:8px;padding:5px 12px;background:rgba(245,196,0,0.1);border:1px solid rgba(245,196,0,0.25);color:#f5c400;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">↻ Refresh Prices</button>
+        <button onclick="exportPortfolioCSV()" style="font-size:8px;padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:#5a7a68;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">📥 CSV</button>
+      </div>
+    </div>
+
+    <!-- Add Holding Form -->
+    <div style="background:rgba(245,196,0,0.04);border:1px solid rgba(245,196,0,0.15);border-radius:8px;padding:12px;margin-bottom:14px;font-family:'Space Mono',monospace">
+      <div style="font-size:9px;font-weight:700;color:#f5c400;margin-bottom:8px">+ ADD HOLDING</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div>
+          <label style="font-size:7px;color:#5a7a68;display:block;margin-bottom:2px">Coin</label>
+          <select id="pfCoinSelect" style="font-size:9px;padding:5px 8px;background:#0a1a10;border:1px solid rgba(245,196,0,0.3);color:#f5c400;border-radius:4px;font-family:'Space Mono',monospace;width:140px">
+            <option value="">Select coin...</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:7px;color:#5a7a68;display:block;margin-bottom:2px">Quantity</label>
+          <input id="pfQuantity" type="number" step="any" min="0" placeholder="0.5" style="font-size:9px;padding:5px 8px;background:#0a1a10;border:1px solid rgba(255,255,255,0.1);color:#ddd;border-radius:4px;font-family:'Space Mono',monospace;width:100px">
+        </div>
+        <div>
+          <label style="font-size:7px;color:#5a7a68;display:block;margin-bottom:2px">Avg Buy Price ($)</label>
+          <input id="pfBuyPrice" type="number" step="any" min="0" placeholder="42000" style="font-size:9px;padding:5px 8px;background:#0a1a10;border:1px solid rgba(255,255,255,0.1);color:#ddd;border-radius:4px;font-family:'Space Mono',monospace;width:100px">
+        </div>
+        <button onclick="addPortfolioHolding()" style="font-size:8px;padding:5px 14px;background:rgba(245,196,0,0.15);border:1px solid rgba(245,196,0,0.4);color:#f5c400;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">+ Add</button>
+      </div>
+    </div>
+
+    <!-- Portfolio KPIs -->
+    <div id="portfolioTrackerKPIs" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:14px"></div>
+
+    <!-- Portfolio Health Score -->
+    <div id="portfolioHealthScore" style="margin-bottom:14px"></div>
+
+    <!-- Holdings Table -->
+    <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:12px;margin-bottom:14px">
+      <div style="font-size:9px;font-weight:700;color:#aaa;font-family:'Space Mono',monospace;letter-spacing:2px;margin-bottom:8px">📋 HOLDINGS</div>
+      <div id="portfolioHoldingsTable" style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;max-height:400px;overflow-y:auto">
+        <div style="text-align:center;padding:20px;color:#3a5a48">No holdings yet. Add your first coin above.</div>
+      </div>
+    </div>
+
+    <!-- Sector Exposure -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+      <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:12px">
+        <div style="font-size:9px;font-weight:700;color:#aaa;font-family:'Space Mono',monospace;letter-spacing:2px;margin-bottom:8px">📊 SECTOR EXPOSURE</div>
+        <div id="portfolioSectorExposure" style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68">No data</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:12px">
+        <div style="font-size:9px;font-weight:700;color:#aaa;font-family:'Space Mono',monospace;letter-spacing:2px;margin-bottom:8px">🏆 TOP / BOTTOM PERFORMERS</div>
+        <div id="portfolioPerformers" style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68">No data</div>
+      </div>
+    </div>
+
+    <!-- Smart Recommendations -->
+    <div style="background:rgba(245,196,0,0.04);border:1px solid rgba(245,196,0,0.15);border-radius:8px;padding:12px">
+      <div style="font-size:9px;font-weight:700;color:#f5c400;font-family:'Space Mono',monospace;letter-spacing:2px;margin-bottom:8px">🧠 SMART RECOMMENDATIONS</div>
+      <div style="font-size:7px;color:#3a5a48;font-family:'Space Mono',monospace;margin-bottom:8px">Powered by regime detection, sector rotation, funding rates, and ETF flows. Not financial advice.</div>
+      <div id="portfolioRecommendations" style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68">Add holdings to receive recommendations.</div>
+    </div>
+
+  </div>
+
 </div><!-- end page_intel -->
 
 <!-- ========== BEST TRADES PAGE ========== -->
@@ -11060,7 +11133,7 @@ function renderCycleImmediate() {
 // ── Sub-tab switching ──────────────────────────────────────
 function switchIntelTab(tab) {
   INTEL.currentSubTab = tab;
-  ['overview','screener','picks','astro','etf','news'].forEach(t => {
+  ['overview','screener','picks','astro','etf','news','portfolio'].forEach(t => {
     const btn  = $('intelTab_' + t);
     const view = $('intelView_' + t);
     if (btn)  { btn.classList.toggle('active', t === tab); }
@@ -11072,6 +11145,7 @@ function switchIntelTab(tab) {
   if (tab === 'astro') { runAstroAnalysis(); }
   if (tab === 'etf')   { loadEtfFlows(); }
   if (tab === 'news')  { loadNews(); }
+  if (tab === 'portfolio') { initPortfolioTracker(); }
 }
 
 // ── Main entry point ───────────────────────────────────────
@@ -17986,6 +18060,604 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+// 💼 PORTFOLIO TRACKER ENGINE
+// Live crypto portfolio with smart recommendations
+// ════════════════════════════════════════════════════════════════
+const PF_KEY = 'cryptoPortfolio_v1';
+const PF_PRICES_KEY = 'cryptoPortfolioPrices_v1';
+
+function pfLoad() { try { return JSON.parse(localStorage.getItem(PF_KEY) || '[]'); } catch { return []; } }
+function pfSave(d) { try { localStorage.setItem(PF_KEY, JSON.stringify(d)); } catch {} }
+function pfPricesLoad() { try { return JSON.parse(localStorage.getItem(PF_PRICES_KEY) || '{}'); } catch { return {}; } }
+function pfPricesSave(d) { try { localStorage.setItem(PF_PRICES_KEY, JSON.stringify(d)); } catch {} }
+
+// Coin list for the dropdown (CoinGecko IDs + symbols)
+const PF_COINS = [
+  { id: 'bitcoin', sym: 'BTC', name: 'Bitcoin', sector: 'l1' },
+  { id: 'ethereum', sym: 'ETH', name: 'Ethereum', sector: 'l1' },
+  { id: 'solana', sym: 'SOL', name: 'Solana', sector: 'l1' },
+  { id: 'binancecoin', sym: 'BNB', name: 'BNB', sector: 'l1' },
+  { id: 'ripple', sym: 'XRP', name: 'XRP', sector: 'l1' },
+  { id: 'cardano', sym: 'ADA', name: 'Cardano', sector: 'l1' },
+  { id: 'avalanche-2', sym: 'AVAX', name: 'Avalanche', sector: 'l1' },
+  { id: 'sui', sym: 'SUI', name: 'Sui', sector: 'l1' },
+  { id: 'near', sym: 'NEAR', name: 'NEAR', sector: 'l1' },
+  { id: 'toncoin', sym: 'TON', name: 'Toncoin', sector: 'l1' },
+  { id: 'aptos', sym: 'APT', name: 'Aptos', sector: 'l1' },
+  { id: 'matic-network', sym: 'MATIC', name: 'Polygon', sector: 'l2' },
+  { id: 'arbitrum', sym: 'ARB', name: 'Arbitrum', sector: 'l2' },
+  { id: 'optimism', sym: 'OP', name: 'Optimism', sector: 'l2' },
+  { id: 'starknet', sym: 'STRK', name: 'Starknet', sector: 'l2' },
+  { id: 'chainlink', sym: 'LINK', name: 'Chainlink', sector: 'infra' },
+  { id: 'polkadot', sym: 'DOT', name: 'Polkadot', sector: 'l1' },
+  { id: 'uniswap', sym: 'UNI', name: 'Uniswap', sector: 'defi' },
+  { id: 'aave', sym: 'AAVE', name: 'Aave', sector: 'defi' },
+  { id: 'maker', sym: 'MKR', name: 'Maker', sector: 'defi' },
+  { id: 'jupiter-exchange-solana', sym: 'JUP', name: 'Jupiter', sector: 'defi' },
+  { id: 'injective-protocol', sym: 'INJ', name: 'Injective', sector: 'defi' },
+  { id: 'curve-dao-token', sym: 'CRV', name: 'Curve', sector: 'defi' },
+  { id: 'render-token', sym: 'RENDER', name: 'Render', sector: 'ai' },
+  { id: 'fetch-ai', sym: 'FET', name: 'Fetch.ai', sector: 'ai' },
+  { id: 'bittensor', sym: 'TAO', name: 'Bittensor', sector: 'ai' },
+  { id: 'singularitynet', sym: 'AGIX', name: 'SingularityNET', sector: 'ai' },
+  { id: 'dogecoin', sym: 'DOGE', name: 'Dogecoin', sector: 'meme' },
+  { id: 'shiba-inu', sym: 'SHIB', name: 'Shiba Inu', sector: 'meme' },
+  { id: 'pepe', sym: 'PEPE', name: 'Pepe', sector: 'meme' },
+  { id: 'bonk', sym: 'BONK', name: 'Bonk', sector: 'meme' },
+  { id: 'dogwifcoin', sym: 'WIF', name: 'dogwifhat', sector: 'meme' },
+  { id: 'floki', sym: 'FLOKI', name: 'Floki', sector: 'meme' },
+];
+
+const SECTOR_META = {
+  l1:    { label: 'L1', color: '#f5c400', name: 'Layer 1' },
+  l2:    { label: 'L2', color: '#63b3ed', name: 'Layer 2' },
+  defi:  { label: 'DeFi', color: '#ff6b35', name: 'DeFi' },
+  ai:    { label: 'AI', color: '#00c9ff', name: 'AI Crypto' },
+  meme:  { label: 'Meme', color: '#ff8c00', name: 'Meme Coins' },
+  infra: { label: 'Infra', color: '#a78bfa', name: 'Infrastructure' },
+  other: { label: 'Other', color: '#5a7a68', name: 'Other' },
+};
+
+let _pfInitialized = false;
+
+function initPortfolioTracker() {
+  // Populate coin dropdown
+  const sel = $('pfCoinSelect');
+  if (sel && sel.options.length <= 1) {
+    PF_COINS.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = `${c.sym} — ${c.name}`;
+      sel.appendChild(opt);
+    });
+  }
+
+  if (!_pfInitialized) {
+    refreshPortfolioPrices();
+    _pfInitialized = true;
+  } else {
+    renderPortfolioTracker();
+  }
+}
+
+function addPortfolioHolding() {
+  const coinId = $('pfCoinSelect')?.value;
+  const qty = parseFloat($('pfQuantity')?.value);
+  const buyPrice = parseFloat($('pfBuyPrice')?.value);
+
+  if (!coinId) { toast('Select a coin', 'error'); return; }
+  if (!qty || qty <= 0) { toast('Enter a valid quantity', 'error'); return; }
+  if (!buyPrice || buyPrice <= 0) { toast('Enter a valid buy price', 'error'); return; }
+
+  const coin = PF_COINS.find(c => c.id === coinId);
+  if (!coin) { toast('Coin not found', 'error'); return; }
+
+  const holdings = pfLoad();
+
+  // Check if already exists — update qty and avg price
+  const existing = holdings.find(h => h.id === coinId);
+  if (existing) {
+    const totalCost = existing.quantity * existing.avgBuyPrice + qty * buyPrice;
+    existing.quantity += qty;
+    existing.avgBuyPrice = totalCost / existing.quantity;
+    toast(`Updated ${coin.sym} holding`);
+  } else {
+    holdings.push({
+      id: coinId,
+      sym: coin.sym,
+      name: coin.name,
+      sector: coin.sector,
+      quantity: qty,
+      avgBuyPrice: buyPrice,
+      addedAt: Date.now(),
+    });
+    toast(`Added ${coin.sym} to portfolio`);
+  }
+
+  pfSave(holdings);
+  $('pfQuantity').value = '';
+  $('pfBuyPrice').value = '';
+  $('pfCoinSelect').value = '';
+  renderPortfolioTracker();
+}
+
+function removePortfolioHolding(coinId) {
+  if (!confirm('Remove this holding?')) return;
+  const holdings = pfLoad().filter(h => h.id !== coinId);
+  pfSave(holdings);
+  renderPortfolioTracker();
+  toast('Holding removed');
+}
+
+async function refreshPortfolioPrices() {
+  const holdings = pfLoad();
+  if (!holdings.length) { renderPortfolioTracker(); return; }
+
+  const ids = [...new Set(holdings.map(h => h.id))].join(',');
+  try {
+    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true&include_7d_change=true&include_market_cap=true&include_24hr_vol=true`);
+    if (res.ok) {
+      const data = await res.json();
+      pfPricesSave({ ...data, _ts: Date.now() });
+      console.log('[Portfolio] Prices updated for', Object.keys(data).length, 'coins');
+    }
+  } catch (e) {
+    console.warn('[Portfolio] Price fetch failed:', e.message);
+  }
+  renderPortfolioTracker();
+}
+
+function renderPortfolioTracker() {
+  const holdings = pfLoad();
+  const prices = pfPricesLoad();
+  const kpiEl = $('portfolioTrackerKPIs');
+  const tableEl = $('portfolioHoldingsTable');
+  const sectorEl = $('portfolioSectorExposure');
+  const perfEl = $('portfolioPerformers');
+  const recEl = $('portfolioRecommendations');
+  const healthEl = $('portfolioHealthScore');
+
+  if (!holdings.length) {
+    if (kpiEl) kpiEl.innerHTML = '';
+    if (tableEl) tableEl.innerHTML = '<div style="text-align:center;padding:20px;color:#3a5a48;font-family:\'Space Mono\',monospace;font-size:9px">No holdings yet. Add your first coin above.</div>';
+    if (sectorEl) sectorEl.innerHTML = 'No data';
+    if (perfEl) perfEl.innerHTML = 'No data';
+    if (recEl) recEl.innerHTML = 'Add holdings to receive recommendations.';
+    if (healthEl) healthEl.innerHTML = '';
+    return;
+  }
+
+  // Enrich holdings with current prices
+  let totalValue = 0, totalCost = 0;
+  const enriched = holdings.map(h => {
+    const p = prices[h.id];
+    const currentPrice = p?.usd || h.avgBuyPrice;
+    const value = h.quantity * currentPrice;
+    const cost = h.quantity * h.avgBuyPrice;
+    const pnl = value - cost;
+    const pnlPct = cost > 0 ? (pnl / cost * 100) : 0;
+    const change24h = p?.usd_24h_change || 0;
+    const marketCap = p?.usd_market_cap || 0;
+    const volume = p?.usd_24h_vol || 0;
+    totalValue += value;
+    totalCost += cost;
+    return { ...h, currentPrice, value, cost, pnl, pnlPct, change24h, marketCap, volume };
+  });
+
+  // Sort by value descending
+  enriched.sort((a, b) => b.value - a.value);
+
+  // Add allocation %
+  enriched.forEach(h => { h.allocation = totalValue > 0 ? (h.value / totalValue * 100) : 0; });
+
+  const totalPnl = totalValue - totalCost;
+  const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost * 100) : 0;
+
+  // ── KPIs ──
+  if (kpiEl) {
+    const pnlColor = totalPnl >= 0 ? '#00f5a0' : '#ff4d6d';
+    const best = enriched.reduce((b, h) => h.pnlPct > b.pnlPct ? h : b, enriched[0]);
+    const worst = enriched.reduce((w, h) => h.pnlPct < w.pnlPct ? h : w, enriched[0]);
+    const priceAge = prices._ts ? Math.round((Date.now() - prices._ts) / 60000) : '?';
+
+    kpiEl.innerHTML = `
+      <div style="background:rgba(245,196,0,0.06);border:1px solid rgba(245,196,0,0.15);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:800;color:#fff;font-family:'Space Mono',monospace">$${totalValue.toLocaleString(undefined,{maximumFractionDigits:0})}</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">TOTAL VALUE</div>
+      </div>
+      <div style="background:rgba(245,196,0,0.06);border:1px solid rgba(245,196,0,0.15);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:800;color:${pnlColor};font-family:'Space Mono',monospace">${totalPnl >= 0 ? '+' : ''}$${totalPnl.toLocaleString(undefined,{maximumFractionDigits:0})}</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">TOTAL P&L</div>
+      </div>
+      <div style="background:rgba(245,196,0,0.06);border:1px solid rgba(245,196,0,0.15);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:800;color:${pnlColor};font-family:'Space Mono',monospace">${totalPnlPct >= 0 ? '+' : ''}${totalPnlPct.toFixed(1)}%</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">RETURN</div>
+      </div>
+      <div style="background:rgba(245,196,0,0.06);border:1px solid rgba(245,196,0,0.15);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:800;color:#00f5a0;font-family:'Space Mono',monospace">${best.sym}</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">BEST (+${best.pnlPct.toFixed(1)}%)</div>
+      </div>
+      <div style="background:rgba(245,196,0,0.06);border:1px solid rgba(245,196,0,0.15);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:800;color:#ff4d6d;font-family:'Space Mono',monospace">${worst.sym}</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">WORST (${worst.pnlPct.toFixed(1)}%)</div>
+      </div>
+      <div style="background:rgba(245,196,0,0.06);border:1px solid rgba(245,196,0,0.15);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:800;color:#aaa;font-family:'Space Mono',monospace">${enriched.length}</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">COINS · ${priceAge}m ago</div>
+      </div>
+    `;
+  }
+
+  // ── Holdings Table ──
+  if (tableEl) {
+    const rows = enriched.map(h => {
+      const pnlColor = h.pnl >= 0 ? '#00f5a0' : '#ff4d6d';
+      const chgColor = h.change24h >= 0 ? '#00f5a0' : '#ff4d6d';
+      const sectorMeta = SECTOR_META[h.sector] || SECTOR_META.other;
+      const fmt = p => p > 1000 ? '$' + p.toLocaleString(undefined,{maximumFractionDigits:0}) : p > 1 ? '$' + p.toFixed(2) : '$' + p.toFixed(6);
+      return `<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+        <td style="padding:6px 8px;font-weight:700;color:#fff">${h.sym} <span style="color:${sectorMeta.color};font-size:7px;font-weight:400">${sectorMeta.label}</span></td>
+        <td style="padding:6px 8px;color:#aaa">${h.quantity.toLocaleString(undefined,{maximumFractionDigits:6})}</td>
+        <td style="padding:6px 8px;color:#5a7a68">${fmt(h.avgBuyPrice)}</td>
+        <td style="padding:6px 8px;color:#fff">${fmt(h.currentPrice)}</td>
+        <td style="padding:6px 8px;color:#fff;font-weight:700">$${h.value.toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+        <td style="padding:6px 8px;color:${pnlColor};font-weight:700">${h.pnl >= 0 ? '+' : ''}$${h.pnl.toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+        <td style="padding:6px 8px;color:${pnlColor}">${h.pnlPct >= 0 ? '+' : ''}${h.pnlPct.toFixed(1)}%</td>
+        <td style="padding:6px 8px;color:${chgColor}">${h.change24h >= 0 ? '+' : ''}${h.change24h.toFixed(1)}%</td>
+        <td style="padding:6px 8px;color:#aaa">${h.allocation.toFixed(1)}%</td>
+        <td style="padding:6px 8px"><button onclick="removePortfolioHolding('${h.id}')" style="font-size:7px;padding:2px 6px;background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.2);color:#ff4d6d;border-radius:3px;cursor:pointer;font-family:'Space Mono',monospace;width:auto;margin:0">✕</button></td>
+      </tr>`;
+    }).join('');
+
+    tableEl.innerHTML = `<div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-family:'Space Mono',monospace;font-size:8px">
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+          <td style="padding:5px 8px;color:#5a7a68;font-weight:700">COIN</td>
+          <td style="padding:5px 8px;color:#5a7a68;font-weight:700">QTY</td>
+          <td style="padding:5px 8px;color:#5a7a68;font-weight:700">AVG BUY</td>
+          <td style="padding:5px 8px;color:#5a7a68;font-weight:700">PRICE</td>
+          <td style="padding:5px 8px;color:#5a7a68;font-weight:700">VALUE</td>
+          <td style="padding:5px 8px;color:#5a7a68;font-weight:700">P&L $</td>
+          <td style="padding:5px 8px;color:#5a7a68;font-weight:700">P&L %</td>
+          <td style="padding:5px 8px;color:#5a7a68;font-weight:700">24H</td>
+          <td style="padding:5px 8px;color:#5a7a68;font-weight:700">ALLOC</td>
+          <td style="padding:5px 8px;color:#5a7a68;font-weight:700"></td>
+        </tr>
+        ${rows}
+      </table>
+    </div>`;
+  }
+
+  // ── Sector Exposure ──
+  if (sectorEl) {
+    const sectors = {};
+    enriched.forEach(h => {
+      const s = h.sector || 'other';
+      if (!sectors[s]) sectors[s] = { value: 0, count: 0 };
+      sectors[s].value += h.value;
+      sectors[s].count++;
+    });
+
+    const maxSectorVal = Math.max(1, ...Object.values(sectors).map(s => s.value));
+    const bars = Object.entries(sectors)
+      .sort((a, b) => b[1].value - a[1].value)
+      .map(([key, data]) => {
+        const meta = SECTOR_META[key] || SECTOR_META.other;
+        const pct = totalValue > 0 ? (data.value / totalValue * 100) : 0;
+        const barW = Math.max(5, (data.value / maxSectorVal) * 100);
+        const overweight = pct > 40;
+        return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+          <span style="font-size:8px;color:${meta.color};font-weight:700;width:40px">${meta.label}</span>
+          <div style="flex:1;height:10px;background:rgba(255,255,255,0.04);border-radius:5px;overflow:hidden">
+            <div style="height:100%;width:${barW}%;background:${meta.color};border-radius:5px;opacity:0.7"></div>
+          </div>
+          <span style="font-size:8px;color:#aaa;width:60px;text-align:right">${pct.toFixed(1)}% ${overweight ? '⚠' : ''}</span>
+          <span style="font-size:7px;color:#5a7a68;width:70px;text-align:right">$${(data.value/1000).toFixed(1)}k · ${data.count}</span>
+        </div>`;
+      }).join('');
+
+    sectorEl.innerHTML = bars || 'No data';
+  }
+
+  // ── Top / Bottom Performers ──
+  if (perfEl) {
+    const sorted = [...enriched].sort((a, b) => b.pnlPct - a.pnlPct);
+    const top3 = sorted.slice(0, 3);
+    const bottom3 = sorted.slice(-3).reverse();
+
+    const renderList = (items, isTop) => items.map(h => {
+      const color = h.pnlPct >= 0 ? '#00f5a0' : '#ff4d6d';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+        <span style="font-size:8px;color:#aaa;font-weight:700">${h.sym}</span>
+        <span style="font-size:8px;color:${color};font-weight:700">${h.pnlPct >= 0 ? '+' : ''}${h.pnlPct.toFixed(1)}%</span>
+      </div>`;
+    }).join('');
+
+    perfEl.innerHTML = `
+      <div style="margin-bottom:8px">
+        <div style="font-size:7px;color:#00f5a0;margin-bottom:4px">▲ TOP GAINERS</div>
+        ${renderList(top3, true)}
+      </div>
+      <div>
+        <div style="font-size:7px;color:#ff4d6d;margin-bottom:4px">▼ BIGGEST LOSERS</div>
+        ${renderList(bottom3, false)}
+      </div>
+    `;
+  }
+
+  // ── Portfolio Health Score ──
+  if (healthEl) {
+    const health = calcPortfolioHealth(enriched, totalValue);
+    const hColor = health.score >= 70 ? '#00f5a0' : health.score >= 40 ? '#f5c400' : '#ff4d6d';
+    const hLabel = health.score >= 70 ? 'Healthy' : health.score >= 40 ? 'Moderate Risk' : 'High Risk';
+    healthEl.innerHTML = `
+      <div style="display:flex;align-items:center;gap:14px;padding:10px 14px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:8px">
+        <div style="text-align:center;min-width:70px">
+          <div style="font-size:28px;font-weight:800;color:${hColor};font-family:'Space Mono',monospace">${health.score}</div>
+          <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">HEALTH</div>
+        </div>
+        <div style="flex:1;font-size:8px;font-family:'Space Mono',monospace;color:#aaa;line-height:1.8">
+          <span style="color:${hColor};font-weight:700">${hLabel}</span> ·
+          ${health.notes.map(n => `<span style="color:${n.color}">${n.text}</span>`).join(' · ')}
+        </div>
+      </div>
+    `;
+  }
+
+  // ── Smart Recommendations ──
+  if (recEl) {
+    const recs = generatePortfolioRecommendations(enriched, totalValue, prices);
+    if (recs.length === 0) {
+      recEl.innerHTML = '<div style="color:#3a5a48">No actionable recommendations right now. Portfolio looks balanced.</div>';
+    } else {
+      recEl.innerHTML = recs.map(r => `
+        <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;padding:8px;background:${r.bg};border:1px solid ${r.border};border-radius:6px">
+          <span style="font-size:14px;flex-shrink:0">${r.icon}</span>
+          <div>
+            <div style="font-size:9px;font-weight:700;color:${r.color}">${r.title}</div>
+            <div style="font-size:8px;color:#aaa;margin-top:2px">${r.detail}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+  }
+}
+
+function calcPortfolioHealth(enriched, totalValue) {
+  let score = 100;
+  const notes = [];
+
+  // Diversification — penalty for concentration
+  const topAlloc = enriched.length > 0 ? enriched[0].allocation : 0;
+  if (topAlloc > 50) {
+    score -= 20;
+    notes.push({ text: `${enriched[0].sym} is ${topAlloc.toFixed(0)}% — over-concentrated`, color: '#ff4d6d' });
+  } else if (topAlloc > 35) {
+    score -= 10;
+    notes.push({ text: `${enriched[0].sym} is ${topAlloc.toFixed(0)}% — slightly heavy`, color: '#f5c400' });
+  } else {
+    notes.push({ text: 'Good diversification', color: '#00f5a0' });
+  }
+
+  // Coin count
+  if (enriched.length < 3) {
+    score -= 15;
+    notes.push({ text: 'Only ' + enriched.length + ' coins — low diversification', color: '#ff4d6d' });
+  } else if (enriched.length > 15) {
+    score -= 10;
+    notes.push({ text: enriched.length + ' coins — potentially over-diversified', color: '#f5c400' });
+  }
+
+  // Sector diversity
+  const sectors = new Set(enriched.map(h => h.sector));
+  if (sectors.size <= 1) {
+    score -= 15;
+    notes.push({ text: 'Single sector exposure', color: '#ff4d6d' });
+  } else if (sectors.size >= 3) {
+    notes.push({ text: sectors.size + ' sectors covered', color: '#00f5a0' });
+  }
+
+  // Meme coin exposure
+  const memeAlloc = enriched.filter(h => h.sector === 'meme').reduce((s, h) => s + h.allocation, 0);
+  if (memeAlloc > 30) {
+    score -= 15;
+    notes.push({ text: `${memeAlloc.toFixed(0)}% in memes — high risk`, color: '#ff4d6d' });
+  } else if (memeAlloc > 15) {
+    score -= 5;
+    notes.push({ text: `${memeAlloc.toFixed(0)}% in memes`, color: '#f5c400' });
+  }
+
+  // BTC allocation (stability anchor)
+  const btcAlloc = enriched.find(h => h.id === 'bitcoin')?.allocation || 0;
+  if (btcAlloc >= 20) {
+    notes.push({ text: `${btcAlloc.toFixed(0)}% BTC anchor`, color: '#00f5a0' });
+  } else if (btcAlloc === 0 && enriched.length > 3) {
+    score -= 10;
+    notes.push({ text: 'No BTC — missing stability anchor', color: '#f5c400' });
+  }
+
+  // Regime check
+  const regimeEl = $('probRegimeBanner');
+  if (regimeEl && regimeEl.textContent.includes('BEAR')) {
+    const riskAlloc = enriched.filter(h => h.sector === 'meme' || h.sector === 'ai').reduce((s, h) => s + h.allocation, 0);
+    if (riskAlloc > 30) {
+      score -= 10;
+      notes.push({ text: `${riskAlloc.toFixed(0)}% in risk-on sectors during bear regime`, color: '#ff4d6d' });
+    }
+  }
+
+  return { score: Math.max(0, Math.min(100, score)), notes };
+}
+
+function generatePortfolioRecommendations(enriched, totalValue, prices) {
+  const recs = [];
+  if (!enriched.length) return recs;
+
+  const recStyle = (type) => ({
+    warning:  { icon: '⚠️', bg: 'rgba(245,196,0,0.06)', border: 'rgba(245,196,0,0.15)', color: '#f5c400' },
+    danger:   { icon: '🔴', bg: 'rgba(255,77,109,0.06)', border: 'rgba(255,77,109,0.15)', color: '#ff4d6d' },
+    bullish:  { icon: '🟢', bg: 'rgba(0,245,160,0.06)', border: 'rgba(0,245,160,0.15)', color: '#00f5a0' },
+    info:     { icon: '💡', bg: 'rgba(99,179,237,0.06)', border: 'rgba(99,179,237,0.15)', color: '#63b3ed' },
+    action:   { icon: '🎯', bg: 'rgba(167,139,250,0.06)', border: 'rgba(167,139,250,0.15)', color: '#a78bfa' },
+  }[type]);
+
+  // 1. Concentration risk
+  const topHolding = enriched[0];
+  if (topHolding.allocation > 50) {
+    recs.push({ ...recStyle('danger'), title: `${topHolding.sym} is ${topHolding.allocation.toFixed(0)}% of portfolio`,
+      detail: `Consider trimming to <40%. High single-asset risk — a 20% drop in ${topHolding.sym} would wipe ${(topHolding.allocation * 0.2).toFixed(0)}% of your portfolio.` });
+  }
+
+  // 2. Sector imbalance
+  const sectorAllocs = {};
+  enriched.forEach(h => {
+    const s = h.sector || 'other';
+    sectorAllocs[s] = (sectorAllocs[s] || 0) + h.allocation;
+  });
+
+  for (const [sector, alloc] of Object.entries(sectorAllocs)) {
+    if (alloc > 50 && sector !== 'l1') {
+      const meta = SECTOR_META[sector] || SECTOR_META.other;
+      recs.push({ ...recStyle('warning'), title: `${meta.name} is ${alloc.toFixed(0)}% — sector over-exposure`,
+        detail: `Consider diversifying into other sectors. If ${meta.name} underperforms, your portfolio takes a disproportionate hit.` });
+    }
+  }
+
+  // 3. Missing BTC/ETH (stability anchors)
+  const hasBTC = enriched.find(h => h.id === 'bitcoin');
+  const hasETH = enriched.find(h => h.id === 'ethereum');
+  if (!hasBTC && enriched.length >= 3) {
+    recs.push({ ...recStyle('info'), title: 'No Bitcoin allocation',
+      detail: 'BTC is the market\'s stability anchor. A 20-30% BTC position reduces portfolio volatility significantly without sacrificing much upside.' });
+  }
+  if (!hasETH && enriched.length >= 5 && !sectorAllocs['defi']) {
+    recs.push({ ...recStyle('info'), title: 'No Ethereum/DeFi exposure',
+      detail: 'ETH is the backbone of DeFi. Consider ETH or a DeFi index for ecosystem exposure.' });
+  }
+
+  // 4. Meme coin warning
+  const memeAlloc = sectorAllocs['meme'] || 0;
+  if (memeAlloc > 25) {
+    recs.push({ ...recStyle('warning'), title: `${memeAlloc.toFixed(0)}% in meme coins`,
+      detail: 'Meme coins are highly volatile with low fundamental backing. Consider capping meme exposure at 10-15% of portfolio.' });
+  }
+
+  // 5. Regime-based recommendations
+  const regimeEl = $('probRegimeBanner');
+  const regimeText = regimeEl?.textContent || '';
+  if (regimeText.includes('BEAR')) {
+    recs.push({ ...recStyle('danger'), title: 'Bear regime detected — defensive positioning recommended',
+      detail: 'Consider increasing BTC/stablecoin allocation and reducing meme/AI exposure. Bear markets punish risk-on sectors hardest.' });
+    // Specific alts to trim
+    const riskAlts = enriched.filter(h => (h.sector === 'meme' || h.sector === 'ai') && h.allocation > 5);
+    if (riskAlts.length > 0) {
+      recs.push({ ...recStyle('action'), title: `Consider trimming: ${riskAlts.map(h => h.sym).join(', ')}`,
+        detail: `These risk-on assets (${riskAlts.map(h => h.allocation.toFixed(0) + '% ' + h.sym).join(', ')}) typically drop 60-80% in bear markets.` });
+    }
+  } else if (regimeText.includes('BULL')) {
+    if ((sectorAllocs['l1'] || 0) > 80) {
+      recs.push({ ...recStyle('bullish'), title: 'Bull regime — consider adding higher-beta exposure',
+        detail: 'L1s are your core (good), but in bull markets, DeFi and AI sectors often outperform. A small allocation could boost returns.' });
+    }
+  }
+
+  // 6. Big losers — cut loss?
+  const bigLosers = enriched.filter(h => h.pnlPct < -30 && h.allocation > 3);
+  for (const loser of bigLosers) {
+    recs.push({ ...recStyle('warning'), title: `${loser.sym} is down ${Math.abs(loser.pnlPct).toFixed(0)}% — review position`,
+      detail: `Cost basis: $${loser.avgBuyPrice.toFixed(2)} → Current: $${loser.currentPrice.toFixed(2)}. Consider whether your thesis still holds or if this capital is better deployed elsewhere.` });
+  }
+
+  // 7. Funding rate warnings (if available)
+  const fundedAssets = enriched.filter(h => {
+    const fundingSym = h.sym + 'USDT';
+    const rate = fundingHistory[fundingSym]?.slice(-1)[0]?.rate;
+    return rate != null && Math.abs(rate) > 0.1;
+  });
+  for (const h of fundedAssets) {
+    const rate = fundingHistory[h.sym + 'USDT'].slice(-1)[0].rate;
+    if (rate > 0.1) {
+      recs.push({ ...recStyle('warning'), title: `${h.sym} funding rate is ${rate.toFixed(3)}% — crowded longs`,
+        detail: `High funding means long holders are paying shorts. If you're holding spot, no direct cost — but it signals potential for a squeeze down.` });
+    }
+  }
+
+  // 8. ETF flow alignment
+  if (ETF_STATE.loaded && ETF_STATE.data) {
+    const etfBias = getEtfFlowBias('BTCUSDT');
+    if (etfBias && etfBias.bias === 'strong_outflow' && hasBTC && hasBTC.allocation > 30) {
+      recs.push({ ...recStyle('danger'), title: `ETF outflows ($${(Math.abs(etfBias.net7)/1000).toFixed(1)}B/7d) — institutions exiting`,
+        detail: `Your ${hasBTC.allocation.toFixed(0)}% BTC position faces institutional headwinds. Consider reducing or hedging.` });
+    } else if (etfBias && etfBias.bias === 'strong_inflow' && !hasBTC) {
+      recs.push({ ...recStyle('bullish'), title: `ETF inflows ($${(etfBias.net7/1000).toFixed(1)}B/7d) — institutions accumulating BTC`,
+        detail: `Strong institutional buying but you have no BTC. Consider adding a BTC position to ride institutional momentum.` });
+    }
+  }
+
+  // 9. Sector rotation signal
+  if (INTEL.coinData.length > 0) {
+    const sectorPerf = {};
+    for (const coin of INTEL.coinData) {
+      const s = coin.sector || 'other';
+      if (!sectorPerf[s]) sectorPerf[s] = [];
+      sectorPerf[s].push(coin.price_change_percentage_7d_in_currency || 0);
+    }
+    const sectorAvg = {};
+    for (const [s, perfs] of Object.entries(sectorPerf)) {
+      sectorAvg[s] = perfs.reduce((a, b) => a + b, 0) / perfs.length;
+    }
+
+    // Find hot/cold sectors
+    const sortedSectors = Object.entries(sectorAvg).sort((a, b) => b[1] - a[1]);
+    const hotSector = sortedSectors[0];
+    const coldSector = sortedSectors[sortedSectors.length - 1];
+
+    if (hotSector && hotSector[1] > 5 && !(sectorAllocs[hotSector[0]] > 10)) {
+      const meta = SECTOR_META[hotSector[0]] || SECTOR_META.other;
+      recs.push({ ...recStyle('bullish'), title: `${meta.name} sector is hot (+${hotSector[1].toFixed(1)}% 7d) — you have low exposure`,
+        detail: `Consider rotating some capital into ${meta.name} to capture sector momentum.` });
+    }
+    if (coldSector && coldSector[1] < -10 && (sectorAllocs[coldSector[0]] > 20)) {
+      const meta = SECTOR_META[coldSector[0]] || SECTOR_META.other;
+      recs.push({ ...recStyle('warning'), title: `${meta.name} sector underperforming (${coldSector[1].toFixed(1)}% 7d) — you have ${(sectorAllocs[coldSector[0]]).toFixed(0)}% here`,
+        detail: `This sector is bleeding. Consider reducing exposure if the trend continues.` });
+    }
+  }
+
+  return recs.slice(0, 8); // Cap at 8 recommendations
+}
+
+function exportPortfolioCSV() {
+  const holdings = pfLoad();
+  const prices = pfPricesLoad();
+  if (!holdings.length) { alert('No holdings to export.'); return; }
+
+  const headers = ['coin','symbol','sector','quantity','avg_buy_price','current_price','value','pnl','pnl_pct','allocation_pct'];
+  let totalValue = 0;
+  const enriched = holdings.map(h => {
+    const p = prices[h.id];
+    const currentPrice = p?.usd || h.avgBuyPrice;
+    const value = h.quantity * currentPrice;
+    totalValue += value;
+    return { ...h, currentPrice, value, pnl: value - h.quantity * h.avgBuyPrice, pnlPct: ((currentPrice - h.avgBuyPrice) / h.avgBuyPrice * 100) };
+  });
+  enriched.forEach(h => h.allocation = totalValue > 0 ? (h.value / totalValue * 100) : 0);
+
+  const rows = enriched.map(h =>
+    [h.name, h.sym, h.sector, h.quantity, h.avgBuyPrice, h.currentPrice, h.value.toFixed(2), h.pnl.toFixed(2), h.pnlPct.toFixed(2), h.allocation.toFixed(2)].join(',')
+  );
+
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `portfolio_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // 🔔 ALERT MANAGER ENGINE
 // ════════════════════════════════════════════════════════════════
 
