@@ -741,12 +741,11 @@ class BestTradesScanner {
 
   async start() {
     await this._loadSettings();
-    if (this.settings.enabled) {
-      this._startAllTimers();
-    }
+    // Always start scan timers — scanning & logging predictions is independent of auto-trading
+    this._startAllTimers();
     // Always start resolution tracker (resolves predictions even if scanner is disabled)
     this._startResolutionTimer();
-    console.log(`[BestTrades] Scanner initialized. Enabled: ${this.settings.enabled}, Mode: ${this.settings.mode}, Scanning ALL timeframes: ${ALL_TIMEFRAMES.join(', ')}`);
+    console.log(`[BestTrades] Scanner initialized. Auto-trade: ${this.settings.enabled ? 'ON (' + this.settings.mode + ')' : 'OFF (scan-only)'}. Scanning ALL timeframes: ${ALL_TIMEFRAMES.join(', ')}`);
   }
 
   stop() {
@@ -764,14 +763,10 @@ class BestTradesScanner {
     Object.assign(this.settings, newSettings);
     await this._saveSettings();
 
-    // Restart all timers
+    // Scanning always runs — restart timers to pick up any interval changes
     this._stopAllTimers();
-    if (this.settings.enabled) {
-      this._startAllTimers();
-      console.log(`[BestTrades] Scanner enabled — scanning ALL timeframes (${ALL_TIMEFRAMES.join(', ')})`);
-    } else {
-      console.log('[BestTrades] Scanner disabled.');
-    }
+    this._startAllTimers();
+    console.log(`[BestTrades] Settings updated. Auto-trade: ${this.settings.enabled ? 'ON (' + this.settings.mode + ')' : 'OFF (scan-only)'}`);
     // Notify SSE clients
     this._broadcast('settings', this.settings);
     return this.settings;
@@ -814,7 +809,7 @@ class BestTradesScanner {
   // ── Scan a Single Timeframe ──
 
   async _scanTimeframe(tf) {
-    if (!this.settings.enabled) return [];
+    // Scanning always runs (for prediction logging & calibration). Auto-trading is gated separately in _processAutoTrades().
     // Refresh calibration cache (no-op if refreshed recently)
     await refreshCalibrationCache();
     console.log(`[BestTrades] Scanning ${ASSETS.length} assets on ${tf}...`);
@@ -959,7 +954,7 @@ class BestTradesScanner {
   // ── Auto-Trade Execution ──
 
   async _processAutoTrades(results, tf) {
-    if (this.settings.mode !== 'auto') return;
+    if (!this.settings.enabled || this.settings.mode !== 'auto') return;
 
     // Check per-TF rule: if this TF is explicitly disabled, skip
     const tfRule = this.settings.tfRules[tf];
@@ -1186,8 +1181,8 @@ class BestTradesScanner {
 
   async _logResults(results) {
     if (!pool) return;
-    // Log top 5 qualifying results
-    const top = results.filter(r => r.prob >= this.settings.minProb).slice(0, 5);
+    // Log top 5 results with prob >= 50% for calibration data (independent of auto-trade minProb)
+    const top = results.filter(r => r.prob >= 50).slice(0, 5);
     for (const r of top) {
       try {
         await pool.query(
@@ -1199,8 +1194,11 @@ class BestTradesScanner {
            r.marketQuality, r.rr, r.price, r.stopPrice, r.targetPrice,
            r.stopPct, r.targetPct, r.regime, false, r.timeframe || '4h']
         );
-      } catch {}
+      } catch (e) {
+        console.warn(`[BestTrades] Log insert error for ${r.asset}:`, e.message);
+      }
     }
+    if (top.length > 0) console.log(`[BestTrades] Logged ${top.length} predictions to best_trades_log`);
   }
 
   // ── SSE ──
