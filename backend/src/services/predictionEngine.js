@@ -66,49 +66,67 @@ class PredictionEngine extends EventEmitter {
 
   async pollMarkets() {
     try {
-      // Fetch active crypto prediction events
-      const data = await this._fetchJup('/events?category=crypto&includeMarkets=true&sortBy=startDate&sortDirection=desc');
-      const events = Array.isArray(data) ? data : (data.events || data.data || []);
+      // Fetch LIVE crypto prediction events (5m/15m BTC, ETH, SOL up/down)
+      const [liveData, activeData] = await Promise.all([
+        this._fetchJup('/events?category=crypto&includeMarkets=true&sortBy=beginAt&sortDirection=desc&filter=live').catch(() => ({ data: [] })),
+        this._fetchJup('/events?category=crypto&includeMarkets=true&sortBy=volume&sortDirection=desc').catch(() => ({ data: [] })),
+      ]);
+
+      const liveEvents = liveData.data || [];
+      const activeEvents = activeData.data || [];
+      // Merge: live first, then active (dedupe by eventId)
+      const seenIds = new Set();
+      const allEvents = [];
+      for (const e of [...liveEvents, ...activeEvents]) {
+        if (!seenIds.has(e.eventId)) { seenIds.add(e.eventId); allEvents.push(e); }
+      }
 
       this.markets = [];
-      const now = Date.now();
 
-      for (const event of events) {
+      for (const event of allEvents) {
         const markets = event.markets || [];
         const tags = event.tags || [];
-        const isLive = event.isLive || event.status === 'live' || event.status === 'active';
+        const isLive = event.isLive === true;
+        const isActive = event.isActive === true;
         const timeframe = tags.includes('5m') ? '5m' : tags.includes('15m') ? '15m' : tags.includes('1h') ? '1h' : 'other';
+        const eventTitle = event.metadata?.title || 'Unknown Event';
 
         for (const m of markets) {
-          // Parse prices (Jupiter uses micro-USD: 410000 = $0.41)
-          const yesPrice = m.buyYesPriceUsd ? m.buyYesPriceUsd / 1e6 : (m.yesPrice || m.lastYesPrice || null);
-          const noPrice = m.buyNoPriceUsd ? m.buyNoPriceUsd / 1e6 : (m.noPrice || m.lastNoPrice || null);
+          // Pricing is in market.pricing object, values in micro-USD (650000 = $0.65)
+          const pricing = m.pricing || {};
+          const yesPrice = pricing.buyYesPriceUsd ? pricing.buyYesPriceUsd / 1e6 : null;
+          const noPrice = pricing.buyNoPriceUsd ? pricing.buyNoPriceUsd / 1e6 : null;
+          const volume = pricing.volume || 0;
+          const marketTitle = m.metadata?.title || '';
 
           this.markets.push({
-            id: m.id || m.marketId,
-            eventId: event.id || event.eventId,
-            title: event.title || m.title || m.question || 'Unknown',
-            description: event.description || m.description || '',
-            side: m.title || m.outcome || (m.isYes ? 'Up' : 'Down'),
-            yesPrice: typeof yesPrice === 'number' ? yesPrice : null,
-            noPrice: typeof noPrice === 'number' ? noPrice : null,
-            volume: parseFloat(m.volume || m.totalVolume || 0),
-            liquidity: parseFloat(m.liquidity || m.totalLiquidity || 0),
+            id: m.marketId,
+            eventId: event.eventId,
+            title: eventTitle,
+            description: m.metadata?.rulesPrimary || '',
+            side: marketTitle || 'Unknown',
+            yesPrice,
+            noPrice,
+            volume: parseFloat(volume),
+            liquidity: 0,
             timeframe,
             isLive,
+            isActive,
             tags,
-            startDate: event.startDate || m.startDate,
-            endDate: event.endDate || m.endDate,
-            resolutionSource: event.resolutionSource || 'Chainlink',
-            status: m.status || event.status || 'unknown',
+            subcategory: event.subcategory || '',
+            startDate: m.openTime ? new Date(m.openTime * 1000).toISOString() : null,
+            endDate: m.closeTime ? new Date(m.closeTime * 1000).toISOString() : null,
+            resolutionSource: event.subcategory === 'btc' ? 'Binance BTC/USDT' : event.subcategory === 'eth' ? 'Binance ETH/USDT' : event.subcategory === 'sol' ? 'Binance SOL/USDT' : 'Chainlink',
+            status: m.status || 'unknown',
+            imageUrl: m.imageUrl || event.metadata?.imageUrl || null,
           });
         }
       }
 
-      // Filter to live/upcoming crypto markets
+      // Filter to open markets only
       this.markets = this.markets.filter(m =>
-        m.status !== 'closed' && m.status !== 'resolved'
-      ).slice(0, 60);
+        m.status === 'open' || m.status === 'active'
+      ).slice(0, 80);
 
       // Run signal detection
       await this.detectSignals();
