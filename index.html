@@ -14236,11 +14236,16 @@ function _buildBucketBars(buckets) {
     const barHeight = Math.max(20, Math.min(120, data.total * 8));
     const wrColor = parseFloat(actualWR) >= expectedMid ? '#00f5a0' : parseFloat(actualWR) >= expectedMid - 10 ? '#f5c400' : '#ff4d6d';
     const isCalibrated = Math.abs(parseFloat(actualWR) - expectedMid) <= 10;
-    return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;min-width:55px">
-      <div style="font-size:13px;color:${wrColor};font-weight:800;font-family:'Space Mono',monospace">${actualWR}%</div>
-      <div style="width:100%;max-width:40px;height:${barHeight}px;background:${wrColor};border-radius:4px;opacity:0.8"></div>
-      <div style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;font-weight:700">${label}</div>
-      <div style="font-size:9px;color:#3a5a48;font-family:'Space Mono',monospace">n=${data.total}</div>
+    const predictedLabel = Math.round(expectedMid) + '%';
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;min-width:60px">
+      <div style="font-size:11px;color:${wrColor};font-weight:800;font-family:'Space Mono',monospace">${actualWR}%</div>
+      <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">actual</div>
+      <div style="width:100%;max-width:40px;height:${barHeight}px;background:${wrColor};border-radius:4px;opacity:0.8;position:relative">
+        <div style="position:absolute;left:-2px;right:-2px;top:${Math.max(0, Math.min(100, 100 - expectedMid))}%;height:2px;background:rgba(167,139,250,0.6);border-radius:1px" title="Predicted: ${predictedLabel}"></div>
+      </div>
+      <div style="font-size:9px;color:#a78bfa;font-family:'Space Mono',monospace;font-weight:700">${predictedLabel}</div>
+      <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">predicted</div>
+      <div style="font-size:8px;color:#3a5a48;font-family:'Space Mono',monospace">n=${data.total}</div>
       <div style="font-size:9px;color:${isCalibrated ? '#00f5a0' : '#ff8c69'};font-family:'Space Mono',monospace">${isCalibrated ? '✓' : '⚠'}</div>
     </div>`;
   }).join('');
@@ -15920,7 +15925,7 @@ async function _renderRecCalibrationChart() {
       return;
     }
 
-    // Build bars
+    // Build bars with both actual and predicted probabilities
     const maxHeight = 70;
     const maxN = Math.max(...bucketData.map(b => b.total), 1);
     const bars = bucketData.map(b => {
@@ -15931,11 +15936,15 @@ async function _renderRecCalibrationChart() {
       const calibrated = Math.abs(actualWR - predicted) <= 10;
       const icon = calibrated ? '✓' : '⚠';
       const iconColor = calibrated ? '#00f5a0' : '#f5c400';
-      return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:50px">
-        <div style="font-size:9px;font-weight:700;color:${barColor};margin-bottom:3px">${actualWR.toFixed(0)}%</div>
-        <div style="width:100%;max-width:40px;height:${barH}px;background:${barColor};border-radius:4px 4px 0 0;transition:height 0.5s"></div>
-        <div style="font-size:7px;color:#5a7a68;margin-top:3px;text-align:center">${b.bucket}%</div>
-        <div style="font-size:7px;color:#5a7a68">n=${b.total}</div>
+      return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:60px">
+        <div style="font-size:9px;font-weight:700;color:${barColor}">${actualWR.toFixed(0)}%</div>
+        <div style="font-size:6px;color:#5a7a68">actual</div>
+        <div style="width:100%;max-width:40px;height:${barH}px;background:${barColor};border-radius:4px 4px 0 0;transition:height 0.5s;margin:3px 0;position:relative">
+          <div style="position:absolute;left:-2px;right:-2px;top:${Math.max(0, Math.min(100, 100 - predicted))}%;height:2px;background:rgba(167,139,250,0.6);border-radius:1px" title="Predicted: ${predicted}%"></div>
+        </div>
+        <div style="font-size:9px;color:#a78bfa;font-weight:700">${predicted}%</div>
+        <div style="font-size:6px;color:#5a7a68">predicted</div>
+        <div style="font-size:7px;color:#3a5a48">n=${b.total}</div>
         <div style="font-size:8px;color:${iconColor}">${icon}</div>
       </div>`;
     }).join('');
