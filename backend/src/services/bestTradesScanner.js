@@ -955,11 +955,25 @@ class BestTradesScanner {
 
   async start() {
     await this._loadSettings();
+    // Verify DB connection and table exists
+    if (pool) {
+      try {
+        const tableCheck = await pool.query("SELECT COUNT(*) AS cnt FROM best_trades_log LIMIT 1");
+        console.log(`[BestTrades] DB connected. best_trades_log has ${tableCheck.rows[0].cnt} rows`);
+        // Check if new columns exist
+        const colCheck = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name='best_trades_log' AND column_name='signal_snapshot'");
+        console.log(`[BestTrades] Migration 012 columns: ${colCheck.rows.length > 0 ? 'PRESENT' : 'MISSING - will use basic inserts'}`);
+      } catch (e) {
+        console.error(`[BestTrades] DB check error:`, e.message);
+      }
+    } else {
+      console.warn('[BestTrades] NO DB POOL - predictions will NOT be logged!');
+    }
     // Always start scan timers — scanning & logging predictions is independent of auto-trading
     this._startAllTimers();
     // Always start resolution tracker (resolves predictions even if scanner is disabled)
     this._startResolutionTimer();
-    console.log(`[BestTrades] Scanner initialized. Auto-trade: ${this.settings.enabled ? 'ON (' + this.settings.mode + ')' : 'OFF (scan-only)'}. Scanning ALL timeframes: ${ALL_TIMEFRAMES.join(', ')}`);
+    console.log(`[BestTrades] Scanner v2.1 initialized. Auto-trade: ${this.settings.enabled ? 'ON (' + this.settings.mode + ')' : 'OFF (scan-only)'}. Scanning ALL timeframes: ${ALL_TIMEFRAMES.join(', ')}`);
   }
 
   stop() {
@@ -1543,7 +1557,22 @@ class BestTradesScanner {
            r.volumeRatio, r.confluenceScore]
         );
       } catch (e) {
-        console.warn(`[BestTrades] Log insert error for ${r.asset}:`, e.message);
+        console.warn(`[BestTrades] Extended insert failed for ${r.asset}:`, e.message, '- trying basic insert...');
+        // Fallback: insert with only original columns (in case migration 012 hasn't run yet)
+        try {
+          await pool.query(
+            `INSERT INTO best_trades_log
+             (asset, direction, probability, confidence, market_quality, rr_ratio,
+              entry_price, stop_price, target_price, stop_pct, target_pct, regime, executed, timeframe)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+            [r.asset, r.direction, r.prob, r.confidence,
+             r.marketQuality, r.rr, r.price, r.stopPrice, r.targetPrice,
+             r.stopPct, r.targetPct, r.regime, false, r.timeframe || '4h']
+          );
+          console.log(`[BestTrades] Basic insert succeeded for ${r.asset}`);
+        } catch (e2) {
+          console.error(`[BestTrades] BOTH inserts failed for ${r.asset}:`, e2.message);
+        }
       }
     }
     if (top.length > 0) console.log(`[BestTrades] Logged ${top.length} predictions to best_trades_log`);

@@ -55,7 +55,7 @@ app.use((req, res, next) => {
 });
 
 // Health check - always works even if DB is down
-app.get('/health', (req, res) => res.json({ status: 'ok', version: 'v2-live', time: new Date().toISOString() }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: 'v2.1-consensus-upgrades', time: new Date().toISOString() }));
 app.get('/', (req, res) => res.json({ status: 'ok', service: 'Crypto Backtester Backend' }));
 
 // Start HTTP server FIRST so Railway sees it's alive
