@@ -1,7 +1,7 @@
 /**
  * predictionScorer.js — AI Scoring Engine for Jupiter Prediction Markets
  *
- * V1: Weighted Feature Ensemble (Rule-Based)
+ * V1.1: Weighted Feature Ensemble (Rule-Based)
  *
  * Takes real-time features from predictionDataPipeline.js and produces
  * a calibrated probability estimate P(UP) for each asset/timeframe.
@@ -12,48 +12,63 @@
  *   3. Probability Mapping: aggregate score → calibrated probability via sigmoid
  *   4. Confidence Assessment: feature agreement + data quality
  *   5. Edge Detection: our probability vs Jupiter market price
- *   6. Kelly Sizing: quarter-Kelly with drawdown adjustments
- *   7. Quality Filters: reject low-confidence / low-edge signals
+ *   6. Kelly Sizing: quarter-Kelly with graduated drawdown tiers + category adjustment
+ *   7. Quality Filters: reject low-confidence / low-edge / choppy regime / stale data signals
+ *
+ * V1.1 Changes:
+ *   - Removed fear_greed, fear_greed_change, obv_slope, atr_ratio (zero intraday signal / redundant)
+ *   - Added ofi_cumulative (Order Flow Imbalance) as highest-weight single feature
+ *   - Reallocated weights to orderbook/volume features
+ *   - Adversarial edge cap (>15% = likely stale data)
+ *   - Spread filter tightened from 50 bps to 10 bps
+ *   - Session-aware edge thresholds (US/EU/ASIA + weekend adjustment)
+ *   - Market regime gate (reject choppy markets)
+ *   - Graduated drawdown tiers (5/10/15/20%)
+ *   - Dynamic Kelly adjustment by dominant feature category
+ *   - Lag volume modifier (use previous bar's volume ratio)
+ *   - Trade cooldown support (skip 3 market cycles)
  */
 
-const MODEL_VERSION = '1.0.0';
+const MODEL_VERSION = '1.1.0';
 const MODEL_UPDATED = '2026-03-15';
 const ESTIMATED_FEE_PCT = 0.015; // ~1.5% round-trip fees on Jupiter prediction markets
 
 // ─── Feature Weight Configuration ────────────────────────────────────────────
 
 const FEATURE_WEIGHTS = {
-  // PRICE / MOMENTUM — total: 0.25
+  // PRICE / MOMENTUM — total: 0.21
   returns_1m:   0.04,
   returns_5m:   0.04,
   returns_15m:  0.03,
-  rsi_7:        0.04,
+  rsi_7:        0.03,
   rsi_14:       0.03,
-  macd_hist:    0.04,
-  bb_zscore:    0.02,
-  atr_ratio:    0.01,
+  macd_hist:    0.03,
+  bb_zscore:    0.01,
+  // atr_ratio removed (non-directional, tiny weight)
 
   // VOLUME / FLOW — total: 0.20
   volume_ratio:     0.03,
-  buy_sell_ratio:   0.06,
-  cvd_slope:        0.05,
+  buy_sell_ratio:   0.07,   // was 0.06
+  cvd_slope:        0.06,   // was 0.05
   vwap_deviation:   0.04,
-  obv_slope:        0.02,
+  // obv_slope removed (redundant with cvd_slope)
 
-  // ORDERBOOK — total: 0.30 (highest weight, most predictive at short timeframes)
-  book_imbalance_1:    0.08,
+  // ORDERBOOK — total: 0.38 (highest weight, most predictive at short timeframes)
+  ofi_cumulative:      0.09,  // NEW: Order Flow Imbalance (highest single feature)
+  book_imbalance_1:    0.09,  // was 0.08
   book_imbalance_5:    0.07,
-  book_imbalance_10:   0.05,
+  book_imbalance_10:   0.03,
   spread_bps:          0.02,
-  microprice_deviation: 0.06,
+  microprice_deviation: 0.07, // was 0.06
   depth_ratio:         0.02,
+  // Removed: fear_greed, fear_greed_change (daily update = no intraday signal)
 
-  // DERIVATIVES — total: 0.15
+  // DERIVATIVES — total: 0.11
   funding_rate:      0.04,
   oi_change_pct:     0.03,
   long_short_ratio:  0.04,
-  fear_greed:        0.02,
-  fear_greed_change: 0.02,
+  // fear_greed removed (daily update frequency, zero intraday signal)
+  // fear_greed_change removed (daily update frequency, zero intraday signal)
 
   // TEMPORAL — total: 0.10 (affects confidence, not direction)
   session_weight: 0.05,
@@ -61,10 +76,10 @@ const FEATURE_WEIGHTS = {
 };
 
 const FEATURE_CATEGORIES = {
-  momentum:    ['returns_1m', 'returns_5m', 'returns_15m', 'rsi_7', 'rsi_14', 'macd_hist', 'bb_zscore', 'atr_ratio'],
-  volume:      ['volume_ratio', 'buy_sell_ratio', 'cvd_slope', 'vwap_deviation', 'obv_slope'],
-  orderbook:   ['book_imbalance_1', 'book_imbalance_5', 'book_imbalance_10', 'spread_bps', 'microprice_deviation', 'depth_ratio'],
-  derivatives: ['funding_rate', 'oi_change_pct', 'long_short_ratio', 'fear_greed', 'fear_greed_change'],
+  momentum:    ['returns_1m', 'returns_5m', 'returns_15m', 'rsi_7', 'rsi_14', 'macd_hist', 'bb_zscore'],
+  volume:      ['volume_ratio', 'buy_sell_ratio', 'cvd_slope', 'vwap_deviation'],
+  orderbook:   ['ofi_cumulative', 'book_imbalance_1', 'book_imbalance_5', 'book_imbalance_10', 'spread_bps', 'microprice_deviation', 'depth_ratio'],
+  derivatives: ['funding_rate', 'oi_change_pct', 'long_short_ratio'],
   temporal:    ['session_weight', 'hour_weight'],
 };
 
@@ -119,10 +134,6 @@ function computeFeatureSignal(featureName, features) {
       // Mean reversion: price above upper band = bearish
       return clamp(-v / 2, -1, 1);
 
-    case 'atr_ratio':
-      // Volatility is informational, not directional
-      return 0;
-
     // ── VOLUME / FLOW ──
     case 'volume_ratio':
       // Modifier: amplifies other signals when volume is high.
@@ -140,10 +151,12 @@ function computeFeatureSignal(featureName, features) {
       // Mean reversion toward VWAP
       return clamp(-v / 0.002, -1, 1);
 
-    case 'obv_slope':
-      return clamp(v, -1, 1);
-
     // ── ORDERBOOK ──
+    case 'ofi_cumulative':
+      // Positive OFI = bid being built / ask being consumed = bullish
+      // Normalize by a reasonable threshold
+      return clamp(v / 50, -1, 1);
+
     case 'book_imbalance_1':
       return clamp(v * 2, -1, 1);
 
@@ -182,13 +195,6 @@ function computeFeatureSignal(featureName, features) {
     case 'long_short_ratio':
       // Contrarian: too many longs (ratio > 1) → bearish
       return clamp(-(v - 1) * 2, -1, 1);
-
-    case 'fear_greed':
-      // Slight momentum: high sentiment = slightly bullish
-      return clamp((v - 0.5) * 0.5, -1, 1);
-
-    case 'fear_greed_change':
-      return clamp(v / 10, -1, 1);
 
     // ── TEMPORAL ──
     case 'session_weight':
@@ -233,8 +239,8 @@ function generateReason(featureName, signal, value) {
       return `CVD trending ${signal > 0 ? 'positive' : 'negative'} — ${dir}`;
     case 'vwap_deviation':
       return `Price ${value > 0 ? 'above' : 'below'} VWAP by ${(Math.abs(value) * 100).toFixed(3)}% — ${dir} reversion`;
-    case 'obv_slope':
-      return `OBV slope ${dir}`;
+    case 'ofi_cumulative':
+      return `${strength} order flow imbalance (OFI: ${value.toFixed(1)}) — ${dir} book pressure`;
     case 'book_imbalance_1':
       return `${strength} top-of-book imbalance (${value.toFixed(3)}) favoring ${signal > 0 ? 'buyers' : 'sellers'}`;
     case 'book_imbalance_5':
@@ -251,10 +257,6 @@ function generateReason(featureName, signal, value) {
       return `Open interest ${value > 0 ? 'rising' : 'falling'} by ${(Math.abs(value) * 100).toFixed(2)}%`;
     case 'long_short_ratio':
       return `Long/short ratio ${value.toFixed(2)} — contrarian ${dir}`;
-    case 'fear_greed':
-      return `Sentiment index at ${(value * 100).toFixed(0)} — ${value > 0.6 ? 'greedy' : value < 0.4 ? 'fearful' : 'neutral'}`;
-    case 'fear_greed_change':
-      return `Sentiment ${value > 0 ? 'improving' : 'deteriorating'} (change: ${value.toFixed(1)})`;
     default:
       return `${featureName}: signal ${signal.toFixed(2)}`;
   }
@@ -268,6 +270,28 @@ class PredictionScorer {
     this.recentDrawdown = 0;
     this.featureImportanceLog = [];  // track for later validation
     this._lastScoredAt = null;
+    this._lastTradeTime = {};  // cooldown tracking per asset+timeframe
+  }
+
+  /**
+   * Record that a trade was taken for cooldown tracking.
+   */
+  recordTrade(asset, timeframe) {
+    this._lastTradeTime[`${asset}_${timeframe}`] = Date.now();
+  }
+
+  /**
+   * Check if we should skip trading due to cooldown (3 market cycles).
+   * @param {string} asset
+   * @param {string} timeframe
+   * @returns {boolean} true if still in cooldown
+   */
+  shouldCooldown(asset, timeframe) {
+    const key = `${asset}_${timeframe}`;
+    const last = this._lastTradeTime[key];
+    if (!last) return false;
+    const cooldownMs = timeframe === '5m' ? 3 * 5 * 60000 : 3 * 15 * 60000; // skip 3 market cycles
+    return (Date.now() - last) < cooldownMs;
   }
 
   /**
@@ -279,9 +303,10 @@ class PredictionScorer {
    * @param {object} features - feature map from predictionDataPipeline.js
    * @param {number} jupiterMarketProb - Jupiter market's implied P(UP), e.g. 0.55
    * @param {number} marketLifecycleMinutes - minutes since market opened
+   * @param {number} marketRegime - 0 = choppy, 1 = ranging, 2 = trending (default 1)
    * @returns {object|null} signal object or null if data insufficient
    */
-  scoreMarket(asset, timeframe, features, jupiterMarketProb, marketLifecycleMinutes) {
+  scoreMarket(asset, timeframe, features, jupiterMarketProb, marketLifecycleMinutes, marketRegime = 1) {
     if (!features || typeof features !== 'object') {
       return this._reject('No features provided');
     }
@@ -322,7 +347,8 @@ class PredictionScorer {
     }
 
     // Apply volume modifier: amplify score when volume is elevated
-    const volumeRatio = safeNum(features.volume_ratio, 1);
+    // Use PREVIOUS bar's volume ratio to avoid amplifying stale moves
+    const volumeRatio = safeNum(features.prev_volume_ratio || features.volume_ratio, 1);
     const volumeMultiplier = volumeRatio > 2 ? 1.15 :
                              volumeRatio > 1.5 ? 1.08 :
                              volumeRatio < 0.5 ? 0.85 : 1.0;
@@ -370,6 +396,29 @@ class PredictionScorer {
       }
     );
 
+    // ── Step 9b: Dynamic Kelly adjustment by dominant feature category ──
+    const topCats = topFeatures.map(f => {
+      for (const [cat, names] of Object.entries(FEATURE_CATEGORIES)) {
+        if (names.includes(f.name)) return cat;
+      }
+      return 'other';
+    });
+    const dominantCat = topCats.length > 0 ?
+      topCats.sort((a, b) => topCats.filter(v => v === b).length - topCats.filter(v => v === a).length)[0] : 'other';
+
+    // Orderbook features more reliable at short timeframes
+    const catMultiplier = {
+      orderbook: 1.15,    // size slightly larger
+      volume: 1.05,
+      momentum: 0.90,     // less reliable at 5m
+      derivatives: 0.85,
+      temporal: 0.80,
+      other: 0.90,
+    };
+    const kellyAdjustment = catMultiplier[dominantCat] || 0.90;
+    const adjustedKellyFraction = kellyResult.fraction * kellyAdjustment;
+    const adjustedBetSize = adjustedKellyFraction * this.bankroll;
+
     // ── Step 10: Feature quality check ──
     const featureQuality = this._assessFeatureQuality(features);
 
@@ -382,6 +431,7 @@ class PredictionScorer {
       marketLifecycleMinutes,
       timeframe,
       featureQuality,
+      marketRegime,
     });
 
     // ── Step 12: Log feature importance for future validation ──
@@ -405,8 +455,10 @@ class PredictionScorer {
       featureBreakdown,
       topFeatures,
       rawScore: Number(rawScore.toFixed(6)),
-      kellyFraction: Number(kellyResult.fraction.toFixed(4)),
-      betSize: Number(kellyResult.betSize.toFixed(2)),
+      kellyFraction: Number(adjustedKellyFraction.toFixed(4)),
+      kellyAdjustment: Number(kellyAdjustment.toFixed(2)),
+      dominantCategory: dominantCat,
+      betSize: Number(adjustedBetSize.toFixed(2)),
       reasons,
       reject: rejectResult.reject,
       rejectReason: rejectResult.reason,
@@ -492,6 +544,7 @@ class PredictionScorer {
       'returns_1m', 'returns_5m', 'rsi_7',
       'buy_sell_ratio', 'cvd_slope',
       'book_imbalance_1', 'book_imbalance_5', 'microprice_deviation',
+      'ofi_cumulative',
       'funding_rate', 'long_short_ratio',
     ];
 
@@ -529,7 +582,7 @@ class PredictionScorer {
   // ─── Kelly Sizing ────────────────────────────────────────────────────────
 
   /**
-   * Quarter-Kelly position sizing with safety adjustments.
+   * Quarter-Kelly position sizing with graduated drawdown tiers.
    *
    * @param {number} prob - our probability of winning
    * @param {number} marketPrice - market's implied price for our direction
@@ -555,8 +608,12 @@ class PredictionScorer {
 
     let f = rawKelly * 0.25;  // quarter Kelly for safety
 
-    // Drawdown adjustment: halve size after 10%+ drawdown
-    if (recentDrawdown > 0.10) f *= 0.5;
+    // Graduated drawdown tiers
+    if (recentDrawdown > 0.20) f = 0;              // Hard stop
+    else if (recentDrawdown > 0.15) f *= 0.25;     // Quarter size
+    else if (recentDrawdown > 0.10) f *= 0.50;     // Half size
+    else if (recentDrawdown > 0.05) f *= 0.75;     // Three-quarter size
+    // Below 5%: full size
 
     // Confidence adjustments
     if (confidence < 0.6) f *= 0.5;
@@ -575,21 +632,40 @@ class PredictionScorer {
   /**
    * Apply all quality filters. Returns { reject: boolean, reason: string|null }.
    */
-  _applyQualityFilters({ confidence, grossEdge, netEdge, spreadBps, marketLifecycleMinutes, timeframe, featureQuality }) {
+  _applyQualityFilters({ confidence, grossEdge, netEdge, spreadBps, marketLifecycleMinutes, timeframe, featureQuality, marketRegime }) {
+    // Adversarial: massive edge = likely stale data, not real alpha
+    if (Math.abs(grossEdge) > 0.15) {
+      return { reject: true, reason: `Edge suspiciously large (${(grossEdge * 100).toFixed(1)}% > 15%) — likely stale data` };
+    }
+
+    // Market regime gate: reject choppy markets
+    if (marketRegime === 0) {
+      return { reject: true, reason: 'Market regime is choppy — no reliable signal type' };
+    }
+
     if (confidence < 0.45) {
       return { reject: true, reason: `Confidence too low (${(confidence * 100).toFixed(1)}% < 45%)` };
     }
 
-    if (Math.abs(grossEdge) < 0.05) {
-      return { reject: true, reason: `Gross edge too small (${(grossEdge * 100).toFixed(1)}% < 5%)` };
+    // Session-aware edge thresholds
+    const hour = new Date().getUTCHours();
+    const session = hour >= 14 || hour < 0 ? 'US' : hour >= 8 ? 'EU' : 'ASIA';
+    const minGrossEdge = session === 'US' ? 0.04 : session === 'EU' ? 0.05 : 0.065;
+    // Weekend: require higher edge (lower liquidity, more noise)
+    const dayOfWeek = new Date().getUTCDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const adjustedMinEdge = isWeekend ? minGrossEdge * 1.3 : minGrossEdge;
+
+    if (Math.abs(grossEdge) < adjustedMinEdge) {
+      return { reject: true, reason: `Gross edge too small (${(grossEdge * 100).toFixed(1)}% < ${(adjustedMinEdge * 100).toFixed(1)}% for ${session}${isWeekend ? ' weekend' : ''})` };
     }
 
     if (netEdge < 0.035) {
       return { reject: true, reason: `Net edge too small after fees (${(netEdge * 100).toFixed(1)}% < 3.5%)` };
     }
 
-    if (spreadBps > 50) {
-      return { reject: true, reason: `Spread too wide (${spreadBps.toFixed(1)} bps > 50 bps)` };
+    if (spreadBps > 10) {
+      return { reject: true, reason: `Spread too wide (${spreadBps.toFixed(1)} bps > 10 bps)` };
     }
 
     // Market lifecycle: don't enter stale markets
@@ -621,6 +697,8 @@ class PredictionScorer {
       topFeatures: [],
       rawScore: 0,
       kellyFraction: 0,
+      kellyAdjustment: 1,
+      dominantCategory: null,
       betSize: 0,
       reasons: [],
       reject: true,
@@ -692,16 +770,23 @@ class PredictionScorer {
       categoryWeights,
       totalWeight: Number(totalWeight.toFixed(2)),
       probabilityMapping: 'Calibrated sigmoid with timeframe-dependent scaling',
-      positionSizing: 'Quarter-Kelly with drawdown and confidence adjustments',
+      positionSizing: 'Quarter-Kelly with graduated drawdown tiers and category-based adjustment',
       qualityFilters: {
         minConfidence: 0.45,
-        minGrossEdge: 0.05,
+        minGrossEdge: 'Session-aware (US: 4%, EU: 5%, ASIA: 6.5%, +30% on weekends)',
         minNetEdge: 0.035,
-        maxSpreadBps: 50,
+        maxSpreadBps: 10,
+        maxGrossEdge: 0.15,
         maxLifecycle5m: '2 minutes',
         maxLifecycle15m: '5 minutes',
         minFeatureQuality: 0.5,
+        marketRegimeGate: 'Rejects choppy (regime 0)',
       },
+      kellyAdjustments: {
+        drawdownTiers: '0-5%: full, 5-10%: 75%, 10-15%: 50%, 15-20%: 25%, >20%: stop',
+        categoryMultipliers: { orderbook: 1.15, volume: 1.05, momentum: 0.90, derivatives: 0.85, temporal: 0.80 },
+      },
+      cooldown: '3 market cycles per asset+timeframe',
       estimatedFeePct: ESTIMATED_FEE_PCT,
       maxProbability: { '5m': 0.70, '15m': 0.75 },
       minProbability: { '5m': 0.30, '15m': 0.25 },

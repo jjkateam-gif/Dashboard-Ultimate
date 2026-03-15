@@ -1,5 +1,6 @@
 // predictionDataPipeline.js — Real-time data ingestion for Jupiter Prediction Market AI
-// Connects to Binance futures WebSocket + REST APIs, computes 27 features per asset
+// Connects to Binance futures WebSocket + REST APIs, computes 33 features per asset
+// Includes OFI (Order Flow Imbalance), market regime detection, and temporal weighting
 
 const WebSocket = require('ws');
 const fetch = require('node-fetch');
@@ -12,6 +13,8 @@ const MAX_TRADES = 500;
 const API_POLL_INTERVAL = 30000; // 30 seconds
 const LOG_INTERVAL = 60000; // 60 seconds
 const MIN_CANDLES_READY = 60;
+const OFI_BUFFER_SIZE = 300;  // max OFI entries to keep
+const OFI_WINDOW_MS = 30000;  // 30-second rolling window for OFI cumulative
 
 class PredictionDataPipeline {
   constructor() {
@@ -35,6 +38,8 @@ class PredictionDataPipeline {
         candles5m: [],
         candles15m: [],
         orderbook: { bids: [], asks: [], ts: 0 },
+        prevOrderbook: null,   // previous orderbook snapshot for OFI computation
+        ofiBuffer: [],         // rolling OFI entries: { ts, ofi }
         trades: [],       // { price, qty, isBuyerMaker, time }
         lastFeatures: {},
       };
@@ -187,7 +192,59 @@ class PredictionDataPipeline {
   _handleDepth(sym, data) {
     const bids = (data.b || []).map(([p, q]) => ({ price: parseFloat(p), qty: parseFloat(q) }));
     const asks = (data.a || []).map(([p, q]) => ({ price: parseFloat(p), qty: parseFloat(q) }));
-    this.data[sym].orderbook = { bids, asks, ts: Date.now() };
+
+    const d = this.data[sym];
+    const prevOb = d.orderbook;
+
+    // Compute OFI if we have a previous snapshot with data
+    if (prevOb && prevOb.bids.length > 0 && prevOb.asks.length > 0 &&
+        bids.length > 0 && asks.length > 0) {
+      const ofi = this._computeOfi(prevOb, { bids, asks });
+      d.ofiBuffer.push({ ts: Date.now(), ofi });
+      // Trim buffer to max size
+      while (d.ofiBuffer.length > OFI_BUFFER_SIZE) {
+        d.ofiBuffer.shift();
+      }
+    }
+
+    // Store previous snapshot before overwriting
+    d.prevOrderbook = { bids: prevOb.bids, asks: prevOb.asks, ts: prevOb.ts };
+    d.orderbook = { bids, asks, ts: Date.now() };
+  }
+
+  /**
+   * Compute Order Flow Imbalance (OFI) delta between two orderbook snapshots.
+   * OFI_t = ΔBidSize * I(bid_unchanged_or_up) - ΔAskSize * I(ask_unchanged_or_down)
+   * Based on Cont, Kukanov & Stoikov (2014).
+   */
+  _computeOfi(prev, curr) {
+    const prevBestBid = prev.bids[0].price;
+    const prevBestAsk = prev.asks[0].price;
+    const prevBidQty = prev.bids[0].qty;
+    const prevAskQty = prev.asks[0].qty;
+
+    const currBestBid = curr.bids[0].price;
+    const currBestAsk = curr.asks[0].price;
+    const currBidQty = curr.bids[0].qty;
+    const currAskQty = curr.asks[0].qty;
+
+    // Bid side: delta bid size when bid price is unchanged or moved up
+    let bidOfi = 0;
+    if (currBestBid >= prevBestBid) {
+      bidOfi = currBidQty - (currBestBid === prevBestBid ? prevBidQty : 0);
+    } else {
+      bidOfi = -prevBidQty; // bid dropped — liquidity removed
+    }
+
+    // Ask side: delta ask size when ask price is unchanged or moved down
+    let askOfi = 0;
+    if (currBestAsk <= prevBestAsk) {
+      askOfi = currAskQty - (currBestAsk === prevBestAsk ? prevAskQty : 0);
+    } else {
+      askOfi = -prevAskQty; // ask lifted — liquidity removed
+    }
+
+    return bidOfi - askOfi;
   }
 
   _handleAggTrade(sym, data) {
@@ -359,15 +416,33 @@ class PredictionDataPipeline {
     features.fear_greed = (this.fearGreed.value || 50) / 100;
     features.fear_greed_change = ((this.fearGreed.value || 50) - (this.fearGreed.previous || 50)) / 100;
 
-    // ── Temporal (3) ──
+    // ── OFI (2) ──
+    features.ofi_cumulative = this._computeOfiCumulative(d.ofiBuffer);
+    features.ofi_slope = this._computeOfiSlope(d.ofiBuffer);
+
+    // ── Market Regime (2) ──
+    const regime = this._computeMarketRegime(c5m);
+    features.market_regime = regime.regime;       // 0=choppy, 1=ranging, 2=trending
+    features.regime_strength = regime.strength;   // 0-1
+
+    // ── Temporal (5) ──
     const now = new Date();
     const hour = now.getUTCHours() + now.getUTCMinutes() / 60;
     features.hour_sin = Math.sin(2 * Math.PI * hour / 24);
     features.hour_cos = Math.cos(2 * Math.PI * hour / 24);
     features.session = this._getSession(now.getUTCHours());
+    // Session weight: US=1.0, Europe=0.8, Asia=0.6
+    features.session_weight = features.session === 2 ? 1.0 : features.session === 1 ? 0.8 : 0.6;
+    // Hour weight: peak trading hours get higher weight
+    features.hour_weight = this._getHourWeight(now.getUTCHours());
 
-    // Ensure no nulls/NaNs
+    // ── Feature metadata ──
+    features._computedAt = Date.now();
+    features._featureAge = 0; // seconds since last update, 0 when freshly computed
+
+    // Ensure no nulls/NaNs (skip metadata keys starting with _)
     for (const key of Object.keys(features)) {
+      if (key.startsWith('_')) continue;
       if (features[key] === null || features[key] === undefined || Number.isNaN(features[key])) {
         features[key] = 0;
       }
@@ -544,6 +619,116 @@ class PredictionDataPipeline {
     return askDepth === 0 ? 1 : bidDepth / askDepth;
   }
 
+  // ── OFI helpers ──
+
+  _computeOfiCumulative(buffer) {
+    if (!buffer || buffer.length === 0) return 0;
+    const cutoff = Date.now() - OFI_WINDOW_MS;
+    let sum = 0;
+    for (let i = buffer.length - 1; i >= 0; i--) {
+      if (buffer[i].ts < cutoff) break;
+      sum += buffer[i].ofi;
+    }
+    return sum;
+  }
+
+  _computeOfiSlope(buffer) {
+    if (!buffer || buffer.length === 0) return 0;
+    const now = Date.now();
+    const cutoff30 = now - 30000;
+    const cutoff15 = now - 15000;
+
+    let sumRecent = 0; // last 15s
+    let sumPrev = 0;   // 15-30s ago
+    for (let i = buffer.length - 1; i >= 0; i--) {
+      if (buffer[i].ts < cutoff30) break;
+      if (buffer[i].ts >= cutoff15) {
+        sumRecent += buffer[i].ofi;
+      } else {
+        sumPrev += buffer[i].ofi;
+      }
+    }
+    return sumRecent - sumPrev;
+  }
+
+  // ── Market Regime helpers ──
+
+  /**
+   * Compute market regime from 5m candles using ADX proxy and ATR analysis.
+   * Returns { regime: 0|1|2, strength: 0-1 }
+   *   0 = choppy, 1 = ranging, 2 = trending
+   */
+  _computeMarketRegime(candles) {
+    const defaultRegime = { regime: 0, strength: 0.5 };
+    if (!candles || candles.length < 14) return defaultRegime;
+
+    const slice = candles.slice(-14);
+
+    // Compute directional movement for ADX proxy
+    let plusDmSum = 0;
+    let minusDmSum = 0;
+    let trSum = 0;
+
+    for (let i = 1; i < slice.length; i++) {
+      const high = slice[i].h;
+      const low = slice[i].l;
+      const prevHigh = slice[i - 1].h;
+      const prevLow = slice[i - 1].l;
+      const prevClose = slice[i - 1].c;
+
+      // True Range
+      const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
+      trSum += tr;
+
+      // Directional Movement
+      const upMove = high - prevHigh;
+      const downMove = prevLow - low;
+
+      if (upMove > downMove && upMove > 0) plusDmSum += upMove;
+      if (downMove > upMove && downMove > 0) minusDmSum += downMove;
+    }
+
+    if (trSum === 0) return defaultRegime;
+
+    // DI+ and DI- (simplified, not smoothed)
+    const diPlus = plusDmSum / trSum;
+    const diMinus = minusDmSum / trSum;
+    const diSum = diPlus + diMinus;
+
+    // DX = |DI+ - DI-| / (DI+ + DI-)
+    const dx = diSum === 0 ? 0 : Math.abs(diPlus - diMinus) / diSum;
+
+    // ADX proxy: dx is already 0-1 range
+    // Also measure price range vs ATR for ranging detection
+    const avgTr = trSum / (slice.length - 1);
+    const priceRange = Math.max(...slice.map(c => c.h)) - Math.min(...slice.map(c => c.l));
+    const midPrice = slice[slice.length - 1].c;
+    const rangeRatio = midPrice > 0 ? priceRange / midPrice : 0;
+    const atrRatio = midPrice > 0 ? avgTr / midPrice : 0;
+
+    // Volume irregularity: stdev of volumes / mean
+    const vols = slice.map(c => c.v);
+    const volMean = vols.reduce((a, b) => a + b, 0) / vols.length;
+    const volStd = Math.sqrt(vols.reduce((a, b) => a + (b - volMean) ** 2, 0) / vols.length);
+    const volCV = volMean > 0 ? volStd / volMean : 0;
+
+    // Classify regime
+    // TRENDING: strong directional movement (high DX)
+    if (dx > 0.3) {
+      return { regime: 2, strength: Math.min(dx / 0.6, 1.0) };
+    }
+
+    // CHOPPY: high ATR relative to range, irregular volume, low DX
+    if (volCV > 0.6 && dx < 0.2 && atrRatio > 0) {
+      const choppyStrength = Math.min((volCV - 0.3) / 0.7, 1.0);
+      return { regime: 0, strength: Math.max(0, choppyStrength) };
+    }
+
+    // RANGING: price oscillating within ATR band, moderate DX
+    const rangingStrength = rangeRatio > 0 ? Math.min(1.0, (avgTr * 3) / priceRange) : 0.5;
+    return { regime: 1, strength: Math.max(0, Math.min(1, rangingStrength)) };
+  }
+
   // ── Temporal helpers ──
 
   _getSession(utcHour) {
@@ -551,6 +736,18 @@ class PredictionDataPipeline {
     if (utcHour < 8) return 0;
     if (utcHour < 14) return 1;
     return 2;
+  }
+
+  /**
+   * Hour weight: peak trading hours (US market overlap) get higher weight.
+   * US overlap 14-21 UTC = 1.0, Europe active 08-14 = 0.8,
+   * Late US 21-00 = 0.7, Asia 00-08 = 0.5
+   */
+  _getHourWeight(utcHour) {
+    if (utcHour >= 14 && utcHour < 21) return 1.0;  // US + Europe overlap / US prime
+    if (utcHour >= 8 && utcHour < 14) return 0.8;    // Europe session
+    if (utcHour >= 21 || utcHour < 1) return 0.7;    // Late US / early Asia transition
+    return 0.5;                                        // Asia quiet hours
   }
 
   // ──────────────────────────── Logging ────────────────────────────
@@ -583,7 +780,12 @@ class PredictionDataPipeline {
   getFeatures(asset) {
     const sym = asset.toUpperCase();
     if (!this.data[sym]) return {};
-    return { ...this.data[sym].lastFeatures };
+    const features = { ...this.data[sym].lastFeatures };
+    // Update feature age on read
+    if (features._computedAt) {
+      features._featureAge = (Date.now() - features._computedAt) / 1000;
+    }
+    return features;
   }
 
   getCandles(asset, tf) {
@@ -606,6 +808,33 @@ class PredictionDataPipeline {
       asks: [...ob.asks],
       ts: ob.ts,
     };
+  }
+
+  /**
+   * Returns the current market regime for an asset.
+   * { regime: 0|1|2, strength: 0-1, label: 'choppy'|'ranging'|'trending' }
+   */
+  getMarketRegime(asset) {
+    const sym = asset.toUpperCase();
+    if (!this.data[sym]) return { regime: 0, strength: 0.5, label: 'choppy' };
+    const c5m = this.data[sym].candles5m;
+    const result = this._computeMarketRegime(c5m);
+    const labels = ['choppy', 'ranging', 'trending'];
+    return { ...result, label: labels[result.regime] };
+  }
+
+  /**
+   * Returns the PREVIOUS bar's volume ratio (lagged by one bar).
+   * Lagging avoids amplifying stale or look-ahead signals.
+   */
+  getPreviousVolumeRatio(asset) {
+    const sym = asset.toUpperCase();
+    if (!this.data[sym]) return 1;
+    const candles = this.data[sym].candles5m;
+    if (!candles || candles.length < 22) return 1;
+    // Use candles up to second-to-last (lagged by one bar)
+    const lagged = candles.slice(0, -1);
+    return this._computeVolumeRatio(lagged);
   }
 
   isReady(asset) {
