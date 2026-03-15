@@ -1076,6 +1076,14 @@ function switchAuthView(view) {
           <button onclick="stopPredictionBot()" style="flex:1;font-family:'Space Mono',monospace;font-size:9px;padding:8px;background:rgba(255,77,109,0.15);border:1px solid rgba(255,77,109,0.3);color:#ff4d6d;border-radius:6px;cursor:pointer">⏹ Stop Bot</button>
         </div>
         <div style="font-family:'Space Mono',monospace;font-size:8px;color:#5a7a68;margin-top:8px;text-align:center">Powered by Jupiter Prediction Market API</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0 0">
+          <span style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68">🤖 AI Engine:</span>
+          <span id="predAIStatus" style="font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:#a855f7">Initializing...</span>
+        </div>
+        <div id="predAIFeatureBar" style="margin-top:4px;height:3px;background:rgba(255,255,255,0.05);border-radius:2px;overflow:hidden">
+          <div id="predAIFeatureProgress" style="height:100%;width:0%;background:linear-gradient(90deg,#a855f7,#00f5a0);transition:width 0.5s"></div>
+        </div>
+        <div style="font-family:'Space Mono',monospace;font-size:7px;color:#444;margin-top:2px;text-align:center" id="predAIDetail">27 features · Binance WS · Quarter-Kelly</div>
       </div>
 
       <!-- Strategy Config -->
@@ -23107,10 +23115,11 @@ async function loadPredictionMarkets() {
   try {
     const token = localStorage.getItem('dash_token');
     const headers = { 'Authorization': 'Bearer ' + token };
-    const [marketsR, signalsR, perfR] = await Promise.all([
+    const [marketsR, signalsR, perfR, aiR] = await Promise.all([
       fetch(BACKEND_URL + '/predictions/markets', { headers }),
       fetch(BACKEND_URL + '/predictions/signals', { headers }),
       fetch(BACKEND_URL + '/predictions/performance', { headers }),
+      fetch(BACKEND_URL + '/predictions/ai/status', { headers }).catch(() => null),
     ]);
     if (marketsR.ok) {
       const data = await marketsR.json();
@@ -23128,6 +23137,36 @@ async function loadPredictionMarkets() {
     if (perfR.ok) {
       const data = await perfR.json();
       renderPredictionPerformance(data);
+    }
+    // Update AI Engine status
+    if (aiR && aiR.ok) {
+      try {
+        const ai = await aiR.json();
+        const statusEl = document.getElementById('predAIStatus');
+        const progressEl = document.getElementById('predAIFeatureProgress');
+        const detailEl = document.getElementById('predAIDetail');
+        if (statusEl) {
+          const ps = ai.pipelineStatus || {};
+          const readyCount = Object.values(ps).filter(p => p.ready).length;
+          const totalAssets = Object.keys(ps).length || 4;
+          if (readyCount === totalAssets) {
+            statusEl.textContent = 'Active (' + readyCount + '/' + totalAssets + ' assets)';
+            statusEl.style.color = '#00f5a0';
+          } else if (readyCount > 0) {
+            statusEl.textContent = 'Warming Up (' + readyCount + '/' + totalAssets + ')';
+            statusEl.style.color = '#ffd60a';
+          } else {
+            statusEl.textContent = 'Collecting Data...';
+            statusEl.style.color = '#a855f7';
+          }
+          if (progressEl) progressEl.style.width = (readyCount / totalAssets * 100) + '%';
+        }
+        if (detailEl && ai.modelInfo) {
+          const mi = ai.modelInfo;
+          const ss = ai.scoringStats || {};
+          detailEl.textContent = mi.totalFeatures + ' features · v' + mi.modelVersion + ' · Scored: ' + (ss.totalScored||0) + ' · Passed: ' + (ss.totalPassed||0);
+        }
+      } catch {}
     }
     PRED_STATE.marketsLoaded = true;
     if (!PRED_STATE.sseConnected) connectPredictionStream();
@@ -23248,13 +23287,30 @@ function renderPredictionSignals(signals) {
     return;
   }
   el.innerHTML = signals.map(s => {
-    const colors = { momentum: '#ffd60a', trend: '#00b4d8', arbitrage: '#00f5a0' };
-    const icons = { momentum: '⚡', trend: '📈', arbitrage: '♻️' };
+    const colors = { momentum: '#ffd60a', trend: '#00b4d8', arbitrage: '#00f5a0', ai_scored: '#a855f7' };
+    const icons = { momentum: '⚡', trend: '📈', arbitrage: '♻️', ai_scored: '🤖' };
     const borderColor = colors[s.type] || '#a855f7';
     const icon = icons[s.type] || '🎯';
     const typeLabel = icon + ' ' + (s.strategy || s.type).toUpperCase();
     let detail = '';
-    if (s.type === 'momentum') {
+    if (s.type === 'ai_scored') {
+      // AI-scored signal with full metrics
+      const confPct = ((s.confidence||0)*100).toFixed(0);
+      const confColor = (s.confidence||0) >= 0.6 ? '#00f5a0' : (s.confidence||0) >= 0.45 ? '#ffd60a' : '#ff4d6d';
+      const dirColor = /UP/.test(s.direction) ? '#00f5a0' : '#ff4d6d';
+      const probPct = ((s.aiProbUp||0.5)*100).toFixed(1);
+      const mktPct = ((s.marketProbUp||0.5)*100).toFixed(1);
+      detail =
+        '<span style="color:' + dirColor + ';font-weight:700">' + s.direction + '</span>' +
+        ' <span style="color:#ffd60a">Edge: ' + (s.edgePct||0) + '%</span>' +
+        ' <span style="color:' + confColor + '">Conf: ' + confPct + '%</span>' +
+        ' <span style="color:#5a7a68">| AI: ' + probPct + '% vs Mkt: ' + mktPct + '%</span>';
+      // Show top AI reasons if available
+      if (s.reasons && s.reasons.length > 0) {
+        detail += '<div style="margin-top:3px;color:#5a7a68;font-size:8px;line-height:1.3">' +
+          s.reasons.slice(0, 2).map(r => '  › ' + r).join('<br>') + '</div>';
+      }
+    } else if (s.type === 'momentum') {
       detail = '<span style="color:#ffd60a">Edge: ' + s.edgePct + '% | ' + s.direction + '</span> <span style="color:#5a7a68">| Price: ' + ((s.currentPrice||0)*100).toFixed(1) + '% vs Forecast: ' + ((s.forecastPrice||0)*100).toFixed(1) + '%</span>';
     } else if (s.type === 'trend') {
       detail = '<span style="color:#00b4d8">Edge: ' + s.edgePct + '% | ' + s.direction + '</span> <span style="color:#5a7a68">| OB Imbalance: ' + (s.imbalance||0) + '%</span>';
@@ -23328,7 +23384,7 @@ function renderPredTradeLog(trades) {
   logEl.innerHTML = trades.slice(0, 30).map(p => {
     const icon = p.outcome === 'win' ? '✅' : p.outcome === 'loss' ? '❌' : '⏳';
     const pnlColor = (p.pnl || 0) > 0 ? '#00f5a0' : (p.pnl || 0) < 0 ? '#ff4d6d' : '#5a7a68';
-    const stratColor = { momentum: '#ffd60a', trend: '#00b4d8', arbitrage: '#00f5a0' }[p.type] || '#a855f7';
+    const stratColor = { momentum: '#ffd60a', trend: '#00b4d8', arbitrage: '#00f5a0', ai_scored: '#a855f7' }[p.type] || '#a855f7';
     const modeIcon = p.mode === 'paper' ? '📝' : '💰';
     return '<div style="display:grid;grid-template-columns:auto 1fr auto auto auto;gap:8px;align-items:center;padding:5px 8px;font-family:\'Space Mono\',monospace;font-size:9px;border-bottom:1px solid rgba(255,255,255,0.03)">' +
       '<span style="color:#555">' + modeIcon + '</span>' +

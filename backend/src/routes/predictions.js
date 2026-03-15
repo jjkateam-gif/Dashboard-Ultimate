@@ -81,4 +81,21 @@ router.get('/status', (req, res) => {
   });
 });
 
+// ─── AI Engine Endpoints ───
+
+// GET /predictions/ai/status — AI engine status, model info, pipeline readiness
+router.get('/ai/status', (req, res) => {
+  res.json(predictionEngine.getAIStatus());
+});
+
+// GET /predictions/ai/features/:asset — live features for an asset (btc, eth, sol, xrp)
+router.get('/ai/features/:asset', (req, res) => {
+  res.json(predictionEngine.getAIFeatures(req.params.asset));
+});
+
+// GET /predictions/ai/importance — feature importance stats from logged predictions
+router.get('/ai/importance', (req, res) => {
+  res.json(predictionEngine.getFeatureImportance());
+});
+
 module.exports = router;
