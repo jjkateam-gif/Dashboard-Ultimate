@@ -1117,10 +1117,6 @@ class BestTradesScanner {
         if (scannedCount <= 3) {
           console.log(`[BestTrades] ${asset.label} ${tf}: longProb=${longScore.prob} shortProb=${shortScore.prob} best=${best.prob} conf=${best.confluence?.toFixed(3)} mq=${marketQuality} regime=${regime}`);
         }
-        // Log detected patterns
-        if (patternResult.patterns.length > 0 && scannedCount <= 5) {
-          console.log(`[BestTrades] ${asset.label} ${tf} PATTERNS: ${patternResult.patternSummary} → adj: ${patternAdj > 0 ? '+' : ''}${patternAdj.toFixed(1)}%`);
-        }
 
         // #9 Multi-TF Confluence: For 5m/15m signals, check 1h trend alignment
         // If 1h trend opposes the signal direction, penalize probability
@@ -1152,6 +1148,11 @@ class BestTradesScanner {
         // ── CHART PATTERN DETECTION ──
         const patternResult = detectPatterns(candles, tf, regime);
         const patternAdj = patternResult.probabilityAdj || 0;
+
+        // Log detected patterns (MUST be after patternResult declaration)
+        if (patternResult.patterns.length > 0 && scannedCount <= 5) {
+          console.log(`[BestTrades] ${asset.label} ${tf} PATTERNS: ${patternResult.patternSummary} → adj: ${patternAdj > 0 ? '+' : ''}${patternAdj.toFixed(1)}%`);
+        }
 
         // ── CALIBRATION: Adjust probability using historical accuracy ──
         const rawProb = best.prob;
