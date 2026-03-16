@@ -1753,7 +1753,10 @@ class BestTradesScanner {
     // Always log — even when 0 inserts — so we can diagnose issues
     const topInfo = top.map(r => `${r.asset}/${r.direction}/${r.timeframe}(${r.prob}%,ev=${r.ev?.toFixed(3)})`).join(', ');
     console.log(`[BestTrades] _logResults: ${inserted} new, ${updated} updated, ${top.length} candidates from ${results.length} results [${topInfo}]`);
-    this.lastLogAttempt = { time: new Date().toISOString(), inserted, updated, ...debugInfo, top: topInfo };
+    if (!this.lastLogAttempts) this.lastLogAttempts = {};
+    const tf = top[0]?.timeframe || results[0]?.timeframe || 'unknown';
+    this.lastLogAttempts[tf] = { time: new Date().toISOString(), inserted, updated, ...debugInfo, top: topInfo };
+    this.lastLogAttempt = this.lastLogAttempts;
   }
 
   // ── SSE ──
