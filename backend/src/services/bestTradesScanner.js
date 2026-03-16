@@ -1327,33 +1327,36 @@ class BestTradesScanner {
       if (ts && now - parseInt(ts) > dedupeExpiry) this.recentTrades.delete(key);
     }
 
-    // Filter qualifying setups using per-TF rules
+    // Filter qualifying setups using per-TF rules (with debug logging)
+    const rejectReasons = {};
     const qualifying = results.filter(r => {
-      if (r.prob < minProb) return false;
-      if (r.marketQuality === 'No-Trade') return false;
-      // Per-TF minimum quality grade filter
-      if (minQuality && (QUALITY_ORDER[r.marketQuality] || 0) < (QUALITY_ORDER[minQuality] || 0)) return false;
-      // Confidence filter: per-TF or global (default: skip Low)
+      if (r.prob < minProb) { rejectReasons[r.asset] = `prob ${r.prob}% < min ${minProb}%`; return false; }
+      if (r.marketQuality === 'No-Trade') { rejectReasons[r.asset] = 'No-Trade quality'; return false; }
+      if (minQuality && (QUALITY_ORDER[r.marketQuality] || 0) < (QUALITY_ORDER[minQuality] || 0)) { rejectReasons[r.asset] = `quality ${r.marketQuality} < min ${minQuality}`; return false; }
+      // Confidence filter: only apply if per-TF rule explicitly sets minConfidence
       if (minConfidence) {
         const confOrder = { 'High': 3, 'Medium': 2, 'Low': 1 };
-        if ((confOrder[r.confidence] || 0) < (confOrder[minConfidence] || 0)) return false;
-      } else {
-        if (r.confidence === 'Low') return false;
+        if ((confOrder[r.confidence] || 0) < (confOrder[minConfidence] || 0)) { rejectReasons[r.asset] = `conf ${r.confidence} < min ${minConfidence}`; return false; }
       }
-      if (r.entryEfficiency === 'Chasing') return false;
-      if (r.ev <= 0) return false; // #24 EV must be positive
+      if (r.entryEfficiency === 'Chasing') { rejectReasons[r.asset] = 'Chasing entry'; return false; }
+      if (r.ev <= 0) { rejectReasons[r.asset] = `EV ${r.ev.toFixed(3)} <= 0`; return false; }
 
       // #27 — Per-TF leverage limits: hardcode 4h to max 1x until fixed
-      // (This is handled in getSafeLeverage, but also skip low-quality 4h)
-      if (tf === '4h' && r.marketQuality !== 'A') return false;
+      if (tf === '4h' && r.marketQuality !== 'A') { rejectReasons[r.asset] = '4h non-A quality'; return false; }
 
       // Cross-TF dedup: don't trade same asset+direction if recently traded on another TF
       const dedupeKey = `${r.asset}|${r.direction}`;
       for (const existing of this.recentTrades) {
-        if (existing.startsWith(dedupeKey + '|')) return false;
+        if (existing.startsWith(dedupeKey + '|')) { rejectReasons[r.asset] = 'cross-TF dedup'; return false; }
       }
       return true;
     });
+
+    // Log why trades were rejected (first 5)
+    const rejectEntries = Object.entries(rejectReasons).slice(0, 5);
+    if (rejectEntries.length > 0) {
+      console.log(`[BestTrades] ${tf} auto-trade rejections: ${rejectEntries.map(([a, r]) => `${a}(${r})`).join(', ')}`);
+    }
 
     if (qualifying.length === 0) return;
 
