@@ -15631,7 +15631,7 @@ function renderProbeResults(results, tf) {
         <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
           <span style="font-size:7px;font-weight:700;font-family:'Space Mono',monospace;padding:2px 6px;border-radius:4px;background:${r.marketQuality === 'A' ? 'rgba(0,245,160,0.15)' : r.marketQuality === 'B' ? 'rgba(245,196,0,0.15)' : r.marketQuality === 'C' ? 'rgba(255,140,105,0.15)' : 'rgba(255,77,109,0.15)'};color:${r.marketQuality === 'A' ? '#00f5a0' : r.marketQuality === 'B' ? '#f5c400' : r.marketQuality === 'C' ? '#ff8c69' : '#ff4d6d'};border:1px solid ${r.marketQuality === 'A' ? 'rgba(0,245,160,0.3)' : r.marketQuality === 'B' ? 'rgba(245,196,0,0.3)' : r.marketQuality === 'C' ? 'rgba(255,140,105,0.3)' : 'rgba(255,77,109,0.3)'}">${r.marketQuality === 'No-Trade' ? '⛔ NO TRADE' : r.marketQuality + '-Grade'}</span>
           ${r.snappedStop ? '<span style="font-size:6px;color:#a78bfa;font-family:\'Space Mono\',monospace">🎯 SL snapped to structure</span>' : ''}
-          ${r.entryEfficiency && r.entryEfficiency !== 'Acceptable' ? '<span style="font-size:6px;font-family:\'Space Mono\',monospace;color:' + (r.entryEfficiency === 'Excellent' ? '#00f5a0' : r.entryEfficiency === 'Chasing' ? '#ff4d6d' : '#f5c400') + '">' + (r.entryEfficiency === 'Excellent' ? '✦ Excellent entry' : r.entryEfficiency === 'Chasing' ? '⚠ Chasing (½ size)' : '⏳ Late entry') + '</span>' : ''}
+          ${r.entryEfficiency && r.entryEfficiency !== 'Acceptable' ? '<span style="font-size:6px;font-family:\'Space Mono\',monospace;color:' + (r.entryEfficiency === 'Excellent' ? '#00f5a0' : r.entryEfficiency === 'Chasing' ? '#ff4d6d' : '#f5c400') + '">' + (r.entryEfficiency === 'Excellent' ? '✦ Excellent entry' : r.entryEfficiency === 'Chasing' ? '⚠ Chasing (no trade)' : '⏳ Late entry') + '</span>' : ''}
         </div>
       </div>
 
@@ -15666,6 +15666,23 @@ function renderProbeResults(results, tf) {
         <span style="color:#5a7a68">|</span>
         <span style="color:#ff8c69">Fees: ${r.feePct}%</span>
       </div>
+
+      <!-- No-Trade Reasons (visible rejection box) -->
+      ${(() => {
+        const reasons = [];
+        const minProb = +($('autoTradeMinProb')?.value || 70);
+        if (r.marketQuality === 'No-Trade') reasons.push('⛔ Market quality: No-Trade zone (choppy/dead market)');
+        if (r.prob < minProb) reasons.push('📉 Probability ' + r.prob + '% below your minimum (' + minProb + '%)');
+        if (r.entryEfficiency === 'Chasing') reasons.push('🏃 Chasing: 3+ candles extended, >2% from EMA21 — poor entry');
+        if (parseFloat(r.ev) <= 0) reasons.push('📊 Negative EV (' + r.ev + '%) — risk exceeds expected reward after fees');
+        if (r.confidence === 'Low') reasons.push('⚠️ Low confidence — weak signal confluence (' + (r.confluence*100).toFixed(0) + '%)');
+        if (r.rr < 1) reasons.push('⚖️ Risk/Reward ' + r.rr + ':1 — reward doesn\'t justify the risk');
+        if (!reasons.length) return '';
+        return '<div style="margin-top:8px;padding:8px 10px;background:rgba(255,77,109,0.06);border:1px solid rgba(255,77,109,0.15);border-radius:6px">' +
+          '<div style="font-size:7px;font-weight:700;color:#ff4d6d;font-family:\'Space Mono\',monospace;margin-bottom:4px">🚫 AUTO-TRADE BLOCKED</div>' +
+          reasons.map(r => '<div style="font-size:7px;color:#ff8c69;font-family:\'Space Mono\',monospace;margin-bottom:2px;padding-left:4px">' + r + '</div>').join('') +
+        '</div>';
+      })()}
 
       <!-- Both direction probs + ETF flow -->
       <div style="margin-top:6px;display:flex;gap:8px;font-size:7px;font-family:'Space Mono',monospace;flex-wrap:wrap">
@@ -23091,7 +23108,7 @@ renderProbeResults = function(results, tf) {
         <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
           <span style="font-size:7px;font-weight:700;font-family:'Space Mono',monospace;padding:2px 6px;border-radius:4px;background:${r.marketQuality === 'A' ? 'rgba(0,245,160,0.15)' : r.marketQuality === 'B' ? 'rgba(245,196,0,0.15)' : r.marketQuality === 'C' ? 'rgba(255,140,105,0.15)' : 'rgba(255,77,109,0.15)'};color:${r.marketQuality === 'A' ? '#00f5a0' : r.marketQuality === 'B' ? '#f5c400' : r.marketQuality === 'C' ? '#ff8c69' : '#ff4d6d'};border:1px solid ${r.marketQuality === 'A' ? 'rgba(0,245,160,0.3)' : r.marketQuality === 'B' ? 'rgba(245,196,0,0.3)' : r.marketQuality === 'C' ? 'rgba(255,140,105,0.3)' : 'rgba(255,77,109,0.3)'}">${r.marketQuality === 'No-Trade' ? '⛔ NO TRADE' : (r.marketQuality || '?') + '-Grade'}</span>
           ${r.snappedStop ? '<span style="font-size:6px;color:#a78bfa;font-family:\'Space Mono\',monospace">🎯 SL snapped to structure</span>' : ''}
-          ${r.entryEfficiency && r.entryEfficiency !== 'Acceptable' ? '<span style="font-size:6px;font-family:\'Space Mono\',monospace;color:' + (r.entryEfficiency === 'Excellent' ? '#00f5a0' : r.entryEfficiency === 'Chasing' ? '#ff4d6d' : '#f5c400') + '">' + (r.entryEfficiency === 'Excellent' ? '✦ Excellent entry' : r.entryEfficiency === 'Chasing' ? '⚠ Chasing (½ size)' : '⏳ Late entry') + '</span>' : ''}
+          ${r.entryEfficiency && r.entryEfficiency !== 'Acceptable' ? '<span style="font-size:6px;font-family:\'Space Mono\',monospace;color:' + (r.entryEfficiency === 'Excellent' ? '#00f5a0' : r.entryEfficiency === 'Chasing' ? '#ff4d6d' : '#f5c400') + '">' + (r.entryEfficiency === 'Excellent' ? '✦ Excellent entry' : r.entryEfficiency === 'Chasing' ? '⚠ Chasing (no trade)' : '⏳ Late entry') + '</span>' : ''}
         </div>
       </div>
 
@@ -23165,6 +23182,23 @@ renderProbeResults = function(results, tf) {
       <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:8px;margin-bottom:10px">
         ${hitBars}${missBars}
       </div>
+
+      <!-- No-Trade Reasons -->
+      ${(() => {
+        const reasons = [];
+        const minProb = +($('autoTradeMinProb')?.value || 70);
+        if (r.marketQuality === 'No-Trade') reasons.push('⛔ Market quality: No-Trade zone (choppy/dead market)');
+        if (r.prob < minProb) reasons.push('📉 Probability ' + r.prob + '% below your minimum (' + minProb + '%)');
+        if (r.entryEfficiency === 'Chasing') reasons.push('🏃 Chasing: 3+ candles extended, >2% from EMA21 — poor entry');
+        if (parseFloat(r.ev||0) <= 0) reasons.push('📊 Negative EV (' + (r.ev||'0') + '%) — risk exceeds expected reward after fees');
+        if (r.confidence === 'Low') reasons.push('⚠️ Low confidence — weak signal confluence');
+        if (r.rr < 1) reasons.push('⚖️ Risk/Reward ' + r.rr + ':1 — reward doesn\'t justify the risk');
+        if (!reasons.length) return '';
+        return '<div style="margin-bottom:8px;padding:8px 10px;background:rgba(255,77,109,0.06);border:1px solid rgba(255,77,109,0.15);border-radius:6px">' +
+          '<div style="font-size:7px;font-weight:700;color:#ff4d6d;font-family:\'Space Mono\',monospace;margin-bottom:4px">🚫 AUTO-TRADE BLOCKED</div>' +
+          reasons.map(r => '<div style="font-size:7px;color:#ff8c69;font-family:\'Space Mono\',monospace;margin-bottom:2px;padding-left:4px">' + r + '</div>').join('') +
+        '</div>';
+      })()}
 
       <!-- Probs + Log/Execute -->
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
