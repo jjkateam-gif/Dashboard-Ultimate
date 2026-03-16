@@ -205,6 +205,7 @@ async function initDB() {
               lastEntries: lastRow.rows,
             },
             settings: bestTradesScanner.settings,
+            tradeRejections: bestTradesScanner.lastTradeRejections || {},
           });
         } catch (e) {
           res.status(500).json({ error: e.message, stack: e.stack?.split('\n').slice(0, 3) });

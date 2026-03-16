@@ -1352,10 +1352,15 @@ class BestTradesScanner {
       return true;
     });
 
-    // Log why trades were rejected (first 5)
+    // Log why trades were rejected (first 5) + store for debug endpoint
     const rejectEntries = Object.entries(rejectReasons).slice(0, 5);
+    if (!this.lastTradeRejections) this.lastTradeRejections = {};
+    this.lastTradeRejections[tf] = rejectReasons;
     if (rejectEntries.length > 0) {
       console.log(`[BestTrades] ${tf} auto-trade rejections: ${rejectEntries.map(([a, r]) => `${a}(${r})`).join(', ')}`);
+    }
+    if (qualifying.length > 0) {
+      console.log(`[BestTrades] ${tf} auto-trade QUALIFYING: ${qualifying.map(r => `${r.asset}(${r.prob}%,${r.marketQuality},${r.confidence},EV:${r.ev.toFixed(2)},entry:${r.entryEfficiency})`).join(', ')}`);
     }
 
     if (qualifying.length === 0) return;
@@ -1384,9 +1389,10 @@ class BestTradesScanner {
     }
 
     if (!creds) {
-      console.log('[BestTrades] Auto-trade: no unlocked credentials — skipping execution');
+      console.log(`[BestTrades] ${tf} auto-trade: no unlocked credentials — skipping execution (${qualifying.length} qualifying)`);
       return;
     }
+    console.log(`[BestTrades] ${tf} auto-trade: ${qualifying.length} qualifying, creds unlocked for user ${userId}`);
 
     // Count open positions
     let openCount = 0;
