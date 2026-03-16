@@ -157,6 +157,33 @@ async function initDB() {
       app.use('/best-trades', bestTradesRoutes);
       bestTradesScanner.start();
       console.log('Best Trades scanner started.');
+
+      // Debug endpoint (no auth) — check scanner health + DB row count
+      app.get('/best-trades-debug', async (req, res) => {
+        try {
+          const { pool: dbPool } = require('./db');
+          const countRes = await dbPool.query('SELECT COUNT(*) AS cnt FROM best_trades_log');
+          const pendingRes = await dbPool.query("SELECT COUNT(*) AS cnt FROM best_trades_log WHERE outcome IS NULL");
+          const lastRow = await dbPool.query('SELECT id, asset, direction, probability, timeframe, created_at FROM best_trades_log ORDER BY created_at DESC LIMIT 3');
+          const colCheck = await dbPool.query("SELECT column_name FROM information_schema.columns WHERE table_name='best_trades_log' AND column_name='signal_snapshot'");
+          res.json({
+            version: 'v2.1-consensus-upgrades',
+            scannerRunning: Object.keys(bestTradesScanner.scanTimers || {}).length > 0,
+            activeTimers: Object.keys(bestTradesScanner.scanTimers || {}),
+            lastResults: (bestTradesScanner.getLastResults() || []).length,
+            lastScanTimes: bestTradesScanner.lastScanTimeByTF || {},
+            db: {
+              totalRows: parseInt(countRes.rows[0].cnt),
+              pendingRows: parseInt(pendingRes.rows[0].cnt),
+              migration012: colCheck.rows.length > 0 ? 'PRESENT' : 'MISSING',
+              lastEntries: lastRow.rows,
+            },
+            settings: bestTradesScanner.settings,
+          });
+        } catch (e) {
+          res.status(500).json({ error: e.message, stack: e.stack?.split('\n').slice(0, 3) });
+        }
+      });
     } catch (btErr) {
       console.error('Best Trades scanner init error (core routes still working):', btErr.message);
     }
