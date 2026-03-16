@@ -1667,10 +1667,17 @@ class BestTradesScanner {
 
   async _logResults(results) {
     if (!pool) { this.lastLogAttempt = { time: new Date().toISOString(), error: 'NO POOL' }; return; }
+    // Debug: show raw top values before filtering
+    const sortedByEv = [...results].sort((a, b) => (b.ev || 0) - (a.ev || 0));
+    const rawTop5 = sortedByEv.slice(0, 5).map(r => ({
+      a: r.asset, d: r.direction, tf: r.timeframe,
+      prob: r.prob, ev: r.ev, evType: typeof r.ev,
+      probGte50: r.prob >= 50, evGt0: r.ev > 0
+    }));
     // Log top 3 results with EV > 0 for calibration data (#24: EV-first, fallback to prob >= 50%)
     const top = results.filter(r => (r.ev > 0) || r.prob >= 50).slice(0, 3);
     let inserted = 0, updated = 0;
-    const debugInfo = { candidates: top.length, fromResults: results.length, errors: [] };
+    const debugInfo = { candidates: top.length, fromResults: results.length, rawTop5, errors: [] };
     for (const r of top) {
       try {
         // DEDUPLICATION: Check if identical RECENT pending signal already exists
