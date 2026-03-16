@@ -945,11 +945,11 @@ function switchAuthView(view) {
         <div class="zone-marker" id="zoneMarker" style="left:50%"></div>
       </div>
       <div class="zone-labels" id="zoneLabels">
-        <span>🟢 DEEP BEAR<br>Accumulate</span>
-        <span style="text-align:center">🔵 EARLY RECOVERY<br>Build position</span>
+        <span>🟢 UNDERVALUED<br>Accumulate</span>
+        <span style="text-align:center">🔵 EARLY CYCLE<br>Build position</span>
         <span style="text-align:center">🟡 MID CYCLE<br>Trend follow</span>
         <span style="text-align:center">🟠 LATE CYCLE<br>Take profits</span>
-        <span style="text-align:right">🔴 EUPHORIA<br>Exit</span>
+        <span style="text-align:right">🔴 OVERHEATED<br>Exit</span>
       </div>
     </div>
 
@@ -4026,13 +4026,15 @@ function renderCycleDashboard(d){
   // Update zone labels based on bear/bull context
   const zl = $('zoneLabels');
   if (zl) {
+    // Bar always reads left (safe/low risk) → right (danger/high risk)
+    // Score maps: 0=safest, 100=most dangerous
     if (isBearMarket) {
       zl.innerHTML = `
-        <span>🟢 DEEP BEAR<br>Accumulate</span>
-        <span style="text-align:center">🔵 EARLY BEAR<br>Build position</span>
-        <span style="text-align:center">🟡 MID BEAR<br>Caution</span>
-        <span style="text-align:center">🟠 LATE BEAR<br>Distribution</span>
-        <span style="text-align:right">🔴 CAPITULATION<br>Exit risk</span>
+        <span>🟢 OVERSOLD<br>Accumulate</span>
+        <span style="text-align:center">🔵 BEAR RALLY<br>Caution</span>
+        <span style="text-align:center">🟡 DISTRIBUTION<br>Reduce exposure</span>
+        <span style="text-align:center">🟠 BREAKDOWN<br>Hedge / exit</span>
+        <span style="text-align:right">🔴 CAPITULATION<br>Max fear</span>
       `;
     } else if (isBullMarket) {
       zl.innerHTML = `
@@ -4044,24 +4046,24 @@ function renderCycleDashboard(d){
       `;
     } else {
       zl.innerHTML = `
-        <span>🟢 DEEP BEAR<br>Accumulate</span>
-        <span style="text-align:center">🔵 EARLY RECOVERY<br>Build position</span>
+        <span>🟢 UNDERVALUED<br>Accumulate</span>
+        <span style="text-align:center">🔵 EARLY CYCLE<br>Build position</span>
         <span style="text-align:center">🟡 MID CYCLE<br>Trend follow</span>
         <span style="text-align:center">🟠 LATE CYCLE<br>Take profits</span>
-        <span style="text-align:right">🔴 EUPHORIA<br>Exit</span>
+        <span style="text-align:right">🔴 OVERHEATED<br>Exit</span>
       `;
     }
   }
 
   if(adjustedScore < 20){
     vb.className='verdict-badge accumulate';
-    vb.innerHTML='🟢 ACCUMULATE — DEEP BEAR';
+    vb.innerHTML='🟢 ACCUMULATE — EXTREME UNDERVALUATION';
     vs.textContent='Multiple indicators showing extreme undervaluation. Historically the best time to build a position. Risk is lower here than it feels.';
   } else if(adjustedScore < 36){
     vb.className='verdict-badge hold';
     if (isBearMarket) {
-      vb.innerHTML='🔵 EARLY BEAR — BUILD POSITION';
-      vs.textContent='Bear market conditions but approaching oversold levels. Start building positions cautiously. DCA into strength.';
+      vb.innerHTML='🔵 OVERSOLD — ACCUMULATE WITH CAUTION';
+      vs.textContent='Bear market but approaching oversold levels. Historically good entries. Start building positions cautiously via DCA.';
     } else {
       vb.innerHTML='🔵 EARLY BULL — BUILD POSITION';
       vs.textContent='Early recovery or oversold conditions. Good time to enter or add to positions. Not yet in overbought territory.';
@@ -4069,32 +4071,42 @@ function renderCycleDashboard(d){
   } else if(adjustedScore < 50){
     vb.className='verdict-badge hold';
     if (isBearMarket) {
-      vb.innerHTML='🔵 MID BEAR — HOLD / ACCUMULATE';
-      vs.textContent='Bear market with mixed signals. Below key MAs, meaningful drawdown from ATH. Look for bottoming signals before aggressive buying.';
+      vb.innerHTML='🔵 BEAR RALLY — CAUTIOUS OPTIMISM';
+      vs.textContent='Bear market with some recovery signs. Could be a relief rally. Maintain tight stops. Look for confirmation of trend reversal before heavy exposure.';
     } else if (isBullMarket) {
-      vb.innerHTML='🔵 MID BULL — HOLD / RIDE TREND';
+      vb.innerHTML='🔵 MID BULL — RIDE TREND';
       vs.textContent='Bull market with healthy momentum. Ride existing positions with stops in place. Add on pullbacks to key support.';
     } else {
-      vb.innerHTML='🔵 HOLD — TRANSITIONAL';
-      vs.textContent='Market in transition between bull and bear. Mixed signals across indicators. Maintain positions with tight risk management.';
+      vb.innerHTML='🔵 TRANSITIONAL — MIXED SIGNALS';
+      vs.textContent='Market in transition. Mixed signals across indicators. Maintain positions with tight risk management.';
     }
   } else if(adjustedScore < 62){
     vb.className='verdict-badge caution';
     if (isBearMarket) {
-      vb.innerHTML='🟡 CAUTION — LATE BEAR / DISTRIBUTION';
-      vs.textContent='Bear market with elevated risk signals. Could be distribution before further downside. Reduce exposure, tighten stops. Watch for capitulation.';
+      vb.innerHTML='🟡 CAUTION — DISTRIBUTION RISK';
+      vs.textContent='Bear market with elevated risk. Price may be distributing before another leg down. Reduce exposure, tighten stops.';
     } else {
       vb.innerHTML='🟡 CAUTION — ELEVATED RISK';
-      vs.textContent='Risk is elevated. Late cycle conditions developing. Tighten stop losses. Reduce new position sizes. Watch trend direction closely.';
+      vs.textContent='Risk is elevated. Late cycle conditions developing. Tighten stop losses. Reduce new position sizes.';
     }
   } else if(adjustedScore < 76){
     vb.className='verdict-badge reduce';
-    vb.innerHTML='🟠 LATE BULL — REDUCE EXPOSURE';
-    vs.textContent='Late bull / high-risk territory. Multiple warning signals active. Strongly consider reducing position size. Move profits to stable assets.';
+    if (isBearMarket) {
+      vb.innerHTML='🟠 HIGH RISK — BREAKDOWN IMMINENT';
+      vs.textContent='Bear market in distribution or breakdown phase. Multiple risk signals active. Strongly consider reducing or hedging positions.';
+    } else {
+      vb.innerHTML='🟠 LATE BULL — REDUCE EXPOSURE';
+      vs.textContent='Late bull / high-risk territory. Multiple warning signals active. Strongly consider reducing position size. Move profits to stable assets.';
+    }
   } else {
     vb.className='verdict-badge exit';
-    vb.innerHTML='🔴 EUPHORIA — EXIT RISK';
-    vs.textContent='Extreme signals. Historically within range of major cycle tops. Consider exiting most or all positions.';
+    if (isBearMarket) {
+      vb.innerHTML='🔴 CAPITULATION — MAXIMUM FEAR';
+      vs.textContent='Extreme bearish conditions. Capitulation may be in progress. Historically near bottoms but can go lower. Only for brave contrarian buyers.';
+    } else {
+      vb.innerHTML='🔴 EUPHORIA — EXIT RISK';
+      vs.textContent='Extreme signals. Historically within range of major cycle tops. Consider exiting most or all positions.';
+    }
   }
 
   // Add halving cycle context below the verdict (clear old ones first to prevent duplicates)
