@@ -76,7 +76,7 @@ const ASSETS = [
   { sym: 'PEPEUSDT', label: 'PEPE' },
   { sym: 'BONKUSDT', label: 'BONK' },
   { sym: 'WIFUSDT', label: 'WIF' },
-  // RENDER removed — not available on BloFin, caused 1 error per scan cycle
+  { sym: 'RENDERUSDT', label: 'RENDER' },
 ];
 
 // Scan intervals per timeframe (optimized: no need to scan faster than candle closes)

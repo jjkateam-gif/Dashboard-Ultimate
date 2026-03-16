@@ -3918,8 +3918,21 @@ function calcCycleDashboard(d){
     });
   })();
 
+  // ---- 12. LIQUIDATION RISK — weight 0 (standalone, not in overall score) ----
+  // Fetched async from backend — placeholder added here, filled after API call
+  // This indicator is NOT part of the cycle score — it's a separate risk warning
+  results.push({
+    name: 'LIQUIDATION RISK',
+    score: window._liqRiskScore || 30,
+    signal: (window._liqRiskScore || 30) < 35 ? 'bull' : (window._liqRiskScore || 30) > 65 ? 'bear' : 'neutral',
+    weight: 0, // excluded from overall cycle score
+    val: window._liqRiskLabel || 'Loading...',
+    desc: window._liqRiskDesc || 'Fetching real-time leverage data from BloFin...',
+    isLiqRisk: true,
+  });
+
   let totalWeight=0,weightedSum=0;
-  results.forEach(r=>{weightedSum+=r.score*r.weight;totalWeight+=r.weight;});
+  results.forEach(r=>{if(r.weight>0){weightedSum+=r.score*r.weight;totalWeight+=r.weight;}});
   const overallScore=Math.round(weightedSum/totalWeight);
 
   return{score:overallScore, indicators:results};
@@ -4074,22 +4087,89 @@ function renderCycleDashboard(d){
     const card=document.createElement('div');
     card.className='ci-card';
     const barColor=ind.score<35?'#00f5a0':ind.score<55?'#00c9ff':ind.score<70?'#ffd60a':ind.score<82?'#ff8c00':'#ff4d6d';
-    card.innerHTML=`
-      <div class="ci-top">
-        <span class="ci-name">${ind.name}</span>
-        <span class="ci-val" style="color:${barColor}">${ind.val}</span>
-      </div>
-      <div class="ci-bar-track">
-        <div class="ci-bar-fill" style="width:${ind.score}%;background:${barColor}"></div>
-      </div>
-      <div class="ci-signal ${ind.signal}">${ind.signal==='bull'?'▼ ACCUMULATE — Low Risk':ind.signal==='bear'?'▲ CAUTION — High Risk':window._cycleDirection==='bear'?'◆ NEUTRAL — Mid Bear':window._cycleDirection==='bull'?'◆ NEUTRAL — Mid Bull':'◆ NEUTRAL — Transitional'} &nbsp;·&nbsp; Score: ${ind.score}/100</div>
-      <div class="ci-desc">${ind.desc}</div>
-    `;
+
+    // Special styling for Liquidation Risk card
+    if (ind.isLiqRisk) {
+      card.id = 'liqRiskCard';
+      card.style.cssText = 'border:2px solid ' + barColor + ';box-shadow:0 0 12px ' + barColor + '33;position:relative';
+      const signalText = ind.score < 20 ? '✅ LOW RISK — Normal conditions' :
+        ind.score < 40 ? '🟢 MODERATE — Monitor leverage' :
+        ind.score < 60 ? '⚠️ ELEVATED — Reduce leverage, tighten stops' :
+        ind.score < 80 ? '🔴 HIGH — Consider reducing exposure' :
+        '🚨 EXTREME — Cascade imminent!';
+      card.innerHTML=`
+        <div class="ci-top">
+          <span class="ci-name">⚡ ${ind.name}</span>
+          <span class="ci-val" style="color:${barColor}">${ind.val}</span>
+        </div>
+        <div class="ci-bar-track">
+          <div class="ci-bar-fill" style="width:${ind.score}%;background:${barColor}"></div>
+        </div>
+        <div class="ci-signal ${ind.signal}" style="color:${barColor}">${signalText} &nbsp;·&nbsp; Risk: ${ind.score}/100</div>
+        <div class="ci-desc">${ind.desc}</div>
+      `;
+    } else {
+      card.innerHTML=`
+        <div class="ci-top">
+          <span class="ci-name">${ind.name}</span>
+          <span class="ci-val" style="color:${barColor}">${ind.val}</span>
+        </div>
+        <div class="ci-bar-track">
+          <div class="ci-bar-fill" style="width:${ind.score}%;background:${barColor}"></div>
+        </div>
+        <div class="ci-signal ${ind.signal}">${ind.signal==='bull'?'▼ ACCUMULATE — Low Risk':ind.signal==='bear'?'▲ CAUTION — High Risk':window._cycleDirection==='bear'?'◆ NEUTRAL — Mid Bear':window._cycleDirection==='bull'?'◆ NEUTRAL — Mid Bull':'◆ NEUTRAL — Transitional'} &nbsp;·&nbsp; Score: ${ind.score}/100</div>
+        <div class="ci-desc">${ind.desc}</div>
+      `;
+    }
     grid.appendChild(card);
   });
 
   // Render bear market projection
   renderBearProjection(d);
+
+  // Fetch Liquidation Risk data from backend (async, updates card when ready)
+  _fetchLiquidationRisk();
+}
+
+// ── Fetch liquidation risk from backend and update the card ──
+async function _fetchLiquidationRisk() {
+  try {
+    const backendUrl = window.CBP_BACKEND || 'https://dashboard-ultimate-production.up.railway.app';
+    const resp = await fetch(backendUrl + '/liquidation-risk');
+    if (!resp.ok) return;
+    const data = await resp.json();
+
+    // Store globally for next render cycle
+    window._liqRiskScore = data.score;
+    window._liqRiskLabel = `${data.riskLevel} · ${data.score}/100`;
+    window._liqRiskDesc = `${data.advice} | Funding: ${data.components.fundingRate.detail} | Skew: ${data.components.longShortSkew.detail} | ${data.components.consecutiveDirection.detail} | Price dev: ${data.components.priceDeviation.detail}`;
+
+    // Update the card in-place if it exists
+    const card = document.getElementById('liqRiskCard');
+    if (card) {
+      const barColor = data.score < 20 ? '#00f5a0' : data.score < 40 ? '#00c9ff' : data.score < 60 ? '#ffd60a' : data.score < 80 ? '#ff8c00' : '#ff4d6d';
+      const signalText = data.score < 20 ? '✅ LOW RISK — Normal conditions' :
+        data.score < 40 ? '🟢 MODERATE — Monitor leverage' :
+        data.score < 60 ? '⚠️ ELEVATED — Reduce leverage, tighten stops' :
+        data.score < 80 ? '🔴 HIGH — Consider reducing exposure' :
+        '🚨 EXTREME — Cascade imminent!';
+      card.style.borderColor = barColor;
+      card.style.boxShadow = '0 0 12px ' + barColor + '33';
+      card.innerHTML = `
+        <div class="ci-top">
+          <span class="ci-name">⚡ LIQUIDATION RISK</span>
+          <span class="ci-val" style="color:${barColor}">${data.riskLevel} · ${data.score}/100</span>
+        </div>
+        <div class="ci-bar-track">
+          <div class="ci-bar-fill" style="width:${data.score}%;background:${barColor}"></div>
+        </div>
+        <div class="ci-signal" style="color:${barColor}">${signalText} &nbsp;·&nbsp; Risk: ${data.score}/100</div>
+        <div class="ci-desc">${data.advice}<br><span style="color:#5a7a68;font-size:8px">Funding: ${data.components.fundingRate.detail} | Skew: ${data.components.longShortSkew.detail} | ${data.components.consecutiveDirection.detail} | Price: ${data.components.priceDeviation.detail}</span></div>
+      `;
+    }
+  } catch (e) {
+    console.warn('[LiqRisk] Failed to fetch:', e.message);
+  }
 }
 
 // ============================================================

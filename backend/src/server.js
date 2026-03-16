@@ -223,6 +223,22 @@ async function initDB() {
       console.error('Recommendation tracker init error (core routes still working):', recErr.message);
     }
 
+    // Liquidation Risk endpoint (no auth — public data only)
+    try {
+      const { calculateLiquidationRisk } = require('./services/liquidationRisk');
+      app.get('/liquidation-risk', async (req, res) => {
+        try {
+          const data = await calculateLiquidationRisk();
+          res.json(data);
+        } catch (e) {
+          res.status(500).json({ error: e.message });
+        }
+      });
+      console.log('Liquidation Risk endpoint loaded.');
+    } catch (lrErr) {
+      console.error('Liquidation Risk init error:', lrErr.message);
+    }
+
     // Error handler — MUST be registered after all routes
     app.use((err, req, res, next) => {
       console.error('Unhandled error:', err);
