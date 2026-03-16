@@ -190,7 +190,7 @@ async function initDB() {
             liveTest = { error: testErr.message, stack: testErr.stack?.split('\n').slice(0, 3) };
           }
           res.json({
-            version: 'v2.6-market-cycle-accuracy',
+            version: 'v2.7-dedup-fix',
             scannerRunning: Object.keys(bestTradesScanner.scanTimers || {}).length > 0,
             activeTimers: Object.keys(bestTradesScanner.scanTimers || {}),
             lastResults: (bestTradesScanner.getLastResults() || []).length,
