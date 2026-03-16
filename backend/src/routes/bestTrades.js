@@ -123,8 +123,8 @@ router.get('/history', async (req, res) => {
   }
 });
 
-// GET /best-trades/history-all — fetch ALL history for distribution chart (#25 fix)
-// Returns only outcome/probability/pnl for lightweight full-dataset queries
+// GET /best-trades/history-all — fetch ALL history (full dataset)
+// Supports all filters: outcome, timeframe, regime, market_quality, confidence
 router.get('/history-all', async (req, res) => {
   try {
     const conditions = [];
@@ -133,12 +133,17 @@ router.get('/history-all', async (req, res) => {
     if (req.query.outcome === 'pending') { conditions.push('outcome IS NULL'); }
     else if (req.query.outcome === 'win' || req.query.outcome === 'loss') { conditions.push(`outcome = $${idx++}`); params.push(req.query.outcome); }
     else if (req.query.outcome === 'all') { /* no filter */ }
+    if (req.query.timeframe) { conditions.push(`timeframe = $${idx++}`); params.push(req.query.timeframe); }
+    if (req.query.regime) { conditions.push(`regime = $${idx++}`); params.push(req.query.regime); }
+    if (req.query.market_quality) { conditions.push(`market_quality = $${idx++}`); params.push(req.query.market_quality); }
+    if (req.query.confidence) { conditions.push(`confidence = $${idx++}`); params.push(req.query.confidence); }
     const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
     const result = await pool.query(
       `SELECT id, asset, direction, probability, confidence, market_quality, rr_ratio, regime, timeframe,
-              outcome, pnl, entry_price, stop_price, target_price, stop_pct, target_pct, executed, created_at, resolved_at
+              outcome, pnl, entry_price, stop_price, target_price, stop_pct, target_pct, executed,
+              created_at, resolved_at, last_seen_at, scan_count
        FROM best_trades_log ${where}
-       ORDER BY created_at DESC LIMIT 5000`,
+       ORDER BY COALESCE(last_seen_at, created_at) DESC LIMIT 5000`,
       params
     );
     res.json({ history: result.rows, total: result.rows.length });

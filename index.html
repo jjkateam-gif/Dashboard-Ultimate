@@ -14287,10 +14287,10 @@ async function renderScanHistory() {
   const headers = { 'Authorization': 'Bearer ' + token };
 
   try {
-    // Fetch stats and history in parallel
+    // Fetch stats and ALL history in parallel (no limit — show everything the engine has logged)
     const [statsR, historyR] = await Promise.all([
       fetch(`${backend}/best-trades/stats`, { headers }),
-      fetch(`${backend}/best-trades/history?limit=200`, { headers }),
+      fetch(`${backend}/best-trades/history-all?outcome=all`, { headers }),
     ]);
     const stats = await statsR.json();
     const history = await historyR.json();
@@ -14298,6 +14298,8 @@ async function renderScanHistory() {
 
     window._serverStats = stats;
     window._serverHistory = (history.history || []).map(_mapDbRow);
+    window._historyPageSize = 50;  // Show 50 initially, load more on demand
+    window._historyShowCount = 50;
 
     _renderUnifiedUI(stats, window._serverHistory);
   } catch (e) {
@@ -14653,7 +14655,12 @@ function _renderHistoryTable(history) {
     filteredEntries = filteredEntries.filter(e => e.prob >= minProb && e.prob <= maxProb);
   }
 
-  const rows = filteredEntries.map(e => {
+  const totalFiltered = filteredEntries.length;
+  const showCount = Math.min(window._historyShowCount || 50, filteredEntries.length);
+  const visibleEntries = filteredEntries.slice(0, showCount);
+  const hasMore = showCount < totalFiltered;
+
+  const rows = visibleEntries.map(e => {
     const dirColor = e.direction === 'long' ? '#00f5a0' : '#ff4d6d';
     const dirArrow = e.direction === 'long' ? '▲' : '▼';
     const probColor = e.prob >= 70 ? '#00f5a0' : e.prob >= 60 ? '#f5c400' : e.prob >= 50 ? '#ff8c69' : '#5a7a68';
@@ -14685,12 +14692,24 @@ function _renderHistoryTable(history) {
   // Filter summary above table
   const probFilterActive = minProb > 0 || maxProb < 100;
   const anyTableFilter = outcomeFilter || probFilterActive;
-  const filterSummary = anyTableFilter ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 10px;margin-bottom:6px;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.1);border-radius:6px;font-family:'Space Mono',monospace;font-size:8px">
-    <span style="color:#a78bfa">Showing <strong style="color:#e2e8f0">${filteredEntries.length}</strong> entries${outcomeFilter ? ' · ' + outcomeFilter.toUpperCase() : ''}${probFilterActive ? ' · ' + minProb + '-' + maxProb + '% prob' : ''}</span>
+  const entrySummary = `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 10px;margin-bottom:6px;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.1);border-radius:6px;font-family:'Space Mono',monospace;font-size:8px">
+    <span style="color:#a78bfa">Showing <strong style="color:#e2e8f0">${showCount}</strong> of <strong style="color:#e2e8f0">${totalFiltered}</strong> entries${outcomeFilter ? ' · ' + outcomeFilter.toUpperCase() : ''}${probFilterActive ? ' · ' + minProb + '-' + maxProb + '% prob' : ''}</span>
+    ${totalFiltered > 0 ? `<span style="color:#5a7a68">${(window._serverHistory || []).length} total in DB</span>` : ''}
+  </div>`;
+
+  const loadMoreBtn = hasMore ? `<div style="text-align:center;padding:10px">
+    <button onclick="window._historyShowCount = (window._historyShowCount || 50) + 50; _renderHistoryTable(window._serverHistory);"
+      style="background:linear-gradient(135deg,rgba(0,245,160,0.08),rgba(0,245,160,0.03));border:1px solid rgba(0,245,160,0.2);color:#00f5a0;padding:8px 24px;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:1px">
+      ▼ LOAD MORE (${totalFiltered - showCount} remaining)
+    </button>
+    <button onclick="window._historyShowCount = 99999; _renderHistoryTable(window._serverHistory);"
+      style="background:none;border:1px solid rgba(167,139,250,0.2);color:#a78bfa;padding:8px 16px;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-size:8px;margin-left:8px">
+      SHOW ALL
+    </button>
   </div>` : '';
 
   tableEl.innerHTML = `
-    ${filterSummary}
+    ${entrySummary}
     <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-family:'Space Mono',monospace;font-size:8px">
         <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
@@ -14709,6 +14728,7 @@ function _renderHistoryTable(history) {
         ${rows}
       </table>
     </div>
+    ${loadMoreBtn}
   `;
 }
 
@@ -14751,34 +14771,8 @@ function _clearAllFilters() {
 }
 async function _filterByOutcome(outcome) {
   window._calActiveOutcome = (outcome === window._calActiveOutcome) ? null : outcome;
-  // #25 Fix: Fetch ALL matching records from server when filtering by outcome
-  // Previously only filtered client-side on 200-row cache, showing 9 of 102 wins
-  const token = localStorage.getItem('dash_token');
-  const backend = window.CBP_BACKEND || 'http://localhost:3001';
-  if (token && window._calActiveOutcome) {
-    try {
-      const resp = await fetch(`${backend}/best-trades/history-all?outcome=${window._calActiveOutcome}`, {
-        headers: { 'Authorization': 'Bearer ' + token }
-      });
-      const data = await resp.json();
-      if (data.history) {
-        window._serverHistory = data.history.map(_mapDbRow);
-      }
-    } catch (e) {
-      console.warn('[ScanHistory] Full history fetch error:', e.message);
-    }
-  } else if (token && !window._calActiveOutcome) {
-    // Reset to standard 200-row fetch
-    try {
-      const resp = await fetch(`${backend}/best-trades/history?limit=200`, {
-        headers: { 'Authorization': 'Bearer ' + token }
-      });
-      const data = await resp.json();
-      if (data.history) {
-        window._serverHistory = data.history.map(_mapDbRow);
-      }
-    } catch {}
-  }
+  window._historyShowCount = 50;  // Reset pagination on filter change
+  // All data already loaded — just re-render with client-side filter
   if (window._serverStats && window._serverHistory) {
     _renderUnifiedUI(window._serverStats, window._serverHistory);
   }
@@ -14799,7 +14793,7 @@ async function _refetchWithFilters() {
   try {
     const [statsR, historyR] = await Promise.all([
       fetch(`${backend}/best-trades/stats${qs ? '?' + qs : ''}`, { headers: { 'Authorization': 'Bearer ' + token } }),
-      fetch(`${backend}/best-trades/history?limit=200${qs ? '&' + qs : ''}`, { headers: { 'Authorization': 'Bearer ' + token } }),
+      fetch(`${backend}/best-trades/history-all?outcome=all${qs ? '&' + qs : ''}`, { headers: { 'Authorization': 'Bearer ' + token } }),
     ]);
     const stats = await statsR.json();
     const history = await historyR.json();
@@ -14807,6 +14801,7 @@ async function _refetchWithFilters() {
 
     window._serverStats = stats;
     window._serverHistory = (history.history || []).map(_mapDbRow);
+    window._historyShowCount = 50;  // Reset to first page
     _renderUnifiedUI(stats, window._serverHistory);
   } catch (e) {
     console.warn('[ScanHistory] Filter refetch error:', e.message);
