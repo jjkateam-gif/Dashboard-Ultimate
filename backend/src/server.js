@@ -174,12 +174,29 @@ async function initDB() {
               top3: results.slice(0, 3).map(r => ({ asset: r.asset, dir: r.direction, prob: r.prob, rawProb: r.rawProb, ev: r.ev, mq: r.marketQuality, conf: r.confidence })),
             };
           }
+          // Quick live test: try to fetch BTC 15m and score it
+          let liveTest = null;
+          try {
+            const { fetchKlines: fk } = require('./services/binance');
+            const btcCandles = await fk('BTCUSDT', '15m', 200);
+            liveTest = { candlesReceived: btcCandles ? btcCandles.length : 0, lastCandle: btcCandles ? btcCandles[btcCandles.length - 1] : null };
+            if (btcCandles && btcCandles.length > 50) {
+              // Import the computeSignals and scoreConfluence from scanner
+              const scanModule = require('./services/bestTradesScanner');
+              // Can't access private functions directly, but we can do a manual test
+              liveTest.note = 'Candles fetched OK. If results are 0, issue is in computeSignals or scoreConfluence.';
+            }
+          } catch (testErr) {
+            liveTest = { error: testErr.message, stack: testErr.stack?.split('\n').slice(0, 3) };
+          }
           res.json({
             version: 'v2.1-consensus-upgrades',
             scannerRunning: Object.keys(bestTradesScanner.scanTimers || {}).length > 0,
             activeTimers: Object.keys(bestTradesScanner.scanTimers || {}),
             lastResults: (bestTradesScanner.getLastResults() || []).length,
             lastScanTimes: bestTradesScanner.lastScanTimeByTF || {},
+            scanDebug: bestTradesScanner.lastScanDebug || {},
+            liveTest,
             perTfResults: perTfSummary,
             db: {
               totalRows: parseInt(countRes.rows[0].cnt),

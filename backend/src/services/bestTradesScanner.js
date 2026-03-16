@@ -948,6 +948,7 @@ class BestTradesScanner {
     this.lastResultsByTF = {};  // { '5m': [...], '4h': [...], ... }
     this.lastScanTime = null;
     this.lastScanTimeByTF = {}; // { '5m': '...', '4h': '...', ... }
+    this.lastScanDebug = {};    // Debug info from most recent scan per TF
     this.openTradeCount = 0;
     this.recentTrades = new Set(); // 'BTC_long' — prevent duplicate trades across TFs
     this.sseClients = [];
@@ -1199,6 +1200,8 @@ class BestTradesScanner {
       }
     }
 
+    // Save scan debug info
+    this.lastScanDebug[tf] = { scanned: scannedCount, results: results.length, skipped: skippedCount, errors: errorCount, time: new Date().toISOString() };
     console.log(`[BestTrades] ${tf} scan complete: ${scannedCount} scanned, ${results.length} results (prob>=50 or EV>0), ${skippedCount} skipped, ${errorCount} errors`);
     if (results.length > 0) {
       const topProbs = results.slice(0, 5).map(r => `${r.asset}:${r.direction}:${r.prob}%`).join(', ');
