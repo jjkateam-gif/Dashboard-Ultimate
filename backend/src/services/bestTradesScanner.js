@@ -1666,10 +1666,11 @@ class BestTradesScanner {
   }
 
   async _logResults(results) {
-    if (!pool) return;
+    if (!pool) { this.lastLogAttempt = { time: new Date().toISOString(), error: 'NO POOL' }; return; }
     // Log top 3 results with EV > 0 for calibration data (#24: EV-first, fallback to prob >= 50%)
     const top = results.filter(r => (r.ev > 0) || r.prob >= 50).slice(0, 3);
     let inserted = 0, updated = 0;
+    const debugInfo = { candidates: top.length, fromResults: results.length, errors: [] };
     for (const r of top) {
       try {
         // DEDUPLICATION: Check if identical RECENT pending signal already exists
@@ -1729,6 +1730,7 @@ class BestTradesScanner {
         );
         inserted++;
       } catch (e) {
+        debugInfo.errors.push({ asset: r.asset, stage: 'extended_insert', msg: e.message });
         console.warn(`[BestTrades] Extended insert failed for ${r.asset}:`, e.message, '- trying basic insert...');
         // Fallback: insert with only original columns (in case migration 012 hasn't run yet)
         try {
@@ -1743,6 +1745,7 @@ class BestTradesScanner {
           );
           inserted++;
         } catch (e2) {
+          debugInfo.errors.push({ asset: r.asset, stage: 'basic_insert', msg: e2.message });
           console.error(`[BestTrades] BOTH inserts failed for ${r.asset}:`, e2.message);
         }
       }
@@ -1750,6 +1753,7 @@ class BestTradesScanner {
     // Always log — even when 0 inserts — so we can diagnose issues
     const topInfo = top.map(r => `${r.asset}/${r.direction}/${r.timeframe}(${r.prob}%,ev=${r.ev?.toFixed(3)})`).join(', ');
     console.log(`[BestTrades] _logResults: ${inserted} new, ${updated} updated, ${top.length} candidates from ${results.length} results [${topInfo}]`);
+    this.lastLogAttempt = { time: new Date().toISOString(), inserted, updated, ...debugInfo, top: topInfo };
   }
 
   // ── SSE ──

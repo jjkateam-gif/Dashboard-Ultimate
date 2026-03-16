@@ -205,6 +205,7 @@ async function initDB() {
               lastEntries: lastRow.rows,
             },
             settings: bestTradesScanner.settings,
+            lastLogAttempt: bestTradesScanner.lastLogAttempt || 'none yet',
             tradeRejections: bestTradesScanner.lastTradeRejections || {},
           });
         } catch (e) {
