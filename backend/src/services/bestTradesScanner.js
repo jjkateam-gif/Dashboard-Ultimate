@@ -1058,13 +1058,15 @@ class BestTradesScanner {
     }
 
     // Scan all assets
+    let scannedCount = 0, skippedCount = 0, errorCount = 0;
     for (const asset of ASSETS) {
       try {
         const candles = await fetchKlines(asset.sym, tf, 200);
-        if (!candles || candles.length < 50) continue;
+        if (!candles || candles.length < 50) { skippedCount++; continue; }
 
         const analysis = computeSignals(candles, tf);
         const { signals, atr: atrVal, price, marketQuality, entryEfficiency, adxVal, ema200Val } = analysis;
+        scannedCount++;
 
         // #27 — 4h regime gate: Skip 4h unless confirmed trending (ADX>20 + price above/below EMA200)
         if (tf === '4h' && adxVal != null && adxVal < 20) {
@@ -1084,6 +1086,11 @@ class BestTradesScanner {
         // Pick best direction
         const best = longScore.prob >= shortScore.prob ? longScore : shortScore;
         const direction = longScore.prob >= shortScore.prob ? 'long' : 'short';
+
+        // Debug: log raw scores for first 3 assets per scan
+        if (scannedCount <= 3) {
+          console.log(`[BestTrades] ${asset.label} ${tf}: longProb=${longScore.prob} shortProb=${shortScore.prob} best=${best.prob} conf=${best.confluence?.toFixed(3)} mq=${marketQuality} regime=${regime}`);
+        }
 
         // #9 Multi-TF Confluence: For 5m/15m signals, check 1h trend alignment
         // If 1h trend opposes the signal direction, penalize probability
@@ -1187,8 +1194,15 @@ class BestTradesScanner {
         // Small delay to avoid Binance rate limits
         await new Promise(r => setTimeout(r, 200));
       } catch (e) {
+        errorCount++;
         console.warn(`[BestTrades] ${asset.label} ${tf} scan error:`, e.message);
       }
+    }
+
+    console.log(`[BestTrades] ${tf} scan complete: ${scannedCount} scanned, ${results.length} results (prob>=50 or EV>0), ${skippedCount} skipped, ${errorCount} errors`);
+    if (results.length > 0) {
+      const topProbs = results.slice(0, 5).map(r => `${r.asset}:${r.direction}:${r.prob}%`).join(', ');
+      console.log(`[BestTrades] ${tf} top results: ${topProbs}`);
     }
 
     // #24 — Sort by EV (expected value) as primary metric, not raw probability
