@@ -828,8 +828,11 @@ function scoreConfluence(signals, direction, regime, tf, marketQuality) {
   if (regime === 'bear' && direction === 'short') prob += 4;
   if (regime === 'bear' && direction === 'long') prob -= 4;
 
-  // Confidence + caps (lowered thresholds so labels spread evenly)
-  const confidence = confluence >= 0.55 ? 'High' : confluence >= 0.35 ? 'Medium' : 'Low';
+  // Confidence thresholds: tuned to actual confluence distribution
+  // With family dampening [1.0, 0.60, 0.35] and opposing penalty (-0.4w),
+  // typical confluence is 0.15-0.40. Max possible ~0.72 (all 7 aligned, no opposition).
+  // Thresholds: High >= 0.38 (strong alignment), Medium >= 0.22 (decent), Low < 0.22
+  const confidence = confluence >= 0.38 ? 'High' : confluence >= 0.22 ? 'Medium' : 'Low';
   let probCap = confidence === 'High' ? 80 : confidence === 'Medium' ? 72 : 62;
   if (confidence === 'High' && marketQuality === 'A') probCap = 85;
   else if (confidence === 'High' && marketQuality === 'B+') probCap = 80;

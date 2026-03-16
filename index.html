@@ -15254,14 +15254,17 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
   // ══════════════════════════════════════════════════════════════
   // CONFIDENCE RATING & PROBABILITY CAPS
   // ══════════════════════════════════════════════════════════════
-  const confidence = confluence >= 0.65 ? 'High' : confluence >= 0.45 ? 'Medium' : 'Low';
+  // Confidence thresholds: tuned to actual confluence distribution
+  // Family dampening means max possible ~0.72; typical range 0.15-0.40
+  const confidence = confluence >= 0.38 ? 'High' : confluence >= 0.22 ? 'Medium' : 'Low';
   const confColor  = confidence === 'High' ? '#00f5a0' : confidence === 'Medium' ? '#f5c400' : '#ff8c69';
-  // A-grade + High confidence can reach 82% (research: reward best setups with higher ceiling)
-  // C-grade capped at 62% (research: choppy environments degrade execution quality)
-  let probCap = confidence === 'High' ? 76 : confidence === 'Medium' ? 68 : 58;
-  if (confidence === 'High' && marketQuality === 'A') probCap = 82;
+  // Probability caps by confidence + quality (aligned with backend)
+  let probCap = confidence === 'High' ? 80 : confidence === 'Medium' ? 72 : 62;
+  if (confidence === 'High' && marketQuality === 'A') probCap = 85;
+  else if (confidence === 'High' && marketQuality === 'B+') probCap = 80;
   else if (confidence === 'High' && marketQuality === 'B') probCap = 76;
-  if (marketQuality === 'C') probCap = Math.min(probCap, 62); // C-grade hard ceiling
+  if (marketQuality === 'C') probCap = Math.min(probCap, 65);
+  if (marketQuality === 'No-Trade') probCap = Math.min(probCap, 55);
   prob = Math.min(probCap, Math.max(25, Math.round(prob)));
 
   return { prob, confluence, confidence, confColor, hits, misses };
