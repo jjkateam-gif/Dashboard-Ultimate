@@ -3772,20 +3772,35 @@ function calcCycleDashboard(d){
       phase = 'HISTORICAL PEAK ZONE';
       wscsEmotion = 'Euphoria / Complacency';
       phaseDesc = '⚠️ All 3 prior ATHs occurred Day 367–548. Peak zone active. Prior peaks: Day 367 (2012), Day 526 (2016), Day 548 (2020). Take profits.';
-    } else if(daysSinceHalving < 730){
-      // Post-peak: score should DROP significantly — we're past the top, heading toward bottom
-      // Day 560: score ~55 (just past peak, still elevated risk)
-      // Day 730: score ~30 (approaching bear market accumulation)
-      score = 55 - ((daysSinceHalving - 560) / 170) * 25;
+    } else if(daysSinceHalving < 650){
+      // Early post-peak: score drops as distribution confirms
+      // Day 560: score ~50 (just past peak, distribution starting)
+      // Day 650: score ~35 (bear confirmed)
+      score = 50 - ((daysSinceHalving - 560) / 90) * 15;
       phase = 'POST-PEAK DISTRIBUTION';
       wscsEmotion = 'Anxiety / Denial';
-      phaseDesc = 'Past all 3 historical ATH windows. Bear market building. Historically -82.9% drawdown from ATH. Reduce exposure, wait for capitulation.';
+      phaseDesc = 'Past all 3 historical ATH windows. Distribution in progress. Historically -82.9% drawdown from ATH. Reduce exposure, wait for capitulation.';
     } else if(daysSinceHalving < 1050){
-      // Bear market: score continues dropping — approaching best accumulation zone
-      score = 30 - ((daysSinceHalving - 730) / 320) * 20;
-      phase = 'BEAR MARKET / CAPITULATION';
-      wscsEmotion = 'Panic / Capitulation';
-      phaseDesc = '⚡ Historical bottom zone. Avg bottom: Day 863 (range 777–924). Avg drawdown -82.9% from ATH. Best long-term accumulation window.';
+      // Bear market / capitulation zone: score drops further into accumulation territory
+      // Day 650: score ~30 (bear confirmed, correction deepening)
+      // Day 863: score ~12 (avg historical bottom — prime accumulation)
+      // Day 1050: score ~10 (late bear, approaching pre-halving base)
+      const bearProgress = Math.min(1, (daysSinceHalving - 650) / 400);
+      score = 30 - bearProgress * 20;
+      // Wall Street Cheat Sheet: early bear = Denial/Fear, mid bear = Panic/Capitulation, late bear = Depression/Hope
+      if (daysSinceHalving < 780) {
+        phase = 'BEAR CORRECTION';
+        wscsEmotion = 'Fear / Denial';
+        phaseDesc = '🐻 Bear market confirmed. Price correcting from cycle ATH. Historically 777–924 days to bottom. Accumulation window approaching — start DCA.';
+      } else if (daysSinceHalving < 950) {
+        phase = 'CAPITULATION ZONE';
+        wscsEmotion = 'Panic / Capitulation';
+        phaseDesc = '⚡ Historical bottom zone. Avg bottom: Day 863 (range 777–924). Avg drawdown -82.9% from ATH. Prime accumulation window — max fear = max opportunity.';
+      } else {
+        phase = 'LATE BEAR / RECOVERY';
+        wscsEmotion = 'Depression / Hope';
+        phaseDesc = '📈 Past average bottom window. Recovery typically begins here. Next halving ~2028. Strong accumulation zone — sentiment at worst.';
+      }
     } else {
       score = 15 + ((daysSinceHalving - 1050) / 378) * 15;
       phase = 'PRE-HALVING BASE';
@@ -3986,15 +4001,21 @@ function renderCycleDashboard(d){
   const daysToBottom = halvingInd ? halvingInd.daysToBottom : 0;
 
   if (halvingPhase === 'HISTORICAL PEAK ZONE' && adjustedScore < 62) {
-    adjustedScore = Math.max(adjustedScore, 62); // at least CAUTION
-  } else if (halvingPhase === 'POST-PEAK DISTRIBUTION' && adjustedScore < 55) {
-    adjustedScore = Math.max(adjustedScore, 55); // at least CAUTION
+    adjustedScore = Math.max(adjustedScore, 62); // at least CAUTION during peak zone
   }
+  // NOTE: POST-PEAK DISTRIBUTION no longer forces score up — once we're past the peak
+  // and in correction, the score should reflect the actual indicators (accumulation signals)
 
   // ATH drawdown override: if drawdown < 15% (near ATH), force at least CAUTION
   const athInd = indicators.find(i=>i.name==='ATH Drawdown');
   if (athInd && athInd.score >= 85 && adjustedScore < 62) {
     adjustedScore = Math.max(adjustedScore, 62);
+  }
+
+  // Bear accumulation override: if deep drawdown (>40%) AND in bear/capitulation phase,
+  // pull score DOWN toward accumulation zone — on-chain says buy, not sell
+  if (athInd && athInd.score < 35 && inBearPhase && adjustedScore > 35) {
+    adjustedScore = Math.round(adjustedScore * 0.7); // compress toward accumulate
   }
 
   // ── Determine cycle DIRECTION (bull vs bear) ──
@@ -4008,10 +4029,11 @@ function renderCycleDashboard(d){
   const bearTrend = trendScore < 40;                  // trend pointing down
   const bullTrend = trendScore > 60;                  // trend pointing up
   const postPeak = ['POST-PEAK DISTRIBUTION','HISTORICAL PEAK ZONE'].includes(halvingPhase);
-  const preRally = ['EARLY CYCLE','ACCUMULATION','MID CYCLE'].includes(halvingPhase);
+  const inBearPhase = ['BEAR CORRECTION','CAPITULATION ZONE','LATE BEAR / RECOVERY','BEAR MARKET / CAPITULATION'].includes(halvingPhase);
+  const preRally = ['EARLY CYCLE','ACCUMULATION','MID CYCLE','LATE BEAR / RECOVERY'].includes(halvingPhase);
 
-  // Bear signals: below 200MA, deep drawdown, bearish trend, post-peak halving
-  const bearSignals = (belowMA?1:0) + (deepDD?1:0) + (bearTrend?1:0) + (postPeak?1:0);
+  // Bear signals: below 200MA, deep drawdown, bearish trend, post-peak/bear halving phase
+  const bearSignals = (belowMA?1:0) + (deepDD?1:0) + (bearTrend?1:0) + ((postPeak||inBearPhase)?1:0);
   // Bull signals: above 200MA, near ATH, bullish trend, pre-rally halving
   const bullSignals = (aboveMA?1:0) + (nearATH?1:0) + (bullTrend?1:0) + (preRally?1:0);
 
@@ -4030,11 +4052,11 @@ function renderCycleDashboard(d){
     // Score maps: 0=safest, 100=most dangerous
     if (isBearMarket) {
       zl.innerHTML = `
-        <span>🟢 OVERSOLD<br>Accumulate</span>
-        <span style="text-align:center">🔵 BEAR RALLY<br>Caution</span>
-        <span style="text-align:center">🟡 DISTRIBUTION<br>Reduce exposure</span>
-        <span style="text-align:center">🟠 BREAKDOWN<br>Hedge / exit</span>
-        <span style="text-align:right">🔴 CAPITULATION<br>Max fear</span>
+        <span>🟢 ACCUMULATE<br>Max opportunity</span>
+        <span style="text-align:center">🔵 OVERSOLD<br>DCA zone</span>
+        <span style="text-align:center">🟡 BEAR RALLY<br>Caution</span>
+        <span style="text-align:center">🟠 DISTRIBUTION<br>Reduce</span>
+        <span style="text-align:right">🔴 BREAKDOWN<br>Max risk</span>
       `;
     } else if (isBullMarket) {
       zl.innerHTML = `
@@ -4063,7 +4085,9 @@ function renderCycleDashboard(d){
     vb.className='verdict-badge hold';
     if (isBearMarket) {
       vb.innerHTML='🔵 OVERSOLD — ACCUMULATE WITH CAUTION';
-      vs.textContent='Bear market but approaching oversold levels. Historically good entries. Start building positions cautiously via DCA.';
+      vs.textContent= inBearPhase
+        ? 'Deep in bear correction with on-chain accumulation signals. Historically excellent DCA zone. Whale accumulation + exchange outflows suggest smart money buying. Start building positions via DCA.'
+        : 'Bear market but approaching oversold levels. Historically good entries. Start building positions cautiously via DCA.';
     } else {
       vb.innerHTML='🔵 EARLY BULL — BUILD POSITION';
       vs.textContent='Early recovery or oversold conditions. Good time to enter or add to positions. Not yet in overbought territory.';
@@ -4119,9 +4143,10 @@ function renderCycleDashboard(d){
     const ctxEl = document.createElement('div');
     ctxEl.setAttribute('data-halving-ctx', '1');
     ctxEl.style.cssText = 'font-family:Space Mono,monospace;font-size:10px;color:#a78bfa;margin-top:8px;padding:8px 12px;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);border-radius:6px;line-height:1.7';
+    const drawdownInfo = athInd ? ` · ${athInd.val}` : '';
     ctxEl.innerHTML = `<strong>${halvingPhase}</strong>${emotionBadge}`
       + (daysCtx ? ` | ${daysCtx}` : '')
-      + `<br><span style="color:#5a7a68">Halving cycle: Day ${halvingDays} · Score: ${halvingInd.score}/100</span>`;
+      + `<br><span style="color:#5a7a68">Halving cycle: Day ${halvingDays}${drawdownInfo} · Bottom window: Jun–Sep 2026</span>`;
     vs.parentElement.appendChild(ctxEl);
   }
 

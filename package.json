@@ -1,0 +1,26 @@
+{
+  "dependencies": {
+    "docx": "^9.6.1",
+    "pdfkit": "^0.17.2",
+    "puppeteer": "^24.39.1"
+  },
+  "name": "dashboard-ultimate",
+  "version": "1.0.0",
+  "description": "",
+  "main": "capture-screenshots.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jjkateam-gif/Dashboard-Ultimate.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/jjkateam-gif/Dashboard-Ultimate/issues"
+  },
+  "homepage": "https://github.com/jjkateam-gif/Dashboard-Ultimate#readme"
+}
