@@ -14113,13 +14113,17 @@ function _renderUnifiedUI(stats, history) {
 
     // #30 Sharpe ratio + leverage risk display
     const lr = stats.leverageRisk || {};
-    const sharpeVal = lr.sharpeRatio != null ? lr.sharpeRatio.toFixed(2) : 'N/A';
-    const sharpeColor = sharpeVal === 'N/A' ? '#5a7a68' : lr.sharpeRatio >= 1.5 ? '#00f5a0' : lr.sharpeRatio >= 0.5 ? '#f5c400' : '#ff4d6d';
+    const ptSharpe = lr.perTradeSharpe != null ? lr.perTradeSharpe.toFixed(2) : null;
+    const annSharpe = lr.sharpeRatio != null ? lr.sharpeRatio.toFixed(1) : null;
+    const sharpeDisplay = ptSharpe || annSharpe || 'N/A';
+    const sharpeNum = lr.perTradeSharpe != null ? lr.perTradeSharpe : (lr.sharpeRatio || 0);
+    const sharpeColor = sharpeDisplay === 'N/A' ? '#5a7a68' : sharpeNum >= 0.5 ? '#00f5a0' : sharpeNum >= 0.2 ? '#f5c400' : '#ff4d6d';
+    const tpd = lr.tradesPerDay != null ? lr.tradesPerDay.toFixed(0) : '?';
     const ddColor = (lr.drawdownPct || 0) >= 10 ? '#ff4d6d' : (lr.drawdownPct || 0) >= 5 ? '#f5c400' : '#00f5a0';
     summaryEl.innerHTML += `
-      <div style="background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:14px;font-weight:800;color:${sharpeColor};font-family:'Space Mono',monospace">${sharpeVal}</div>
-        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">SHARPE RATIO</div>
+      <div style="background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);border-radius:8px;padding:10px;text-align:center" title="Per-trade Sharpe: ${ptSharpe || 'N/A'}\nAnnualized: ${annSharpe || 'N/A'}\n~${tpd} trades/day">
+        <div style="font-size:14px;font-weight:800;color:${sharpeColor};font-family:'Space Mono',monospace">${sharpeDisplay}</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">SHARPE (per trade)</div>
       </div>
       <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;text-align:center">
         <div style="font-size:11px;font-weight:800;font-family:'Space Mono',monospace">

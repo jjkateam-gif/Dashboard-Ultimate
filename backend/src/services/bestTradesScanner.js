@@ -27,7 +27,7 @@ async function refreshFundingRates() {
       'BTC-USDT', 'ETH-USDT', 'SOL-USDT', 'SUI-USDT', 'BNB-USDT',
       'DOGE-USDT', 'XRP-USDT', 'ADA-USDT', 'AVAX-USDT', 'LINK-USDT',
       'DOT-USDT', 'NEAR-USDT', 'ARB-USDT', 'OP-USDT', 'APT-USDT',
-      'INJ-USDT', 'PEPE-USDT', 'BONK-USDT', 'WIF-USDT', 'RENDER-USDT',
+      'INJ-USDT', 'PEPE-USDT', 'BONK-USDT', 'WIF-USDT',
     ];
     for (const instId of FUNDING_ASSETS) {
       try {
@@ -76,7 +76,7 @@ const ASSETS = [
   { sym: 'PEPEUSDT', label: 'PEPE' },
   { sym: 'BONKUSDT', label: 'BONK' },
   { sym: 'WIFUSDT', label: 'WIF' },
-  { sym: 'RENDERUSDT', label: 'RENDER' },
+  // RENDER removed — not available on BloFin, caused 1 error per scan cycle
 ];
 
 // Scan intervals per timeframe (optimized: no need to scan faster than candle closes)
@@ -158,15 +158,27 @@ async function refreshLeverageRisk() {
     leverageRisk.consecutiveLosses = consecLosses;
     leverageRisk.maxConsecutiveLosses = Math.max(leverageRisk.maxConsecutiveLosses, consecLosses);
 
-    // Sharpe ratio (#30) — annualized from recent PnL data
+    // Sharpe ratio (#30) — per-trade Sharpe, then annualize using actual trade frequency
     const pnls = recentRes.rows.filter(r => r.pnl != null).map(r => parseFloat(r.pnl));
     leverageRisk.recentPnLs = pnls;
     if (pnls.length >= 10) {
       const mean = pnls.reduce((s, v) => s + v, 0) / pnls.length;
       const variance = pnls.reduce((s, v) => s + (v - mean) ** 2, 0) / pnls.length;
       const stdDev = Math.sqrt(variance);
-      // Annualize assuming ~3 trades/day avg
-      leverageRisk.sharpeRatio = stdDev > 0 ? parseFloat(((mean / stdDev) * Math.sqrt(365 * 3)).toFixed(2)) : null;
+      // Per-trade Sharpe (no annualization — more meaningful for variable-frequency trades)
+      const perTradeSharpe = stdDev > 0 ? mean / stdDev : null;
+      // Estimate trades per day from actual data for annualized version
+      const resolvedDaysRes = await pool.query(`
+        SELECT EXTRACT(EPOCH FROM (MAX(resolved_at) - MIN(resolved_at))) / 86400 AS days
+        FROM best_trades_log WHERE outcome IN ('win','loss') AND resolved_at IS NOT NULL
+      `);
+      const tradeDays = parseFloat(resolvedDaysRes.rows[0]?.days) || 1;
+      const tradesPerDay = Math.max(1, pnls.length / Math.max(0.1, tradeDays));
+      // Annualized Sharpe = per-trade Sharpe * sqrt(trades_per_year)
+      const annualizedSharpe = perTradeSharpe != null ? parseFloat((perTradeSharpe * Math.sqrt(tradesPerDay * 365)).toFixed(2)) : null;
+      leverageRisk.sharpeRatio = annualizedSharpe;
+      leverageRisk.perTradeSharpe = perTradeSharpe != null ? parseFloat(perTradeSharpe.toFixed(4)) : null;
+      leverageRisk.tradesPerDay = parseFloat(tradesPerDay.toFixed(1));
     }
 
     // Drawdown tracking (#13)
