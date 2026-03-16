@@ -14294,8 +14294,9 @@ function _renderCalibrationChart(stats, activeTF) {
   if (activeTF) filters.push(activeTF);
   if (window._calActiveRegime) filters.push(window._calActiveRegime);
   if (window._calActiveMQ) filters.push('Grade ' + window._calActiveMQ);
+  if (window._calActiveConf) filters.push(window._calActiveConf + ' conf');
   const filterLabel = filters.length > 0 ? `<span style="color:#ff6b35"> (${filters.join(' · ')})</span>` : ' <span style="color:#5a7a68">(all data)</span>';
-  const hasAnyFilter = activeTF || window._calActiveRegime || window._calActiveMQ;
+  const hasAnyFilter = activeTF || window._calActiveRegime || window._calActiveMQ || window._calActiveConf;
 
   // Regime rows (clickable)
   const activeRegime = window._calActiveRegime || null;
@@ -14313,6 +14314,17 @@ function _renderCalibrationChart(stats, activeTF) {
     const color = q.quality === 'A' ? '#00f5a0' : q.quality === 'B+' ? '#7ef5d0' : q.quality === 'B' ? '#f5c400' : '#ff8c69';
     const border = isActive ? `border-bottom:2px solid ${color};padding-bottom:2px` : 'border-bottom:2px solid transparent;padding-bottom:2px';
     return `<span onclick="_filterCalibrationByMQ('${q.quality}')" style="color:${color};cursor:pointer;${border};font-weight:${isActive ? '800' : '400'};transition:all 0.2s" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">${q.quality}: ${q.total > 0 ? q.winRate.toFixed(0) + '% <span style="color:#5a7a68">(' + q.total + ' trades)</span>' : '—'}</span>`;
+  }).join(' · ');
+
+  // Confidence rows (clickable)
+  const activeConf = window._calActiveConf || null;
+  const confOrder = ['High', 'Medium', 'Low'];
+  const confRows = confOrder.map(conf => {
+    const c = (stats.byConfidence || []).find(x => x.confidence === conf);
+    const isActive = activeConf === conf;
+    const color = conf === 'High' ? '#00f5a0' : conf === 'Medium' ? '#f5c400' : '#ff8c69';
+    const border = isActive ? `border-bottom:2px solid ${color};padding-bottom:2px` : 'border-bottom:2px solid transparent;padding-bottom:2px';
+    return `<span onclick="_filterCalibrationByConf('${conf}')" style="color:${color};cursor:pointer;${border};font-weight:${isActive ? '800' : '400'};transition:all 0.2s" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">${conf}: ${c && c.total > 0 ? c.winRate.toFixed(0) + '% <span style="color:#5a7a68">(' + c.total + ' trades)</span>' : '—'}</span>`;
   }).join(' · ');
 
   // TF cards (clickable)
@@ -14347,7 +14359,7 @@ function _renderCalibrationChart(stats, activeTF) {
   }).join('');
 
   // Build active filter pills
-  const anyFilter = activeTF || window._calActiveRegime || window._calActiveMQ || window._calActiveOutcome;
+  const anyFilter = activeTF || window._calActiveRegime || window._calActiveMQ || window._calActiveConf || window._calActiveOutcome;
   let filterPills = '';
   if (anyFilter) {
     const pills = [];
@@ -14365,6 +14377,10 @@ function _renderCalibrationChart(stats, activeTF) {
     }
     if (window._calActiveMQ) {
       pills.push(`<span onclick="_filterCalibrationByMQ('${window._calActiveMQ}')" style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.08);border:1px solid #a78bfa;border-radius:12px;padding:2px 8px;cursor:pointer;color:#a78bfa;font-size:9px;font-weight:600">Grade ${window._calActiveMQ} <span style="font-size:11px;line-height:1">×</span></span>`);
+    }
+    if (window._calActiveConf) {
+      const cc = window._calActiveConf === 'High' ? '#00f5a0' : window._calActiveConf === 'Medium' ? '#f5c400' : '#ff8c69';
+      pills.push(`<span onclick="_filterCalibrationByConf('${window._calActiveConf}')" style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.08);border:1px solid ${cc};border-radius:12px;padding:2px 8px;cursor:pointer;color:${cc};font-size:9px;font-weight:600">${window._calActiveConf} conf <span style="font-size:11px;line-height:1">×</span></span>`);
     }
     filterPills = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px;padding:8px 10px;background:rgba(255,107,53,0.05);border:1px solid rgba(255,107,53,0.15);border-radius:6px">
       <span style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;font-weight:700">ACTIVE FILTERS:</span>
@@ -14389,7 +14405,8 @@ function _renderCalibrationChart(stats, activeTF) {
       </div>
       <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:8px;font-size:9px;font-family:'Space Mono',monospace">
         <div style="margin-bottom:4px"><span style="color:#5a7a68">By Regime:</span> ${regimeRows || '<span style="color:#3a5a48">No data</span>'} <span style="color:#3a5a48;font-size:7px">— click to filter</span></div>
-        <div><span style="color:#5a7a68">By Quality:</span> ${mqRows || '<span style="color:#3a5a48">No data</span>'} <span style="color:#3a5a48;font-size:7px">— click to filter</span></div>
+        <div style="margin-bottom:4px"><span style="color:#5a7a68">By Quality:</span> ${mqRows || '<span style="color:#3a5a48">No data</span>'} <span style="color:#3a5a48;font-size:7px">— click to filter</span></div>
+        <div><span style="color:#5a7a68">By Confidence:</span> ${confRows || '<span style="color:#3a5a48">No data</span>'} <span style="color:#3a5a48;font-size:7px">— click to filter</span></div>
       </div>
     </div>
   `;
@@ -14510,10 +14527,15 @@ function _filterCalibrationByMQ(mq) {
   window._calActiveMQ = (mq === window._calActiveMQ) ? null : mq;
   _refetchWithFilters();
 }
+function _filterCalibrationByConf(conf) {
+  window._calActiveConf = (conf === window._calActiveConf) ? null : conf;
+  _refetchWithFilters();
+}
 function _clearCalibrationFilters() {
   window._calActiveTF = null;
   window._calActiveRegime = null;
   window._calActiveMQ = null;
+  window._calActiveConf = null;
   window._calActiveOutcome = null;
   _refetchWithFilters();
 }
@@ -14561,6 +14583,7 @@ async function _refetchWithFilters() {
   if (window._calActiveTF) params.set('timeframe', window._calActiveTF);
   if (window._calActiveRegime) params.set('regime', window._calActiveRegime);
   if (window._calActiveMQ) params.set('market_quality', window._calActiveMQ);
+  if (window._calActiveConf) params.set('confidence', window._calActiveConf);
   const qs = params.toString();
 
   try {

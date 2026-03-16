@@ -69,6 +69,7 @@ router.get('/stats', async (req, res) => {
     if (req.query.timeframe) filters.timeframe = req.query.timeframe;
     if (req.query.regime) filters.regime = req.query.regime;
     if (req.query.market_quality) filters.market_quality = req.query.market_quality;
+    if (req.query.confidence) filters.confidence = req.query.confidence;
     const stats = await scanner.getStats(filters);
     // Attach leverage risk / Sharpe data from scanner status
     const status = scanner.getStatus();
@@ -102,6 +103,7 @@ router.get('/history', async (req, res) => {
     if (req.query.timeframe) { conditions.push(`timeframe = $${idx++}`); params.push(req.query.timeframe); }
     if (req.query.regime) { conditions.push(`regime = $${idx++}`); params.push(req.query.regime); }
     if (req.query.market_quality) { conditions.push(`market_quality = $${idx++}`); params.push(req.query.market_quality); }
+    if (req.query.confidence) { conditions.push(`confidence = $${idx++}`); params.push(req.query.confidence); }
     if (req.query.outcome === 'pending') { conditions.push('outcome IS NULL'); }
     else if (req.query.outcome) { conditions.push(`outcome = $${idx++}`); params.push(req.query.outcome); }
     const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
