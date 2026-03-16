@@ -1710,7 +1710,9 @@ class BestTradesScanner {
                r.ev, r.rawProb, r.confluenceScore,
                JSON.stringify(r.signalSnapshot || {})]
             );
+            debugInfo.errors.push({ asset: r.asset, stage: 'dedup_update_ok', id: row.id });
           } catch (updateErr) {
+            debugInfo.errors.push({ asset: r.asset, stage: 'dedup_update_fail', msg: updateErr.message });
             // Fallback if scan_count/last_seen_at columns don't exist yet
             await pool.query(
               `UPDATE best_trades_log SET probability = $2, confidence = $3, market_quality = $4 WHERE id = $1`,
@@ -1722,6 +1724,7 @@ class BestTradesScanner {
         }
 
         // No existing pending signal — insert new row
+        debugInfo.errors.push({ asset: r.asset, stage: 'inserting_new', tf: r.timeframe, prob: r.prob });
         await pool.query(
           `INSERT INTO best_trades_log
            (asset, direction, probability, confidence, market_quality, rr_ratio,
