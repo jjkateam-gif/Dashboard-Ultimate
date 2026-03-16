@@ -1063,6 +1063,9 @@ class BestTradesScanner {
   // ── Scan a Single Timeframe ──
 
   async _scanTimeframe(tf) {
+    // BULLETPROOF: Entire scan wrapped in master try/catch. This function must NEVER throw
+    // because if it does, predictions stop logging and the engine stops learning.
+    try {
     // Scanning always runs (for prediction logging & calibration). Auto-trading is gated separately in _processAutoTrades().
     // Refresh calibration cache, funding rates, and leverage risk (no-op if refreshed recently)
     await refreshCalibrationCache();
@@ -1306,6 +1309,11 @@ class BestTradesScanner {
 
     this.lastResults = [...bestByAsset.values()].sort((a, b) => b.prob - a.prob);
     this.lastScanTime = new Date().toISOString();
+    } catch (masterError) {
+      // BULLETPROOF: Log but NEVER let this crash. The engine must keep learning.
+      console.error(`[BestTrades] ❌ MASTER CATCH — ${tf} scan failed entirely: ${masterError.message}`);
+      console.error(`[BestTrades] Stack: ${masterError.stack?.split('\n').slice(0, 3).join(' | ')}`);
+    }
   }
 
   // ── Legacy single-TF scan (for manual trigger / API compat) ──
