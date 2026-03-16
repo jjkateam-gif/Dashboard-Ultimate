@@ -829,10 +829,12 @@ function scoreConfluence(signals, direction, regime, tf, marketQuality) {
 
   // Confidence + caps (lowered thresholds so labels spread evenly)
   const confidence = confluence >= 0.55 ? 'High' : confluence >= 0.35 ? 'Medium' : 'Low';
-  let probCap = confidence === 'High' ? 76 : confidence === 'Medium' ? 68 : 58;
-  if (confidence === 'High' && marketQuality === 'A') probCap = 82;
+  let probCap = confidence === 'High' ? 80 : confidence === 'Medium' ? 72 : 62;
+  if (confidence === 'High' && marketQuality === 'A') probCap = 85;
+  else if (confidence === 'High' && marketQuality === 'B+') probCap = 80;
   else if (confidence === 'High' && marketQuality === 'B') probCap = 76;
-  if (marketQuality === 'C') probCap = Math.min(probCap, 62);
+  if (marketQuality === 'C') probCap = Math.min(probCap, 65);
+  if (marketQuality === 'No-Trade') probCap = Math.min(probCap, 55);
   prob = Math.min(probCap, Math.max(25, Math.round(prob)));
 
   return { prob, confluence, confidence, hits, misses };
