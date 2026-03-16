@@ -1,7 +1,7 @@
 const express = require('express');
 const { pool } = require('../db');
 const { authenticate } = require('../middleware/auth');
-const recommendationTracker = require('../services/recommendationTracker');
+// OLD: recommendationTracker removed — replaced by bestTradesScanner
 
 const router = express.Router();
 router.use(authenticate);
@@ -48,41 +48,6 @@ router.get('/me', async (req, res) => {
   }
 });
 
-// GET /stats/recommendations
-router.get('/recommendations', async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 50;
-    const source = req.query.source || null; // 'manual', 'auto', or null for all
-    const recommendations = await recommendationTracker.getHistory(req.user.id, limit, source);
-    res.json({ recommendations });
-  } catch (err) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// GET /stats/recommendations/summary
-router.get('/recommendations/summary', async (req, res) => {
-  try {
-    const source = req.query.source || null;
-    const summary = await recommendationTracker.getSummary(req.user.id, source);
-    res.json(summary);
-  } catch (err) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// POST /stats/recommendations
-router.post('/recommendations', async (req, res) => {
-  try {
-    const rec = req.body;
-    if (!rec.symbol || !rec.direction) {
-      return res.status(400).json({ error: 'symbol and direction required' });
-    }
-    const result = await recommendationTracker.saveRecommendation(req.user.id, rec);
-    res.json({ success: true, id: result.id });
-  } catch (err) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+// OLD recommendation routes removed — all prediction tracking now via /best-trades/* endpoints
 
 module.exports = router;

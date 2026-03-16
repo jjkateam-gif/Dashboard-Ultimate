@@ -1148,19 +1148,7 @@ function switchAuthView(view) {
         </div>
       </div>
 
-      <!-- Trade Log -->
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <div class="card-title" style="color:#a855f7">📋 TRADE LOG</div>
-          <div style="display:flex;gap:6px">
-            <button id="predLogPaperBtn" onclick="switchPredTradeLog('paper')" style="font-family:'Space Mono',monospace;font-size:8px;padding:3px 8px;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:4px;cursor:pointer;font-weight:700">Paper</button>
-            <button id="predLogRealBtn" onclick="switchPredTradeLog('real')" style="font-family:'Space Mono',monospace;font-size:8px;padding:3px 8px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);color:#5a7a68;border-radius:4px;cursor:pointer">Real</button>
-          </div>
-        </div>
-        <div id="predTradeLog" style="max-height:200px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 transparent">
-          <div style="text-align:center;padding:20px;color:#5a7a68;font-family:'Space Mono',monospace;font-size:10px">No trades yet</div>
-        </div>
-      </div>
+      <!-- Old Trade Log card removed — see Scan History & Calibration section -->
     </div>
   </div>
 </div>
@@ -2811,65 +2799,7 @@ function switchAuthView(view) {
     </div>
   </div>
 
-  <!-- Track Record Section -->
-  <div style="margin-top:20px;border-top:1px solid rgba(255,255,255,0.05);padding-top:16px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <div>
-        <div style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#ff6b35">📊 TRADE LOG & TRACK RECORD</div>
-        <div style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;margin-top:2px">Log trades manually or auto-track 60%+ setups. Backend resolves win/loss every 5 min.</div>
-      </div>
-      <div style="display:flex;gap:6px;align-items:center">
-        <!-- Filter tabs -->
-        <div id="recFilterTabs" style="display:flex;gap:3px;background:rgba(0,0,0,0.25);border-radius:6px;padding:2px">
-          <button onclick="setRecFilter(null)" id="recFilterAll" style="font-size:8px;padding:4px 10px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;border:none;background:rgba(255,107,53,0.2);color:#ff6b35;font-weight:700">All</button>
-          <button onclick="setRecFilter('manual')" id="recFilterManual" style="font-size:8px;padding:4px 10px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;border:none;background:transparent;color:#5a7a68;font-weight:700">📋 My Logged</button>
-          <button onclick="setRecFilter('auto')" id="recFilterAuto" style="font-size:8px;padding:4px 10px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;border:none;background:transparent;color:#5a7a68;font-weight:700">🤖 Auto</button>
-          <button onclick="loadBlofinTradeHistory()" id="recFilterBlofin" style="font-size:8px;padding:4px 10px;width:auto;margin:0;border-radius:4px;font-family:'Space Mono',monospace;cursor:pointer;border:none;background:transparent;color:#5a7a68;font-weight:700">⚡ BloFin History</button>
-        </div>
-        <button onclick="loadRecommendations()" style="font-family:'Space Mono',monospace;font-size:9px;padding:5px 12px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:6px;cursor:pointer;width:auto;margin:0">Refresh</button>
-      </div>
-    </div>
-    <!-- Portfolio Settings Bar -->
-    <div id="portfolioBar" style="display:flex;align-items:center;gap:12px;margin-bottom:12px;background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.15);border-radius:8px;padding:10px 14px;flex-wrap:wrap">
-      <div style="font-size:8px;font-weight:700;color:#a78bfa;font-family:'Space Mono',monospace;white-space:nowrap">💰 PORTFOLIO</div>
-      <div style="display:flex;align-items:center;gap:4px">
-        <label style="font-size:7px;color:#5a7a68;white-space:nowrap">Balance $</label>
-        <input id="pfBalance" type="number" value="1000" min="10" step="100" onchange="savePortfolioSettings();recomputePortfolio()" style="width:70px;font-size:9px;padding:4px 6px;background:#0a1a10;border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:3px;font-family:'Space Mono',monospace">
-      </div>
-      <div style="display:flex;align-items:center;gap:4px">
-        <label style="font-size:7px;color:#5a7a68;white-space:nowrap">% Per Trade</label>
-        <input id="pfPctPerTrade" type="number" value="10" min="1" max="100" step="1" onchange="savePortfolioSettings();recomputePortfolio()" style="width:50px;font-size:9px;padding:4px 6px;background:#0a1a10;border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:3px;font-family:'Space Mono',monospace">
-      </div>
-      <div style="height:20px;border-left:1px solid rgba(255,255,255,0.08)"></div>
-      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-        <div style="text-align:center"><div style="font-size:7px;color:#5a7a68;text-transform:uppercase">Running Bal</div><div id="pfRunBal" style="font-size:14px;font-weight:700;font-family:'Space Mono',monospace;color:#a78bfa">$1,000</div></div>
-        <div style="text-align:center"><div style="font-size:7px;color:#5a7a68;text-transform:uppercase">Total P&L</div><div id="pfTotalPnl" style="font-size:14px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">$0</div></div>
-        <div style="text-align:center"><div style="font-size:7px;color:#5a7a68;text-transform:uppercase">Return</div><div id="pfReturn" style="font-size:14px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">0%</div></div>
-        <div style="text-align:center"><div style="font-size:7px;color:#5a7a68;text-transform:uppercase">Per Trade</div><div id="pfPerTrade" style="font-size:14px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">$100</div></div>
-        <div style="text-align:center"><div style="font-size:7px;color:#5a7a68;text-transform:uppercase">Max Pos</div><div id="pfMaxPos" style="font-size:14px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">10</div></div>
-      </div>
-    </div>
-    <div id="recSummaryCards" style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px">
-      <div onclick="_recFilterOutcome('all')" id="recCardTotal" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center;cursor:pointer;transition:all 0.2s" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Total</div><div id="recTotal" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#e0e0e0">0</div></div>
-      <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Win Rate</div><div id="recWinRate" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">&mdash;</div></div>
-      <div onclick="_recFilterOutcome('win')" id="recCardWins" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center;cursor:pointer;transition:all 0.2s" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Wins</div><div id="recWins" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#00f5a0">0</div></div>
-      <div onclick="_recFilterOutcome('loss')" id="recCardLosses" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center;cursor:pointer;transition:all 0.2s" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Losses</div><div id="recLosses" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#ff4d6d">0</div></div>
-      <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Avg P&amp;L</div><div id="recAvgPnl" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">&mdash;</div></div>
-      <div onclick="_recFilterOutcome('pending')" id="recCardStreak" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center;cursor:pointer;transition:all 0.2s" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"><div style="font-size:8px;color:#5a7a68;text-transform:uppercase">Streak</div><div id="recStreak" style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;color:#5a7a68">&mdash;</div></div>
-    </div>
-    <!-- Best Timeframe Analysis -->
-    <div id="recTfAnalysis" style="display:none;margin-bottom:12px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:12px">
-      <div style="font-size:9px;font-weight:700;color:#a855f7;font-family:'Space Mono',monospace;margin-bottom:8px">🏆 TIMEFRAME PERFORMANCE</div>
-      <div id="recTfBars" style="display:flex;flex-direction:column;gap:5px"></div>
-    </div>
-    <!-- Calibration Chart for Trade Log -->
-    <div id="recCalibrationChart" style="margin-bottom:12px"></div>
-    <!-- Outcome filter banner -->
-    <div id="recOutcomeFilterBanner" style="display:none;margin-bottom:8px"></div>
-    <div id="recHistoryList" style="max-height:500px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 transparent">
-      <div style="text-align:center;padding:20px;color:#5a7a68;font-family:'Space Mono',monospace;font-size:10px">Run the Probability Engine to start tracking recommendations</div>
-    </div>
-  </div>
+  <!-- Old Trade Log removed — all tracking now via 24/7 Scan History & Calibration above -->
 
 </div><!-- end page_trades -->
 
@@ -15810,25 +15740,7 @@ async function runProbEngine() {
 
   renderProbeResults(results, tf);
 
-  // Save high-confidence recommendations for tracking
-  const savePromises = results.filter(r => r.prob >= 60).map(r =>
-    saveRecommendation({
-      symbol: r.sym || r.asset,
-      direction: r.direction.toUpperCase(),
-      probability: r.prob,
-      entryPrice: r.price,
-      targetPrice: r.rrData ? r.rrData.target : null,
-      stopPrice: r.rrData ? r.rrData.stop : null,
-      rrRatio: r.rr,
-      source: 'auto',
-      timeframe: tf,
-      confidence: r.confidence || null,
-      leverage: leverage,
-      mode: leverage > 1 ? 'perps' : 'spot'
-    })
-  );
-  await Promise.all(savePromises);
-  loadRecommendations();
+  // OLD: recommendation auto-save removed — 24/7 server scanner handles all logging
 
 
   if (btn) { btn.disabled = false; btn.textContent = '⚡ Scan Now'; }
@@ -16349,12 +16261,48 @@ function renderEtfIssuerBreakdown(series) {
 }
 
 // ════════════════════════════════════════════════════════════════
-// RECOMMENDATION TRACKER
+// OLD RECOMMENDATION TRACKER — REMOVED
+// All prediction tracking now via 24/7 server scanner (best_trades_log table)
+// Stub functions below prevent errors from any remaining references
 // ════════════════════════════════════════════════════════════════
 
-let _recFilterSource = null; // null = all, 'manual', 'auto'
-const _loggedTradeIdxs = new Set(); // track which cards have been logged this scan
+let _recFilterSource = null;
+const _loggedTradeIdxs = new Set();
 
+// Stubs — old recommendation system removed, all tracking via bestTradesScanner
+function saveRecommendation() { return Promise.resolve(); }
+function loadRecommendations() {}
+function setRecFilter() {}
+function renderRecHistory() {}
+function renderRecSummary() {}
+function _renderRecCalibrationChart() {}
+function _recFilterByTF() {}
+function _recFilterOutcome() {}
+function _recUpdateCardHighlights() {}
+function _recApplyOutcomeFilter() {}
+function _rebuildRecCalibrationFromFilter() {}
+function _renderRecRows() {}
+function loadPortfolioSettings() {}
+function savePortfolioSettings() {}
+function recomputePortfolio() {}
+function logBestTrade() { toast('Trade logging now handled by 24/7 server scanner', 'info'); }
+function loadBlofinTradeHistory() {}
+function renderBlofinHistory() {}
+function updateBlofinSummary() {}
+function switchPredTradeLog() {}
+
+/* ---- REMOVED: ~1000 lines of old recommendation tracker code ---- */
+/* Original functions: saveRecommendation, loadRecommendations, setRecFilter,
+   renderRecHistory, renderRecSummary, _renderRecCalibrationChart, _recFilterByTF,
+   _recFilterOutcome, _recUpdateCardHighlights, _recApplyOutcomeFilter,
+   _rebuildRecCalibrationFromFilter, _renderRecRows, loadPortfolioSettings,
+   savePortfolioSettings, recomputePortfolio, logBestTrade,
+   loadBlofinTradeHistory, renderBlofinHistory, updateBlofinSummary */
+
+// Skip to where the old block ended — search: "async function saveRecommendation"
+// Everything between here and the AUTO-TRADE ENGINE section is dead code
+
+if (false) { // Dead code guard — prevents execution of any leftover old functions
 async function saveRecommendation(rec) {
   try {
     const token = localStorage.getItem('dash_token');
@@ -17370,6 +17318,7 @@ async function logBestTrade(idx) {
     toast('Failed to log trade', 'error');
   }
 }
+} // end if(false) dead code guard
 
 // ════════════════════════════════════════════════════════════════
 // 🤖 AUTO-TRADE ENGINE

@@ -215,14 +215,9 @@ async function initDB() {
       console.error('Best Trades scanner init error (core routes still working):', btErr.message);
     }
 
-    // Start recommendation tracker (resolves pending recs every 5 min)
-    try {
-      const recommendationTracker = require('./services/recommendationTracker');
-      recommendationTracker.start();
-      console.log('Recommendation tracker started.');
-    } catch (recErr) {
-      console.error('Recommendation tracker init error (core routes still working):', recErr.message);
-    }
+    // OLD: Recommendation tracker removed — replaced by 24/7 bestTradesScanner
+    // The old system only ran when browser was open and used a separate DB table.
+    // All prediction logging and calibration now handled by bestTradesScanner.
 
     // Liquidation Risk endpoint (no auth — public data only)
     try {
