@@ -17151,9 +17151,10 @@ function renderTFRulesGrid(savedRules) {
         <div>
           <label style="font-size:7px;color:#5a7a68;display:block;margin-bottom:2px">MIN QUALITY</label>
           <select data-tf-quality="${tf}" style="width:100%;font-size:11px;padding:5px 6px;background:#0a1a10;border:1px solid rgba(167,139,250,0.2);color:#a78bfa;border-radius:4px;font-family:'Space Mono',monospace;box-sizing:border-box;font-weight:700">
-            <option value="" ${minQuality === '' ? 'selected' : ''}>Any</option>
-            <option value="C" ${minQuality === 'C' ? 'selected' : ''}>C+</option>
-            <option value="B" ${minQuality === 'B' ? 'selected' : ''}>B+</option>
+            <option value="" ${!minQuality ? 'selected' : ''}>Any</option>
+            <option value="C" ${minQuality === 'C' ? 'selected' : ''}>Min C</option>
+            <option value="B" ${minQuality === 'B' ? 'selected' : ''}>Min B</option>
+            <option value="B+" ${minQuality === 'B+' ? 'selected' : ''}>Min B+</option>
             <option value="A" ${minQuality === 'A' ? 'selected' : ''}>A only</option>
           </select>
         </div>
