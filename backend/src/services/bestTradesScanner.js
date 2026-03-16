@@ -964,6 +964,7 @@ class BestTradesScanner {
       minProb: 70,
       tradeSizeUsd: 100,
       tradeSizeMode: 'fixed',  // 'fixed' ($) or 'percent' (% of wallet balance)
+      sizingMode: 'kelly',    // 'kelly' = Kelly-adjusted sizing/leverage, 'fixed' = exact size, no Kelly scaling
       maxOpen: 3,
       leverage: 1,
       tfRules: {},  // Per-TF overrides: { "5m": { enabled: true, minProb: 60, minQuality: "B" }, ... }
@@ -1485,7 +1486,14 @@ class BestTradesScanner {
         basePosSize = Math.round(totalAccountUsd * (this.settings.tradeSizeUsd / 100));
         console.log(`[BestTrades] % sizing: ${this.settings.tradeSizeUsd}% of $${totalAccountUsd.toFixed(2)} = $${basePosSize}`);
       }
-      const posSize = Math.round(basePosSize * (setup.mqSizeMult || 1));
+      // Sizing mode: 'kelly' applies mqSizeMult (quality-based scaling), 'fixed' uses exact user amount
+      const useKelly = this.settings.sizingMode !== 'fixed';
+      const posSize = useKelly ? Math.round(basePosSize * (setup.mqSizeMult || 1)) : Math.round(basePosSize);
+      if (useKelly) {
+        console.log(`[BestTrades] Kelly sizing: base=$${basePosSize} × mqMult=${setup.mqSizeMult} = $${posSize}`);
+      } else {
+        console.log(`[BestTrades] Fixed sizing: $${posSize} (Kelly disabled by user)`);
+      }
       if (availableBalance < posSize) {
         console.log(`[BestTrades] Insufficient balance ($${availableBalance.toFixed(2)} < $${posSize})`);
         break;
@@ -1515,7 +1523,10 @@ class BestTradesScanner {
     const instId = setup.asset + '-USDT';
     const side = setup.direction === 'long' ? 'buy' : 'sell';
     // Apply all leverage risk gates (#13/#14/#15/#16/#18/#19)
-    const rawLev = Math.max(setup.optimalLev || 1, this.settings.leverage || 1);
+    // In fixed sizing mode, use only user's set leverage (no Kelly-optimal override)
+    const rawLev = this.settings.sizingMode === 'fixed'
+      ? (this.settings.leverage || 1)
+      : Math.max(setup.optimalLev || 1, this.settings.leverage || 1);
     const fundingRate = getFundingRateForAsset(setup.sym || setup.asset + 'USDT');
     const lev = getSafeLeverage(rawLev, {
       confidence: setup.confidence,
@@ -1608,6 +1619,7 @@ class BestTradesScanner {
         this.settings.minProb = row.min_prob || 70;
         this.settings.tradeSizeUsd = parseFloat(row.trade_size_usd) || 100;
         this.settings.tradeSizeMode = row.trade_size_mode || 'fixed';
+        this.settings.sizingMode = row.sizing_mode || 'kelly';
         this.settings.maxOpen = row.max_open || 3;
         this.settings.leverage = row.leverage || 1;
         this.settings.tfRules = row.tf_rules || {};
@@ -1622,13 +1634,14 @@ class BestTradesScanner {
     if (!pool) return;
     try {
       await pool.query(
-        `INSERT INTO best_trades_settings (id, enabled, mode, timeframe, min_prob, trade_size_usd, trade_size_mode, max_open, leverage, tf_rules, updated_at)
-         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+        `INSERT INTO best_trades_settings (id, enabled, mode, timeframe, min_prob, trade_size_usd, trade_size_mode, sizing_mode, max_open, leverage, tf_rules, updated_at)
+         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
          ON CONFLICT (id) DO UPDATE SET
            enabled=$1, mode=$2, timeframe=$3, min_prob=$4,
-           trade_size_usd=$5, trade_size_mode=$6, max_open=$7, leverage=$8, tf_rules=$9, updated_at=NOW()`,
+           trade_size_usd=$5, trade_size_mode=$6, sizing_mode=$7, max_open=$8, leverage=$9, tf_rules=$10, updated_at=NOW()`,
         [this.settings.enabled, this.settings.mode, this.settings.timeframe,
          this.settings.minProb, this.settings.tradeSizeUsd, this.settings.tradeSizeMode || 'fixed',
+         this.settings.sizingMode || 'kelly',
          this.settings.maxOpen, this.settings.leverage,
          JSON.stringify(this.settings.tfRules || {})]
       );

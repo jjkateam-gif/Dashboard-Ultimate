@@ -2710,6 +2710,18 @@ function switchAuthView(view) {
           <label style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Max Open Positions</label>
           <input id="autoTradeMaxOpen" type="number" value="3" min="1" max="10" style="width:100%;font-size:13px;padding:8px 10px;background:#0a1a10;border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:5px;font-family:'Space Mono',monospace;box-sizing:border-box;font-weight:700">
         </div>
+        <div>
+          <label style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Position Sizing</label>
+          <select id="autoTradeSizingMode" onchange="toggleSizingModeInfo()" style="width:100%;font-size:13px;padding:8px 10px;background:#0a1a10;border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:5px;font-family:'Space Mono',monospace;box-sizing:border-box;font-weight:700;cursor:pointer">
+            <option value="kelly">Kelly</option>
+            <option value="fixed">Fixed</option>
+          </select>
+        </div>
+      </div>
+      <!-- Sizing mode info -->
+      <div id="sizingModeInfo" style="padding:8px 12px;margin-bottom:14px;border-radius:6px;font-size:8px;font-family:'Space Mono',monospace;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.12);color:#8b8fa3;display:flex;align-items:center;gap:8px">
+        <span id="sizingModeIcon" style="font-size:14px">📊</span>
+        <span id="sizingModeDesc"><strong style="color:#a78bfa">Kelly Mode:</strong> Position size and leverage are dynamically adjusted by the engine based on signal quality, market conditions, and calibration data. Your size setting is the base — the engine scales it up for A-grade setups and down for C-grade.</span>
       </div>
 
       <!-- Per-Timeframe Rules -->
@@ -17536,6 +17548,22 @@ function toggleTradeSizeMode() {
   }
 }
 
+function toggleSizingModeInfo() {
+  const mode = $('autoTradeSizingMode')?.value || 'kelly';
+  const desc = $('sizingModeDesc');
+  const icon = $('sizingModeIcon');
+  const box = $('sizingModeInfo');
+  if (mode === 'kelly') {
+    if (icon) icon.textContent = '📊';
+    if (desc) desc.innerHTML = '<strong style="color:#a78bfa">Kelly Mode:</strong> Position size and leverage are dynamically adjusted by the engine based on signal quality, market conditions, and calibration data. Your size setting is the base — the engine scales it up for A-grade setups and down for C-grade.';
+    if (box) { box.style.background = 'rgba(167,139,250,0.06)'; box.style.borderColor = 'rgba(167,139,250,0.12)'; }
+  } else {
+    if (icon) icon.textContent = '🔒';
+    if (desc) desc.innerHTML = '<strong style="color:#ff6b35">Fixed Mode:</strong> Every trade uses the exact position size and leverage you set. No Kelly scaling, no quality-based adjustments. Simple and predictable — good for users who want full control over risk.';
+    if (box) { box.style.background = 'rgba(255,107,53,0.06)'; box.style.borderColor = 'rgba(255,107,53,0.12)'; }
+  }
+}
+
 // Confirm & save auto-trade settings
 function confirmAutoTradeSettings() {
   const on = $('autoTradeEnabled')?.checked;
@@ -17543,13 +17571,14 @@ function confirmAutoTradeSettings() {
   const minProb = $('autoTradeMinProb')?.value || 70;
   const size = $('autoTradeSize')?.value || 100;
   const sizeMode = $('autoTradeSizeMode')?.value || 'fixed';
+  const sizingMode = $('autoTradeSizingMode')?.value || 'kelly';
   const maxOpen = $('autoTradeMaxOpen')?.value || 3;
 
   // Collect per-TF rules
   const tfRules = collectTFRules();
 
   // Save to localStorage
-  localStorage.setItem('dash_autoTrade', JSON.stringify({ on, mode, minProb, size, sizeMode, maxOpen, tfRules }));
+  localStorage.setItem('dash_autoTrade', JSON.stringify({ on, mode, minProb, size, sizeMode, sizingMode, maxOpen, tfRules }));
 
   // Sync to backend server-side scanner (runs 24/7 even when browser is closed)
   const tf = $('probeTimeframe')?.value || '15m';
@@ -17557,7 +17586,7 @@ function confirmAutoTradeSettings() {
   fetch((window.CBP_BACKEND || 'http://localhost:3001') + '/best-trades/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('dash_token') },
-    body: JSON.stringify({ enabled: on, mode, timeframe: tf, minProb: parseInt(minProb), tradeSizeUsd: parseFloat(size), tradeSizeMode: sizeMode, maxOpen: parseInt(maxOpen), leverage: lev, tfRules }),
+    body: JSON.stringify({ enabled: on, mode, timeframe: tf, minProb: parseInt(minProb), tradeSizeUsd: parseFloat(size), tradeSizeMode: sizeMode, sizingMode, maxOpen: parseInt(maxOpen), leverage: lev, tfRules }),
   }).then(r => r.json()).then(d => {
     if (d.success) console.log('[AutoTrade] Settings synced to server — scanner runs 24/7');
     else console.warn('[AutoTrade] Server sync failed:', d.error);
@@ -17581,7 +17610,7 @@ function confirmAutoTradeSettings() {
   }
 
   if (on) {
-    toast('🤖 Auto-trade saved — ' + (mode === 'auto' ? 'Full Auto' : 'Confirm First') + ' · Min ' + minProb + '% · $' + size + '/trade · Max ' + maxOpen + ' open', 'success', 4000);
+    toast('🤖 Auto-trade saved — ' + (mode === 'auto' ? 'Full Auto' : 'Confirm First') + ' · Min ' + minProb + '% · ' + (sizeMode === 'percent' ? size + '%' : '$' + size) + '/trade · ' + (sizingMode === 'kelly' ? 'Kelly' : 'Fixed') + ' sizing · Max ' + maxOpen + ' open', 'success', 4000);
     // Start background auto-scan timer so engine keeps scanning even when user leaves this tab
     startAutoScanTimer();
   } else {
@@ -17599,6 +17628,7 @@ function loadAutoTradeSettings() {
     if (saved.minProb && $('autoTradeMinProb')) $('autoTradeMinProb').value = saved.minProb;
     if (saved.size && $('autoTradeSize')) $('autoTradeSize').value = saved.size;
     if (saved.sizeMode && $('autoTradeSizeMode')) { $('autoTradeSizeMode').value = saved.sizeMode; toggleTradeSizeMode(); }
+    if (saved.sizingMode && $('autoTradeSizingMode')) { $('autoTradeSizingMode').value = saved.sizingMode; toggleSizingModeInfo(); }
     if (saved.maxOpen && $('autoTradeMaxOpen')) $('autoTradeMaxOpen').value = saved.maxOpen;
     // Load per-TF rules grid
     if (saved.tfRules && typeof saved.tfRules === 'object') {
