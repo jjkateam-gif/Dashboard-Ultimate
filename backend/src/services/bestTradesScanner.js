@@ -1289,6 +1289,12 @@ class BestTradesScanner {
     console.log(`[BestTrades] ${tf} scan complete: ${results.length} assets, ${qualifying.length} qualifying (>=${this.settings.minProb}%), top: ${results[0]?.asset} ${results[0]?.direction} ${results[0]?.prob}%`);
 
     return results;
+    } catch (masterError) {
+      // BULLETPROOF: Log but NEVER let this crash. The engine must keep learning.
+      console.error(`[BestTrades] ❌ MASTER CATCH — ${tf} scan failed entirely: ${masterError.message}`);
+      console.error(`[BestTrades] Stack: ${masterError.stack?.split('\n').slice(0, 3).join(' | ')}`);
+      return [];
+    }
   }
 
   /**
@@ -1309,11 +1315,6 @@ class BestTradesScanner {
 
     this.lastResults = [...bestByAsset.values()].sort((a, b) => b.prob - a.prob);
     this.lastScanTime = new Date().toISOString();
-    } catch (masterError) {
-      // BULLETPROOF: Log but NEVER let this crash. The engine must keep learning.
-      console.error(`[BestTrades] ❌ MASTER CATCH — ${tf} scan failed entirely: ${masterError.message}`);
-      console.error(`[BestTrades] Stack: ${masterError.stack?.split('\n').slice(0, 3).join(' | ')}`);
-    }
   }
 
   // ── Legacy single-TF scan (for manual trigger / API compat) ──
