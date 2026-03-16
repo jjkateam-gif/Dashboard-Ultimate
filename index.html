@@ -944,11 +944,11 @@ function switchAuthView(view) {
       <div class="zone-bar">
         <div class="zone-marker" id="zoneMarker" style="left:50%"></div>
       </div>
-      <div class="zone-labels">
+      <div class="zone-labels" id="zoneLabels">
         <span>🟢 DEEP BEAR<br>Accumulate</span>
-        <span style="text-align:center">🔵 EARLY BULL<br>Build position</span>
-        <span style="text-align:center">🟡 MID BULL<br>Trend follow</span>
-        <span style="text-align:center">🟠 LATE BULL<br>Take profits</span>
+        <span style="text-align:center">🔵 EARLY RECOVERY<br>Build position</span>
+        <span style="text-align:center">🟡 MID CYCLE<br>Trend follow</span>
+        <span style="text-align:center">🟠 LATE CYCLE<br>Take profits</span>
         <span style="text-align:right">🔴 EUPHORIA<br>Exit</span>
       </div>
     </div>
@@ -3963,8 +3963,8 @@ function renderCycleDashboard(d){
   arc.style.stroke=arcColor;
   $('scoreNum').style.color=arcColor;
 
-  // Zone marker
-  $('zoneMarker').style.left=score+'%';
+  // Zone marker — use adjustedScore (calculated below) for consistency with verdict
+  // Deferred: set after adjustedScore is computed
 
   // Verdict
   const vb=$('verdictBadge');
@@ -4019,6 +4019,39 @@ function renderCycleDashboard(d){
   const isBullMarket = bullSignals >= 2 || (bullSignals >= 1 && bearSignals === 0);
   // Store globally for indicator cards to use
   window._cycleDirection = isBearMarket ? 'bear' : isBullMarket ? 'bull' : 'neutral';
+
+  // Update zone marker position to match adjustedScore (not raw score)
+  $('zoneMarker').style.left = adjustedScore + '%';
+
+  // Update zone labels based on bear/bull context
+  const zl = $('zoneLabels');
+  if (zl) {
+    if (isBearMarket) {
+      zl.innerHTML = `
+        <span>🟢 DEEP BEAR<br>Accumulate</span>
+        <span style="text-align:center">🔵 EARLY BEAR<br>Build position</span>
+        <span style="text-align:center">🟡 MID BEAR<br>Caution</span>
+        <span style="text-align:center">🟠 LATE BEAR<br>Distribution</span>
+        <span style="text-align:right">🔴 CAPITULATION<br>Exit risk</span>
+      `;
+    } else if (isBullMarket) {
+      zl.innerHTML = `
+        <span>🟢 DEEP VALUE<br>Accumulate</span>
+        <span style="text-align:center">🔵 EARLY BULL<br>Build position</span>
+        <span style="text-align:center">🟡 MID BULL<br>Trend follow</span>
+        <span style="text-align:center">🟠 LATE BULL<br>Take profits</span>
+        <span style="text-align:right">🔴 EUPHORIA<br>Exit</span>
+      `;
+    } else {
+      zl.innerHTML = `
+        <span>🟢 DEEP BEAR<br>Accumulate</span>
+        <span style="text-align:center">🔵 EARLY RECOVERY<br>Build position</span>
+        <span style="text-align:center">🟡 MID CYCLE<br>Trend follow</span>
+        <span style="text-align:center">🟠 LATE CYCLE<br>Take profits</span>
+        <span style="text-align:right">🔴 EUPHORIA<br>Exit</span>
+      `;
+    }
+  }
 
   if(adjustedScore < 20){
     vb.className='verdict-badge accumulate';
