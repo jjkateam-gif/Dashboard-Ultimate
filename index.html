@@ -14472,11 +14472,19 @@ function _renderCalibrationChart(stats, activeTF) {
   const chartEl = document.getElementById('scanCalibrationChart');
   if (!chartEl) return;
 
-  // Build probability bucket bars from server data
+  // Build probability bucket bars from server data (filtered by prob range)
   const bucketData = stats.byProbBucket || [];
+  const pMin = parseInt(window._calMinProb) || 0;
+  const pMax = parseInt(window._calMaxProb) || 100;
   const buckets = {};
   for (const b of bucketData) {
     if (b.total > 0) {
+      // Filter buckets by prob range (bucketMid is like 52.5, 57.5, etc)
+      if (pMin > 0 || pMax < 100) {
+        const bucketLow = b.bucketMid - 2.5;
+        const bucketHigh = b.bucketMid + 2.5;
+        if (bucketHigh < pMin || bucketLow > pMax) continue;
+      }
       buckets[b.bucket + '%'] = { total: b.total, wins: b.wins, bucket: b.bucketMid - 2 };
     }
   }
@@ -14551,55 +14559,96 @@ function _renderCalibrationChart(stats, activeTF) {
     </div>`;
   }).join('');
 
-  // Build active filter pills
-  const anyFilter = activeTF || window._calActiveRegime || window._calActiveMQ || window._calActiveConf || window._calActiveOutcome;
-  let filterPills = '';
-  if (anyFilter) {
-    const pills = [];
-    if (window._calActiveOutcome) {
-      const oc = window._calActiveOutcome;
-      const ocColor = oc === 'win' ? '#00f5a0' : oc === 'loss' ? '#ff4d6d' : oc === 'pending' ? '#f5c400' : '#aaa';
-      pills.push(`<span onclick="_filterByOutcome('${oc}')" style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.08);border:1px solid ${ocColor};border-radius:12px;padding:2px 8px;cursor:pointer;color:${ocColor};font-size:9px;font-weight:600">${oc.toUpperCase()} <span style="font-size:11px;line-height:1">×</span></span>`);
-    }
-    if (activeTF) {
-      pills.push(`<span onclick="_filterCalibrationByTF('${activeTF}')" style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.08);border:1px solid #ff6b35;border-radius:12px;padding:2px 8px;cursor:pointer;color:#ff6b35;font-size:9px;font-weight:600">${activeTF} <span style="font-size:11px;line-height:1">×</span></span>`);
-    }
-    if (window._calActiveRegime) {
-      const rc = window._calActiveRegime === 'bull' ? '#00f5a0' : window._calActiveRegime === 'bear' ? '#ff4d6d' : '#f5c400';
-      pills.push(`<span onclick="_filterCalibrationByRegime('${window._calActiveRegime}')" style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.08);border:1px solid ${rc};border-radius:12px;padding:2px 8px;cursor:pointer;color:${rc};font-size:9px;font-weight:600">${window._calActiveRegime} <span style="font-size:11px;line-height:1">×</span></span>`);
-    }
-    if (window._calActiveMQ) {
-      pills.push(`<span onclick="_filterCalibrationByMQ('${window._calActiveMQ}')" style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.08);border:1px solid #a78bfa;border-radius:12px;padding:2px 8px;cursor:pointer;color:#a78bfa;font-size:9px;font-weight:600">Grade ${window._calActiveMQ} <span style="font-size:11px;line-height:1">×</span></span>`);
-    }
-    if (window._calActiveConf) {
-      const cc = window._calActiveConf === 'High' ? '#00f5a0' : window._calActiveConf === 'Medium' ? '#f5c400' : '#ff8c69';
-      pills.push(`<span onclick="_filterCalibrationByConf('${window._calActiveConf}')" style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.08);border:1px solid ${cc};border-radius:12px;padding:2px 8px;cursor:pointer;color:${cc};font-size:9px;font-weight:600">${window._calActiveConf} conf <span style="font-size:11px;line-height:1">×</span></span>`);
-    }
-    filterPills = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px;padding:8px 10px;background:rgba(255,107,53,0.05);border:1px solid rgba(255,107,53,0.15);border-radius:6px">
-      <span style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;font-weight:700">ACTIVE FILTERS:</span>
-      ${pills.join('')}
-      <button onclick="_clearCalibrationFilters()" style="font-size:8px;padding:3px 10px;background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.5);color:#ff6b35;border-radius:12px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0;margin-left:auto">CLEAR ALL</button>
-    </div>`;
+  // Prob filter state
+  const minProb = parseInt(window._calMinProb) || 0;
+  const maxProb = parseInt(window._calMaxProb) || 100;
+  const probFilterActive = minProb > 0 || maxProb < 100;
+  if (probFilterActive) {
+    if (!filters.find(f => f.includes('%'))) filters.push(minProb + '-' + maxProb + '%');
   }
+  const filterLabelFull = filters.length > 0 ? `<span style="color:#ff6b35"> (${filters.join(' · ')})</span>` : ' <span style="color:#5a7a68">(all data)</span>';
+
+  // Prob filter pill
+  if (probFilterActive) {
+    const pc = '#a78bfa';
+    filterPills = filterPills || '';
+    // We'll rebuild filterPills to include prob
+  }
+  // Rebuild filterPills with prob included
+  const allPills = [];
+  if (window._calActiveOutcome) {
+    const oc = window._calActiveOutcome;
+    const ocColor = oc === 'win' ? '#00f5a0' : oc === 'loss' ? '#ff4d6d' : oc === 'pending' ? '#f5c400' : '#aaa';
+    allPills.push(`<span onclick="_filterByOutcome('${oc}')" style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.08);border:1px solid ${ocColor};border-radius:12px;padding:2px 8px;cursor:pointer;color:${ocColor};font-size:9px;font-weight:600">${oc.toUpperCase()} ×</span>`);
+  }
+  if (activeTF) allPills.push(`<span onclick="_filterCalibrationByTF('${activeTF}')" style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.08);border:1px solid #ff6b35;border-radius:12px;padding:2px 8px;cursor:pointer;color:#ff6b35;font-size:9px;font-weight:600">${activeTF} ×</span>`);
+  if (window._calActiveRegime) {
+    const rc = window._calActiveRegime === 'bull' ? '#00f5a0' : window._calActiveRegime === 'bear' ? '#ff4d6d' : '#f5c400';
+    allPills.push(`<span onclick="_filterCalibrationByRegime('${window._calActiveRegime}')" style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.08);border:1px solid ${rc};border-radius:12px;padding:2px 8px;cursor:pointer;color:${rc};font-size:9px;font-weight:600">${window._calActiveRegime} ×</span>`);
+  }
+  if (window._calActiveMQ) allPills.push(`<span onclick="_filterCalibrationByMQ('${window._calActiveMQ}')" style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.08);border:1px solid #a78bfa;border-radius:12px;padding:2px 8px;cursor:pointer;color:#a78bfa;font-size:9px;font-weight:600">Grade ${window._calActiveMQ} ×</span>`);
+  if (window._calActiveConf) {
+    const cc = window._calActiveConf === 'High' ? '#00f5a0' : window._calActiveConf === 'Medium' ? '#f5c400' : '#ff8c69';
+    allPills.push(`<span onclick="_filterCalibrationByConf('${window._calActiveConf}')" style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.08);border:1px solid ${cc};border-radius:12px;padding:2px 8px;cursor:pointer;color:${cc};font-size:9px;font-weight:600">${window._calActiveConf} conf ×</span>`);
+  }
+  if (probFilterActive) allPills.push(`<span onclick="window._calMinProb=0;window._calMaxProb=100;_refetchWithFilters()" style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.08);border:1px solid #a78bfa;border-radius:12px;padding:2px 8px;cursor:pointer;color:#a78bfa;font-size:9px;font-weight:600">Prob ${minProb}-${maxProb}% ×</span>`);
+
+  const hasAnyFilterFull = allPills.length > 0;
+  const activePillsHtml = hasAnyFilterFull ? `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px;padding:8px 10px;background:rgba(255,107,53,0.05);border:1px solid rgba(255,107,53,0.15);border-radius:6px">
+    <span style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;font-weight:700">ACTIVE FILTERS:</span>
+    ${allPills.join('')}
+    <button onclick="_clearAllFilters()" style="font-size:8px;padding:3px 10px;background:rgba(255,107,53,0.2);border:1px solid rgba(255,107,53,0.5);color:#ff6b35;border-radius:12px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0;margin-left:auto">CLEAR ALL</button>
+  </div>` : '';
 
   chartEl.innerHTML = `
     <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-radius:8px;padding:16px">
-      ${filterPills}
+      ${activePillsHtml}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <div>
-          <div style="font-size:11px;font-weight:700;color:#a78bfa;font-family:'Space Mono',monospace">CALIBRATION: PREDICTED vs ACTUAL WIN RATE${filterLabel}</div>
+          <div style="font-size:11px;font-weight:700;color:#a78bfa;font-family:'Space Mono',monospace">CALIBRATION: PREDICTED vs ACTUAL WIN RATE${filterLabelFull}</div>
           <div style="font-size:8px;color:#3a5a48;font-family:'Space Mono',monospace;margin-top:2px">✓ = well-calibrated (actual within ±10% of predicted) · ⚠ = needs more data</div>
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:flex-end;padding:12px 0;min-height:80px">${bars}</div>
-      <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:12px;margin-top:10px">
-        <div style="font-size:11px;font-weight:700;color:#ff6b35;font-family:'Space Mono',monospace;margin-bottom:10px">📡 WIN RATE BY TIMEFRAME <span style="font-size:8px;color:#5a7a68;font-weight:400">— click a timeframe to filter</span></div>
+
+      <!-- ── UNIFIED FILTER BAR ── -->
+      <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:14px;margin-top:12px">
+        <div style="font-size:10px;font-weight:700;color:#ff6b35;font-family:'Space Mono',monospace;margin-bottom:10px;letter-spacing:1px">🎛️ FILTERS <span style="font-size:7px;color:#5a7a68;font-weight:400">— click to filter chart + table</span></div>
+
+        <!-- Timeframe cards -->
         <div data-tf-grid style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px">${tfCards}</div>
-      </div>
-      <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:8px;font-size:9px;font-family:'Space Mono',monospace">
-        <div style="margin-bottom:4px"><span style="color:#5a7a68">By Regime:</span> ${regimeRows || '<span style="color:#3a5a48">No data</span>'} <span style="color:#3a5a48;font-size:7px">— click to filter</span></div>
-        <div style="margin-bottom:4px"><span style="color:#5a7a68">By Quality:</span> ${mqRows || '<span style="color:#3a5a48">No data</span>'} <span style="color:#3a5a48;font-size:7px">— click to filter</span></div>
-        <div><span style="color:#5a7a68">By Confidence:</span> ${confRows || '<span style="color:#3a5a48">No data</span>'} <span style="color:#3a5a48;font-size:7px">— click to filter</span></div>
+
+        <!-- Regime / Quality / Confidence row -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;font-size:9px;font-family:'Space Mono',monospace;margin-bottom:12px;padding:8px 10px;background:rgba(0,0,0,0.15);border:1px solid rgba(255,255,255,0.04);border-radius:6px">
+          <div><span style="color:#5a7a68;font-weight:700;font-size:8px">REGIME</span><br/>${regimeRows || '<span style="color:#3a5a48">No data</span>'}</div>
+          <div><span style="color:#5a7a68;font-weight:700;font-size:8px">QUALITY</span><br/>${mqRows || '<span style="color:#3a5a48">No data</span>'}</div>
+          <div><span style="color:#5a7a68;font-weight:700;font-size:8px">CONFIDENCE</span><br/>${confRows || '<span style="color:#3a5a48">No data</span>'}</div>
+        </div>
+
+        <!-- Probability range filter -->
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(167,139,250,0.04);border:1px solid rgba(167,139,250,0.1);border-radius:6px;font-family:'Space Mono',monospace;font-size:9px;flex-wrap:wrap">
+          <span style="color:#a78bfa;font-weight:700;font-size:8px">PROB RANGE:</span>
+          <label style="color:#5a7a68;font-size:8px">Min</label>
+          <input type="number" id="probFilterMin" value="${minProb || ''}" placeholder="0" min="0" max="100" step="5"
+            style="width:42px;padding:2px 4px;background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.25);border-radius:4px;color:#e2e8f0;font-family:'Space Mono',monospace;font-size:9px;text-align:center"
+            onchange="window._calMinProb=this.value;_refetchWithFilters()" />
+          <label style="color:#5a7a68;font-size:8px">Max</label>
+          <input type="number" id="probFilterMax" value="${maxProb < 100 ? maxProb : ''}" placeholder="100" min="0" max="100" step="5"
+            style="width:42px;padding:2px 4px;background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.25);border-radius:4px;color:#e2e8f0;font-family:'Space Mono',monospace;font-size:9px;text-align:center"
+            onchange="window._calMaxProb=this.value;_refetchWithFilters()" />
+          <span style="color:#3a5a48;font-size:7px;margin:0 2px">│</span>
+          <button onclick="window._calMinProb=55;window._calMaxProb=100;_refetchWithFilters()"
+            style="font-size:7px;padding:2px 6px;background:${minProb===55?'rgba(0,245,160,0.25)':'rgba(0,245,160,0.08)'};border:1px solid ${minProb===55?'rgba(0,245,160,0.6)':'rgba(0,245,160,0.25)'};color:#00f5a0;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">55+</button>
+          <button onclick="window._calMinProb=60;window._calMaxProb=100;_refetchWithFilters()"
+            style="font-size:7px;padding:2px 6px;background:${minProb===60?'rgba(0,245,160,0.25)':'rgba(0,245,160,0.08)'};border:1px solid ${minProb===60?'rgba(0,245,160,0.6)':'rgba(0,245,160,0.25)'};color:#00f5a0;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">60+</button>
+          <button onclick="window._calMinProb=65;window._calMaxProb=100;_refetchWithFilters()"
+            style="font-size:7px;padding:2px 6px;background:${minProb===65?'rgba(0,245,160,0.25)':'rgba(0,245,160,0.08)'};border:1px solid ${minProb===65?'rgba(0,245,160,0.6)':'rgba(0,245,160,0.25)'};color:#00f5a0;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">65+</button>
+          <button onclick="window._calMinProb=70;window._calMaxProb=100;_refetchWithFilters()"
+            style="font-size:7px;padding:2px 6px;background:${minProb===70?'rgba(0,245,160,0.25)':'rgba(0,245,160,0.08)'};border:1px solid ${minProb===70?'rgba(0,245,160,0.6)':'rgba(0,245,160,0.25)'};color:#00f5a0;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">70+</button>
+          ${probFilterActive ? `<button onclick="window._calMinProb=0;window._calMaxProb=100;_refetchWithFilters()"
+            style="font-size:7px;padding:2px 6px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">Clear</button>
+          <span style="color:#a78bfa;font-size:8px">${probFilterActive ? '(' + minProb + '-' + maxProb + '%)' : ''}</span>` : ''}
+        </div>
       </div>
     </div>
   `;
@@ -14686,39 +14735,15 @@ function _renderHistoryTable(history) {
     </tr>`;
   }).join('');
 
-  const filterBanner = outcomeFilter ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;margin-bottom:6px;background:rgba(255,107,53,0.08);border:1px solid rgba(255,107,53,0.2);border-radius:6px;font-family:'Space Mono',monospace;font-size:9px">
-    <span style="color:#ff6b35">Showing: <strong>${outcomeFilter === 'pending' ? 'Pending' : outcomeFilter === 'win' ? 'Wins' : outcomeFilter === 'loss' ? 'Losses' : 'All'}</strong> (${filteredEntries.length} entries)</span>
-    <button onclick="window._calActiveOutcome=null;renderScanHistory()" style="font-size:8px;padding:3px 8px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">Clear</button>
+  // Filter summary above table
+  const probFilterActive = minProb > 0 || maxProb < 100;
+  const anyTableFilter = outcomeFilter || probFilterActive;
+  const filterSummary = anyTableFilter ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 10px;margin-bottom:6px;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.1);border-radius:6px;font-family:'Space Mono',monospace;font-size:8px">
+    <span style="color:#a78bfa">Showing <strong style="color:#e2e8f0">${filteredEntries.length}</strong> entries${outcomeFilter ? ' · ' + outcomeFilter.toUpperCase() : ''}${probFilterActive ? ' · ' + minProb + '-' + maxProb + '% prob' : ''}</span>
   </div>` : '';
 
-  // Probability filter bar
-  const probFilterActive = minProb > 0 || maxProb < 100;
-  const probFilterBar = `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;margin-bottom:6px;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.12);border-radius:6px;font-family:'Space Mono',monospace;font-size:9px;flex-wrap:wrap">
-    <span style="color:#a78bfa;font-weight:700;font-size:8px">PROB FILTER:</span>
-    <label style="color:#5a7a68;font-size:8px">Min</label>
-    <input type="number" id="probFilterMin" value="${minProb || ''}" placeholder="0" min="0" max="100" step="5"
-      style="width:42px;padding:2px 4px;background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.25);border-radius:4px;color:#e2e8f0;font-family:'Space Mono',monospace;font-size:9px;text-align:center"
-      onchange="window._calMinProb=this.value;_renderHistoryTable(window._serverHistory||[])" />
-    <label style="color:#5a7a68;font-size:8px">Max</label>
-    <input type="number" id="probFilterMax" value="${maxProb < 100 ? maxProb : ''}" placeholder="100" min="0" max="100" step="5"
-      style="width:42px;padding:2px 4px;background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.25);border-radius:4px;color:#e2e8f0;font-family:'Space Mono',monospace;font-size:9px;text-align:center"
-      onchange="window._calMaxProb=this.value;_renderHistoryTable(window._serverHistory||[])" />
-    <button onclick="window._calMinProb=55;window._calMaxProb=100;_renderHistoryTable(window._serverHistory||[])"
-      style="font-size:7px;padding:2px 6px;background:rgba(0,245,160,0.1);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">55+</button>
-    <button onclick="window._calMinProb=60;window._calMaxProb=100;_renderHistoryTable(window._serverHistory||[])"
-      style="font-size:7px;padding:2px 6px;background:rgba(0,245,160,0.1);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">60+</button>
-    <button onclick="window._calMinProb=65;window._calMaxProb=100;_renderHistoryTable(window._serverHistory||[])"
-      style="font-size:7px;padding:2px 6px;background:rgba(0,245,160,0.1);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">65+</button>
-    <button onclick="window._calMinProb=70;window._calMaxProb=100;_renderHistoryTable(window._serverHistory||[])"
-      style="font-size:7px;padding:2px 6px;background:rgba(0,245,160,0.1);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">70+</button>
-    ${probFilterActive ? `<button onclick="window._calMinProb=0;window._calMaxProb=100;_renderHistoryTable(window._serverHistory||[])"
-      style="font-size:7px;padding:2px 6px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">Clear</button>` : ''}
-    ${probFilterActive ? `<span style="color:#a78bfa;font-size:8px">${filteredEntries.length} entries (${minProb}%-${maxProb}%)</span>` : ''}
-  </div>`;
-
   tableEl.innerHTML = `
-    ${probFilterBar}
-    ${filterBanner}
+    ${filterSummary}
     <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-family:'Space Mono',monospace;font-size:8px">
         <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
@@ -14763,6 +14788,18 @@ function _clearCalibrationFilters() {
   window._calActiveMQ = null;
   window._calActiveConf = null;
   window._calActiveOutcome = null;
+  window._calMinProb = 0;
+  window._calMaxProb = 100;
+  _refetchWithFilters();
+}
+function _clearAllFilters() {
+  window._calActiveTF = null;
+  window._calActiveRegime = null;
+  window._calActiveMQ = null;
+  window._calActiveConf = null;
+  window._calActiveOutcome = null;
+  window._calMinProb = 0;
+  window._calMaxProb = 100;
   _refetchWithFilters();
 }
 async function _filterByOutcome(outcome) {
