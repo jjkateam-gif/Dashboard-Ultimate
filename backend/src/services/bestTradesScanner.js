@@ -7,37 +7,43 @@ const { fetchKlines } = require('./binance');
 const { sma, ema, rsi, stdev, atr } = require('./indicators');
 const blofinClient = require('./blofinClient');
 const liveEngine = require('./liveEngine');
-const https = require('https');
+// https no longer needed — switched from Binance to BloFin for funding rates
 let pool = null;
 try { pool = require('../db').pool; } catch {}
 
 // ══════════════════════════════════════════════════════════════
-// FUNDING RATE CACHE (fetched from Binance Futures, refreshed every 5 min)
+// FUNDING RATE CACHE (fetched from BloFin, refreshed every 5 min)
+// Uses BloFin instead of Binance Futures to avoid US geo-blocking (HTTP 451)
 // ══════════════════════════════════════════════════════════════
 const fundingRateCache = { data: {}, lastRefresh: 0, refreshMs: 5 * 60_000 };
+const fetch = require('node-fetch');
 
 async function refreshFundingRates() {
   const now = Date.now();
   if (now - fundingRateCache.lastRefresh < fundingRateCache.refreshMs) return;
   try {
-    const url = 'https://fapi.binance.com/fapi/v1/premiumIndex';
-    const raw = await new Promise((resolve, reject) => {
-      https.get(url, { timeout: 10000 }, (res) => {
-        let body = '';
-        res.on('data', chunk => body += chunk);
-        res.on('end', () => resolve(body));
-      }).on('error', reject);
-    });
-    const data = JSON.parse(raw);
-    if (Array.isArray(data)) {
-      for (const item of data) {
-        if (item.symbol && item.lastFundingRate) {
-          fundingRateCache.data[item.symbol] = parseFloat(item.lastFundingRate);
+    // Fetch funding rates from BloFin (no geo restrictions)
+    const FUNDING_ASSETS = [
+      'BTC-USDT', 'ETH-USDT', 'SOL-USDT', 'SUI-USDT', 'BNB-USDT',
+      'DOGE-USDT', 'XRP-USDT', 'ADA-USDT', 'AVAX-USDT', 'LINK-USDT',
+      'DOT-USDT', 'NEAR-USDT', 'ARB-USDT', 'OP-USDT', 'APT-USDT',
+      'INJ-USDT', 'PEPE-USDT', 'BONK-USDT', 'WIF-USDT', 'RENDER-USDT',
+    ];
+    for (const instId of FUNDING_ASSETS) {
+      try {
+        const url = `https://openapi.blofin.com/api/v1/market/funding-rate?instId=${instId}`;
+        const resp = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
+        if (!resp.ok) continue;
+        const json = await resp.json();
+        if (json.code === '0' && json.data && json.data[0]) {
+          // Store under Binance-style key (BTCUSDT) for compatibility
+          const sym = instId.replace('-', '');
+          fundingRateCache.data[sym] = parseFloat(json.data[0].fundingRate) || 0;
         }
-      }
-      fundingRateCache.lastRefresh = now;
-      console.log(`[BestTrades] Funding rates refreshed: ${Object.keys(fundingRateCache.data).length} pairs`);
+      } catch (e) { /* skip individual failures */ }
     }
+    fundingRateCache.lastRefresh = now;
+    console.log(`[BestTrades] Funding rates refreshed (BloFin): ${Object.keys(fundingRateCache.data).length} pairs`);
   } catch (e) {
     console.warn('[BestTrades] Funding rate fetch error:', e.message);
   }
