@@ -109,7 +109,7 @@ router.get('/history', async (req, res) => {
     else if (req.query.outcome) { conditions.push(`outcome = $${idx++}`); params.push(req.query.outcome); }
     const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
     const result = await pool.query(
-      `SELECT * FROM best_trades_log ${where} ORDER BY created_at DESC LIMIT $${idx} OFFSET $${idx + 1}`,
+      `SELECT * FROM best_trades_log ${where} ORDER BY COALESCE(last_seen_at, created_at) DESC LIMIT $${idx} OFFSET $${idx + 1}`,
       [...params, limit, offset]
     );
     const countResult = await pool.query(`SELECT COUNT(*) AS total FROM best_trades_log ${where}`, params);

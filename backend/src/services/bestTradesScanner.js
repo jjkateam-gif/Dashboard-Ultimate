@@ -1672,16 +1672,22 @@ class BestTradesScanner {
     let inserted = 0, updated = 0;
     for (const r of top) {
       try {
-        // DEDUPLICATION: Check if identical pending signal already exists
+        // DEDUPLICATION: Check if identical RECENT pending signal already exists
+        // Only dedup within a time window based on TF — after that, allow new predictions
+        // This prevents the same signal from blocking new entries for days
+        const tfDedup = { '5m': '2 hours', '15m': '4 hours', '30m': '8 hours',
+                          '1h': '16 hours', '4h': '2 days', '1d': '5 days' };
+        const dedupWindow = tfDedup[r.timeframe] || '4 hours';
         const existing = await pool.query(
           `SELECT id, scan_count FROM best_trades_log
            WHERE asset = $1 AND direction = $2 AND timeframe = $3 AND outcome IS NULL
+           AND created_at > NOW() - INTERVAL '${dedupWindow}'
            ORDER BY created_at DESC LIMIT 1`,
           [r.asset, r.direction, r.timeframe || '15m']
         );
 
         if (existing.rows.length > 0) {
-          // Signal already pending — increment scan_count and update latest data
+          // Recent signal still pending — increment scan_count and update latest data
           const row = existing.rows[0];
           try {
             await pool.query(

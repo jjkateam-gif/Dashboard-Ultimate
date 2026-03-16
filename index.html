@@ -14309,8 +14309,11 @@ async function renderScanHistory() {
 
 // Map DB column names to frontend-friendly names
 function _mapDbRow(row) {
+  // Use last_seen_at if available (dedup updates this), fall back to created_at
+  const displayTime = row.last_seen_at || row.created_at;
   return {
-    ts: new Date(row.created_at).getTime(),
+    ts: new Date(displayTime).getTime(),
+    createdTs: new Date(row.created_at).getTime(),
     asset: row.asset,
     direction: row.direction,
     prob: row.probability,
@@ -14327,6 +14330,7 @@ function _mapDbRow(row) {
     pnl: parseFloat(row.pnl) || null,
     executed: row.executed,
     resolvedAt: row.resolved_at,
+    scanCount: row.scan_count || 1,
   };
 }
 
@@ -14659,11 +14663,12 @@ function _renderHistoryTable(history) {
       '<span style="color:#5a7a68">⏰ Expired</span>';
     const pnlStr = e.pnl !== null ? `<span style="color:${e.pnl >= 0 ? '#00f5a0' : '#ff4d6d'}">${e.pnl >= 0 ? '+' : ''}${e.pnl.toFixed(2)}%</span>` : '—';
     const timeAgo = formatTimeAgo(e.ts);
+    const scanBadge = e.scanCount > 1 ? `<span style="color:#a78bfa;font-size:6px" title="Seen ${e.scanCount} scans">×${e.scanCount}</span>` : '';
     const mqColor = e.marketQuality === 'A' ? '#00f5a0' : e.marketQuality === 'B+' ? '#7ef5d0' : e.marketQuality === 'B' ? '#f5c400' : '#ff8c69';
     const execIcon = e.executed ? '⚡' : '';
 
     return `<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
-      <td style="padding:4px 6px;color:#5a7a68;font-size:7px;white-space:nowrap">${timeAgo}</td>
+      <td style="padding:4px 6px;color:#5a7a68;font-size:7px;white-space:nowrap">${timeAgo} ${scanBadge}</td>
       <td style="padding:4px 6px;font-weight:700">${execIcon}${e.asset}</td>
       <td style="padding:4px 6px;color:${dirColor}">${dirArrow} ${(e.direction || '').toUpperCase()}</td>
       <td style="padding:4px 6px;color:${probColor};font-weight:700">${e.prob}%</td>
