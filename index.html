@@ -17561,19 +17561,20 @@ async function processAutoTrades(results, tf) {
   const maxSize = +($('policyMaxSize')?.value || 500);
   const posSize = Math.min(+($('autoTradeSize')?.value || 100), maxSize);
 
-  // Filter setups — prob threshold + basic quality gates
-  // Chasing + negative EV = soft penalties (reduced size), NOT hard rejects
-  const qualifying = results.filter(r =>
-    r.prob >= minProb &&
-    r.marketQuality !== 'No-Trade'            // Don't trade dead/choppy markets
-  ).map(r => {
-    r._sizeMultiplier = 1;
-    r._sizeReasons = [];
-    if (r.entryEfficiency === 'Chasing') { r._sizeMultiplier *= 0.5; r._sizeReasons.push('Chasing entry (50%)'); }
-    if (parseFloat(r.ev || 0) <= 0) { r._sizeMultiplier *= 0.5; r._sizeReasons.push('Negative EV (50%)'); }
-    if (r.confidence === 'Low') { r._sizeMultiplier *= 0.75; r._sizeReasons.push('Low confidence (75%)'); }
-    return r;
+  // Filter setups — prob threshold + quality gates
+  // Chasing and negative EV are hard blocks — user sees toast notification with reason
+  const rejected = [];
+  const qualifying = results.filter(r => {
+    if (r.prob < minProb) return false;
+    if (r.marketQuality === 'No-Trade') return false;
+    if (r.entryEfficiency === 'Chasing') { rejected.push(r.asset + ': Chasing entry'); return false; }
+    if (parseFloat(r.ev || 0) <= 0) { rejected.push(r.asset + ': Negative EV'); return false; }
+    return true;
   });
+  if (rejected.length > 0) {
+    console.log('[AutoTrade] Blocked:', rejected.join(', '));
+    toast('🚫 Auto-trade blocked: ' + rejected.join(' · '), 'warn', 5000);
+  }
   if (!qualifying.length) return;
 
   // Refresh balance and sync open positions from BloFin
@@ -17602,8 +17603,8 @@ async function processAutoTrades(results, tf) {
   // Only trade as many as balance allows
   let remainingBalance = availBalance;
   for (const r of toTrade) {
-    // Apply market quality sizing + soft penalty multipliers (Chasing/EV/Low conf)
-    let mqAdjSize = Math.round(posSize * (r.mqSizeMult || 1) * (r._sizeMultiplier || 1));
+    // Apply market quality sizing: A=100%, B=80%, C=50%
+    const mqAdjSize = Math.round(posSize * (r.mqSizeMult || 1));
     if (remainingBalance < mqAdjSize) {
       toast('🤖 Auto-trade: insufficient remaining balance for more trades ($' + remainingBalance.toFixed(2) + ' left)', 'warn', 4000);
       break;
@@ -17612,9 +17613,8 @@ async function processAutoTrades(results, tf) {
     if (mode === 'auto') {
       // Full auto — execute directly via API (no modal)
       const sizeNote = r.mqSizeMult < 1 ? ` (${r.marketQuality}-grade: ${Math.round(r.mqSizeMult*100)}% size)` : '';
-      const penaltyNote = (r._sizeReasons && r._sizeReasons.length) ? ' ⚠ ' + r._sizeReasons.join(', ') : '';
       const levNote = r.marketQuality === 'A' && r.optimalLev >= 2 ? ` · A-grade ${r.optimalLev}× lev` : '';
-      toast('🤖 Auto-executing: ' + r.asset + ' ' + r.direction.toUpperCase() + ' (' + r.prob + '% prob) · $' + mqAdjSize + sizeNote + penaltyNote + levNote, 'info', 5000);
+      toast('🤖 Auto-executing: ' + r.asset + ' ' + r.direction.toUpperCase() + ' (' + r.prob + '% prob) · $' + mqAdjSize + sizeNote + levNote, 'info', 3000);
       (async () => {
         try {
           await autoExecDirect(r, idx, mqAdjSize);
@@ -17640,10 +17640,14 @@ async function autoExecDirect(r, idx, posSize) {
   const tpPct = parseFloat($('bt_tp_' + idx)?.value || r.rrData?.targetPct || 6);
   const modeBtn = $('btMode_perps_' + idx);
   const tradeMode = modeBtn?.style?.background?.includes('167') ? 'perps' : 'spot';
-  // Use engine's optimal leverage (includes A-grade 2× boost) if card UI hasn't been manually set
+  // Use engine's optimal leverage — capped by quality gate (Phase 1: only A-grade gets >1x)
   const cardLev = parseInt($('bt_lev_' + idx)?.value || 0);
   const engineLev = r.optimalLev || 1;
-  const lev = tradeMode === 'perps' ? Math.max(cardLev, engineLev) : (engineLev >= 2 ? engineLev : 1);
+  let lev = tradeMode === 'perps' ? Math.max(cardLev, engineLev) : (engineLev >= 2 ? engineLev : 1);
+  // Quality gate: Phase 1 = only A-grade can use leverage >1x
+  if (r.marketQuality !== 'A') lev = Math.min(lev, 1);
+  // Cap at 3x for Phase 1
+  lev = Math.min(lev, 3);
   const side = r.direction === 'long' ? 'buy' : 'sell';
 
   // Fetch current price
@@ -17661,13 +17665,14 @@ async function autoExecDirect(r, idx, posSize) {
   // Send size in USD — backend handles contract conversion using BloFin instrument data
   const sizeUsd = posSize;
 
-  // Calculate SL/TP prices
+  // Calculate SL/TP prices with dynamic precision for small-price assets (e.g., PEPE at $0.000003)
+  const pricePrecision = lastPrice < 0.0001 ? 10 : lastPrice < 0.01 ? 8 : lastPrice < 1 ? 6 : lastPrice < 100 ? 4 : 2;
   const slPrice = r.direction === 'long'
-    ? (lastPrice * (1 - slPct / 100)).toFixed(6)
-    : (lastPrice * (1 + slPct / 100)).toFixed(6);
+    ? (lastPrice * (1 - slPct / 100)).toFixed(pricePrecision)
+    : (lastPrice * (1 + slPct / 100)).toFixed(pricePrecision);
   const tpPrice = r.direction === 'long'
-    ? (lastPrice * (1 + tpPct / 100)).toFixed(6)
-    : (lastPrice * (1 - tpPct / 100)).toFixed(6);
+    ? (lastPrice * (1 + tpPct / 100)).toFixed(pricePrecision)
+    : (lastPrice * (1 - tpPct / 100)).toFixed(pricePrecision);
 
   const body = {
     instId, side, orderType: 'market', sizeUsd: sizeUsd,
@@ -17691,8 +17696,7 @@ function showAutoTradeConfirm(r, idx, tf) {
   div.innerHTML = `
     <div style="font-size:9px;font-weight:700;color:#ff6b35;margin-bottom:6px">🤖 AUTO-TRADE SIGNAL</div>
     <div style="font-size:12px;font-weight:700;color:${r.direction==='long'?'#00f5a0':'#ff4d6d'};margin-bottom:4px">${r.asset} ${r.direction.toUpperCase()} — ${r.prob}%</div>
-    <div style="font-size:8px;color:#5a7a68;margin-bottom:4px">${tf} · R/R ${r.rr}:1 · Confidence: ${r.confidence || 'Medium'}</div>
-    ${r._sizeReasons && r._sizeReasons.length ? '<div style="font-size:7px;color:#ff8c00;margin-bottom:6px;padding:3px 6px;background:rgba(255,140,0,0.1);border-radius:4px;border:1px solid rgba(255,140,0,0.2)">⚠ Reduced size: ' + r._sizeReasons.join(' · ') + '</div>' : ''}
+    <div style="font-size:8px;color:#5a7a68;margin-bottom:8px">${tf} · R/R ${r.rr}:1 · Confidence: ${r.confidence || 'Medium'}</div>
     <div style="display:flex;gap:6px">
       <button onclick="confirmAutoExec(${idx},'${id}')" style="flex:2;font-size:9px;padding:6px;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);color:#00f5a0;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700">⚡ Execute</button>
       <button onclick="dismissAutoConfirm('${id}')" style="flex:1;font-size:9px;padding:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#5a7a68;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace">Skip</button>

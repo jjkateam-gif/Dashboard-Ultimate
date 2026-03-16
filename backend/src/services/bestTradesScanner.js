@@ -227,8 +227,8 @@ function getSafeLeverage(rawLev, { confidence, marketQuality, fundingRate, direc
   else if (winRate < 55) lev = Math.min(lev, 2); // 50-54% = max 2x A-grade only
   else if (winRate < 57) lev = Math.min(lev, 3);
 
-  // #15 Quality gate per phase
-  const qualOrder = { 'A': 3, 'B': 2, 'C': 1, 'No-Trade': 0 };
+  // #15 Quality gate per phase (B+ sits between A and B)
+  const qualOrder = { 'A': 4, 'B+': 3, 'B': 2, 'C': 1, 'No-Trade': 0 };
   if ((qualOrder[marketQuality] || 0) < (qualOrder[phase.qualityGate] || 0)) {
     lev = Math.min(lev, 1);
   }
@@ -1340,16 +1340,8 @@ class BestTradesScanner {
         const confOrder = { 'High': 3, 'Medium': 2, 'Low': 1 };
         if ((confOrder[r.confidence] || 0) < (confOrder[minConfidence] || 0)) { rejectReasons[r.asset] = `conf ${r.confidence} < min ${minConfidence}`; return false; }
       }
-      // Chasing = soft penalty (reduce size), NOT hard reject
-      // EV <= 0 = warn but allow if prob >= minProb (EV can be negative due to fee drag on low-lev setups)
-      if (r.entryEfficiency === 'Chasing') {
-        r._chasingPenalty = true; // flag for 50% size reduction later
-        console.log(`[BestTrades] ${r.asset}: Chasing entry — will trade at 50% size`);
-      }
-      if (r.ev <= 0) {
-        console.log(`[BestTrades] ${r.asset}: Negative EV (${r.ev.toFixed(3)}) — allowing with reduced size`);
-        r._negativeEV = true; // flag for additional size reduction
-      }
+      if (r.entryEfficiency === 'Chasing') { rejectReasons[r.asset] = 'Chasing entry — extended move, poor entry location'; return false; }
+      if (r.ev <= 0) { rejectReasons[r.asset] = `Negative EV (${r.ev.toFixed(3)}) — risk exceeds reward`; return false; }
 
       // #27 — Per-TF leverage limits: hardcode 4h to max 1x until fixed
       if (tf === '4h' && r.marketQuality !== 'A') { rejectReasons[r.asset] = '4h non-A quality'; return false; }
@@ -1456,13 +1448,7 @@ class BestTradesScanner {
         basePosSize = Math.round(totalAccountUsd * (this.settings.tradeSizeUsd / 100));
         console.log(`[BestTrades] % sizing: ${this.settings.tradeSizeUsd}% of $${totalAccountUsd.toFixed(2)} = $${basePosSize}`);
       }
-      let posSize = Math.round(basePosSize * (setup.mqSizeMult || 1));
-      // Apply soft penalties: Chasing = 50% size, Negative EV = additional 50%
-      if (setup._chasingPenalty) posSize = Math.round(posSize * 0.5);
-      if (setup._negativeEV) posSize = Math.round(posSize * 0.5);
-      if (setup._chasingPenalty || setup._negativeEV) {
-        console.log(`[BestTrades] ${setup.asset}: Reduced size to $${posSize} (chasing:${!!setup._chasingPenalty}, negEV:${!!setup._negativeEV})`);
-      }
+      const posSize = Math.round(basePosSize * (setup.mqSizeMult || 1));
       if (availableBalance < posSize) {
         console.log(`[BestTrades] Insufficient balance ($${availableBalance.toFixed(2)} < $${posSize})`);
         break;
@@ -1514,13 +1500,21 @@ class BestTradesScanner {
     } catch {}
     if (!markPrice) markPrice = setup.price;
 
-    // Calculate SL/TP
+    // Calculate SL/TP with dynamic precision for small-price assets (e.g., PEPE at $0.000003)
+    // Must preserve enough decimals so SL ≠ TP ≠ entry after rounding
+    const pricePrecision = markPrice < 0.0001 ? 10 : markPrice < 0.01 ? 8 : markPrice < 1 ? 6 : markPrice < 100 ? 4 : 2;
     const slPrice = setup.direction === 'long'
-      ? (markPrice * (1 - setup.stopPct / 100)).toFixed(6)
-      : (markPrice * (1 + setup.stopPct / 100)).toFixed(6);
+      ? (markPrice * (1 - setup.stopPct / 100)).toFixed(pricePrecision)
+      : (markPrice * (1 + setup.stopPct / 100)).toFixed(pricePrecision);
     const tpPrice = setup.direction === 'long'
-      ? (markPrice * (1 + setup.targetPct / 100)).toFixed(6)
-      : (markPrice * (1 - setup.targetPct / 100)).toFixed(6);
+      ? (markPrice * (1 + setup.targetPct / 100)).toFixed(pricePrecision)
+      : (markPrice * (1 - setup.targetPct / 100)).toFixed(pricePrecision);
+
+    // Safety: verify SL and TP are actually different from each other AND from entry
+    if (slPrice === tpPrice || parseFloat(slPrice) === markPrice || parseFloat(tpPrice) === markPrice) {
+      console.error(`[BestTrades] ❌ SL/TP precision error for ${setup.asset}: entry=${markPrice}, SL=${slPrice}, TP=${tpPrice} — aborting trade`);
+      return;
+    }
 
     // Get contract info
     let contractValue = 0.001, lotSize = 1, minSize = 1;

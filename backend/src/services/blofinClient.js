@@ -348,7 +348,15 @@ async function openPosition({ creds, instId, direction, size, leverage, orderTyp
       const tpslResult = await privatePost('/api/v1/trade/order-tpsl', tpslBody, creds, true, demo);
       console.log(`[BloFin] TP/SL set for ${instId}:`, JSON.stringify(tpslResult));
     } catch (e) {
-      console.warn(`[BloFin] TP/SL setting warning: ${e.message}`);
+      console.error(`[BloFin] ❌ TP/SL FAILED for ${instId}: ${e.message} — CLOSING position to prevent unprotected trade`);
+      // TP/SL failed — close the position immediately to prevent naked exposure
+      try {
+        await closePosition({ creds, instId, direction, marginMode: mode, demo });
+        console.log(`[BloFin] Position closed after TP/SL failure for ${instId}`);
+      } catch (closeErr) {
+        console.error(`[BloFin] ❌❌ CRITICAL: Could not close unprotected position ${instId}: ${closeErr.message}`);
+      }
+      throw new Error(`TP/SL failed for ${instId} — position closed for safety: ${e.message}`);
     }
   }
 
