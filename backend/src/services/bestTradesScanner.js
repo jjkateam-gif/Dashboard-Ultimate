@@ -7,6 +7,7 @@ const { fetchKlines } = require('./binance');
 const { sma, ema, rsi, stdev, atr } = require('./indicators');
 const blofinClient = require('./blofinClient');
 const liveEngine = require('./liveEngine');
+const { detectPatterns } = require('./chartPatterns');
 // https no longer needed — switched from Binance to BloFin for funding rates
 let pool = null;
 try { pool = require('../db').pool; } catch {}
@@ -1113,6 +1114,10 @@ class BestTradesScanner {
         if (scannedCount <= 3) {
           console.log(`[BestTrades] ${asset.label} ${tf}: longProb=${longScore.prob} shortProb=${shortScore.prob} best=${best.prob} conf=${best.confluence?.toFixed(3)} mq=${marketQuality} regime=${regime}`);
         }
+        // Log detected patterns
+        if (patternResult.patterns.length > 0 && scannedCount <= 5) {
+          console.log(`[BestTrades] ${asset.label} ${tf} PATTERNS: ${patternResult.patternSummary} → adj: ${patternAdj > 0 ? '+' : ''}${patternAdj.toFixed(1)}%`);
+        }
 
         // #9 Multi-TF Confluence: For 5m/15m signals, check 1h trend alignment
         // If 1h trend opposes the signal direction, penalize probability
@@ -1141,10 +1146,16 @@ class BestTradesScanner {
           }
         }
 
+        // ── CHART PATTERN DETECTION ──
+        const patternResult = detectPatterns(candles, tf, regime);
+        const patternAdj = patternResult.probabilityAdj || 0;
+
         // ── CALIBRATION: Adjust probability using historical accuracy ──
         const rawProb = best.prob;
         let calibratedProb = calibrateProb(rawProb, regime, tf, marketQuality);
         calibratedProb += mtfBonus; // Apply multi-TF confluence adjustment
+        calibratedProb += patternAdj; // Apply chart pattern adjustment (±15% cap)
+        calibratedProb = Math.max(25, Math.min(85, calibratedProb));
 
         // ── FUNDING RATE: Contrarian signal — extreme funding penalizes aligned trades ──
         const fundingRate = getFundingRateForAsset(asset.sym);
@@ -1181,6 +1192,16 @@ class BestTradesScanner {
         }
         // Add funding rate to snapshot
         signalSnapshot.fundingRate = fundingRate;
+        // Add chart patterns to snapshot for learning/calibration
+        if (patternResult.patterns.length > 0) {
+          signalSnapshot.chartPatterns = patternResult.patterns.map(p => ({
+            name: p.name, type: p.type, direction: p.direction,
+            stage: p.stage, score: Math.round(p.score * 1000) / 1000,
+            baseWinRate: p.baseWinRate,
+          }));
+          signalSnapshot.patternAdj = patternAdj;
+          signalSnapshot.patternComposite = patternResult.compositeScore;
+        }
 
         results.push({
           asset: asset.label,
@@ -1209,6 +1230,9 @@ class BestTradesScanner {
           misses: best.misses,
           atrValue: atrVal,
           volumeRatio: signals.Volume?.ratio || null,
+          patterns: patternResult.patterns,
+          patternAdj,
+          patternSummary: patternResult.patternSummary,
           signalSnapshot,
           timestamp: new Date().toISOString(),
         });

@@ -13641,6 +13641,162 @@ function intervalMs(iv) {
   return map[iv] || 4*3600e3;
 }
 
+// ── Chart Pattern Detection (lightweight frontend version) ──────────────
+function detectChartPatterns(d, tf, regime) {
+  const empty = { patterns: [], compositeScore: 0, probabilityAdj: 0, patternSummary: 'No patterns' };
+  if (!d || d.length < 40) return empty;
+  const TFW = { '5m':0.30,'15m':0.50,'30m':0.60,'1h':0.70,'4h':0.90,'1d':1.0,'1D':1.0 };
+  const STAGE_W = { forming:0.20, developing:0.50, confirmed:0.75, breakout:1.0, retest:1.15 };
+  const DECAY = { '5m':6,'15m':8,'30m':10,'1h':12,'4h':10,'1d':8,'1D':8 };
+  const last = d.length - 1;
+  const c = d.map(x => x.c), h = d.map(x => x.h), l = d.map(x => x.l), v = d.map(x => x.v || 0);
+  const price = c[last];
+
+  // Helpers
+  function _sma(arr, p) { if (arr.length < p) return null; let s=0; for(let i=arr.length-p;i<arr.length;i++) s+=arr[i]; return s/p; }
+  function _atr(n=14) { const tr=[]; for(let i=1;i<d.length;i++) tr.push(Math.max(d[i].h-d[i].l,Math.abs(d[i].h-d[i-1].c),Math.abs(d[i].l-d[i-1].c))); return _sma(tr,n); }
+  function _linReg(vals) { const n=vals.length; if(n<3) return {slope:0,r2:0}; let sx=0,sy=0,sxy=0,sx2=0; for(let i=0;i<n;i++){sx+=i;sy+=vals[i];sxy+=i*vals[i];sx2+=i*i;} const den=n*sx2-sx*sx; if(!den) return {slope:0,r2:0}; const slope=(n*sxy-sx*sy)/den; const intercept=(sy-slope*sx)/n; let ssRes=0,ssTot=0; const mean=sy/n; for(let i=0;i<n;i++){ssRes+=(vals[i]-(intercept+slope*i))**2; ssTot+=(vals[i]-mean)**2;} return {slope,r2:ssTot?1-ssRes/ssTot:0}; }
+  function _pivots(lb=5) { const hi=[],lo=[]; for(let i=lb;i<d.length-lb;i++){let isH=true,isL=true; for(let j=i-lb;j<=i+lb;j++){if(j===i)continue; if(d[j].h>=d[i].h)isH=false; if(d[j].l<=d[i].l)isL=false;} if(isH)hi.push({i,v:d[i].h}); if(isL)lo.push({i,v:d[i].l});} return {hi,lo}; }
+
+  const atrVal = _atr(14) || price * 0.02;
+  const avgVol = _sma(v, 20) || 1;
+  const volRatio = v[last] / (avgVol || 1);
+  const tfW = TFW[tf] || 0.50;
+
+  function volMod(vr) { return vr<0.8?0.5:vr<1.2?0.8:vr<2.0?1.2:vr<3.0?1.0:0.7; }
+  function regMod(pType, dir) {
+    const reg = (regime||'').split('_')[0];
+    const isCont = pType==='continuation';
+    const isTrend = reg==='bull'||reg==='bear';
+    if (isCont && isTrend) return 1.2;
+    if (isCont && !isTrend) return 0.6;
+    if (!isCont && isTrend) return 0.5;
+    if (!isCont && !isTrend) return 1.1;
+    return 1.0;
+  }
+  function scoreP(bwr, stage, pType) {
+    return bwr * 0.90 * tfW * volMod(volRatio) * (STAGE_W[stage]||0.5) * regMod(pType);
+  }
+
+  const patterns = [];
+
+  // 1. BULL/BEAR FLAGS
+  for (let impLen = 3; impLen <= 8 && impLen < d.length - 10; impLen++) {
+    const impStart = last - impLen - 10; // consolidation ~10 bars
+    if (impStart < 0) continue;
+    const impEnd = impStart + impLen;
+    const impMove = c[impEnd] - c[impStart];
+    const impPct = Math.abs(impMove) / (atrVal * impLen);
+    if (impPct < 0.3) continue; // need meaningful impulse
+    const isBull = impMove > 0;
+    // Check consolidation (bars after impulse)
+    const consCandles = d.slice(impEnd, last + 1);
+    if (consCandles.length < 3) continue;
+    const consHigh = Math.max(...consCandles.map(x => x.h));
+    const consLow = Math.min(...consCandles.map(x => x.l));
+    const consRange = consHigh - consLow;
+    if (consRange > Math.abs(impMove) * 0.5) continue; // too wide
+    // Check breakout
+    let stage = 'forming';
+    if (isBull && c[last] > consHigh) stage = 'breakout';
+    else if (!isBull && c[last] < consLow) stage = 'breakout';
+    else if (consRange < Math.abs(impMove) * 0.35) stage = 'confirmed';
+    const dir = isBull ? 'bullish' : 'bearish';
+    const bwr = (consRange < Math.abs(impMove) * 0.25 && impPct > 0.6) ? 0.77 : 0.41; // high-tight vs standard
+    patterns.push({ name: isBull ? 'Bull Flag' : 'Bear Flag', type: 'continuation', direction: dir, baseWinRate: bwr, stage, score: scoreP(bwr, stage, 'continuation'), expiresInBars: DECAY[tf]||10, description: `${stage} ${dir} flag` });
+    break; // one flag per scan
+  }
+
+  // 2. WEDGES (linear regression on last 30 bars)
+  if (d.length >= 30) {
+    const window = 30;
+    const hSlice = h.slice(-window), lSlice = l.slice(-window);
+    const hReg = _linReg(hSlice), lReg = _linReg(lSlice);
+    const hSlope = hReg.slope / price, lSlope = lReg.slope / price;
+    // Falling wedge: both negative, lows steeper
+    if (hSlope < -0.0005 && lSlope < -0.0005 && lSlope < hSlope * 0.9) {
+      let stage = 'developing';
+      if (c[last] > hSlice[hSlice.length-1] + hReg.slope) stage = 'breakout';
+      else if (hReg.r2 > 0.5 && lReg.r2 > 0.5) stage = 'confirmed';
+      patterns.push({ name: 'Falling Wedge', type: 'reversal', direction: 'bullish', baseWinRate: 0.67, stage, score: scoreP(0.67, stage, 'reversal'), expiresInBars: DECAY[tf]||10, description: `${stage} falling wedge` });
+    }
+    // Rising wedge: both positive, highs less steep
+    if (hSlope > 0.0005 && lSlope > 0.0005 && hSlope < lSlope * 0.9) {
+      let stage = 'developing';
+      if (c[last] < lSlice[lSlice.length-1] + lReg.slope) stage = 'breakout';
+      else if (hReg.r2 > 0.5 && lReg.r2 > 0.5) stage = 'confirmed';
+      patterns.push({ name: 'Rising Wedge', type: 'reversal', direction: 'bearish', baseWinRate: 0.73, stage, score: scoreP(0.73, stage, 'reversal'), expiresInBars: DECAY[tf]||10, description: `${stage} rising wedge` });
+    }
+    // Ascending triangle: flat highs, rising lows
+    if (Math.abs(hSlope) < 0.0003 && lSlope > 0.0005) {
+      let stage = hReg.r2 > 0.4 && lReg.r2 > 0.4 ? 'confirmed' : 'developing';
+      if (c[last] > Math.max(...hSlice.slice(-5))) stage = 'breakout';
+      patterns.push({ name: 'Ascending Triangle', type: 'continuation', direction: 'bullish', baseWinRate: 0.75, stage, score: scoreP(0.75, stage, 'continuation'), expiresInBars: DECAY[tf]||10, description: `${stage} ascending triangle` });
+    }
+    // Descending triangle: flat lows, falling highs
+    if (Math.abs(lSlope) < 0.0003 && hSlope < -0.0005) {
+      let stage = hReg.r2 > 0.4 && lReg.r2 > 0.4 ? 'confirmed' : 'developing';
+      if (c[last] < Math.min(...lSlice.slice(-5))) stage = 'breakout';
+      patterns.push({ name: 'Descending Triangle', type: 'continuation', direction: 'bearish', baseWinRate: 0.64, stage, score: scoreP(0.64, stage, 'continuation'), expiresInBars: DECAY[tf]||10, description: `${stage} descending triangle` });
+    }
+  }
+
+  // 3. DOUBLE TOP / DOUBLE BOTTOM
+  const pivots = _pivots(5);
+  if (pivots.lo.length >= 2) {
+    const lo1 = pivots.lo[pivots.lo.length-2], lo2 = pivots.lo[pivots.lo.length-1];
+    if (Math.abs(lo1.v - lo2.v)/lo1.v < 0.02 && lo2.i - lo1.i >= 10 && lo2.i - lo1.i <= 50) {
+      const neckline = Math.max(...d.slice(lo1.i, lo2.i+1).map(x => x.h));
+      let stage = c[last] > neckline ? 'breakout' : c[last] > neckline * 0.99 ? 'confirmed' : 'forming';
+      patterns.push({ name: 'Double Bottom', type: 'reversal', direction: 'bullish', baseWinRate: 0.79, stage, score: scoreP(0.79, stage, 'reversal'), expiresInBars: DECAY[tf]||10, description: `${stage} double bottom at ${lo2.v.toFixed(2)}` });
+    }
+  }
+  if (pivots.hi.length >= 2) {
+    const hi1 = pivots.hi[pivots.hi.length-2], hi2 = pivots.hi[pivots.hi.length-1];
+    if (Math.abs(hi1.v - hi2.v)/hi1.v < 0.02 && hi2.i - hi1.i >= 10 && hi2.i - hi1.i <= 50) {
+      const neckline = Math.min(...d.slice(hi1.i, hi2.i+1).map(x => x.l));
+      let stage = c[last] < neckline ? 'breakout' : c[last] < neckline * 1.01 ? 'confirmed' : 'forming';
+      patterns.push({ name: 'Double Top', type: 'reversal', direction: 'bearish', baseWinRate: 0.73, stage, score: scoreP(0.73, stage, 'reversal'), expiresInBars: DECAY[tf]||10, description: `${stage} double top at ${hi2.v.toFixed(2)}` });
+    }
+  }
+
+  // 4. RSI DIVERGENCE
+  if (d.length >= 30) {
+    const rsiArr = []; let ag=0,al=0;
+    for(let i=1;i<=14&&i<d.length;i++){const ch=c[i]-c[i-1]; if(ch>0)ag+=ch;else al+=Math.abs(ch);} ag/=14;al/=14;
+    rsiArr[14]=al===0?100:100-100/(1+ag/al);
+    for(let i=15;i<d.length;i++){const ch=c[i]-c[i-1];ag=(ag*13+(ch>0?ch:0))/14;al=(al*13+(ch<0?Math.abs(ch):0))/14;rsiArr[i]=al===0?100:100-100/(1+ag/al);}
+    if (pivots.lo.length >= 2) {
+      const lo1=pivots.lo[pivots.lo.length-2],lo2=pivots.lo[pivots.lo.length-1];
+      if (lo2.v < lo1.v && rsiArr[lo2.i] > rsiArr[lo1.i] && lo2.i-lo1.i>=10) {
+        patterns.push({ name: 'RSI Bull Divergence', type: 'reversal', direction: 'bullish', baseWinRate: 0.65, stage: 'confirmed', score: scoreP(0.65, 'confirmed', 'reversal'), expiresInBars: DECAY[tf]||10, description: 'Price lower low, RSI higher low' });
+      }
+    }
+    if (pivots.hi.length >= 2) {
+      const hi1=pivots.hi[pivots.hi.length-2],hi2=pivots.hi[pivots.hi.length-1];
+      if (hi2.v > hi1.v && rsiArr[hi2.i] < rsiArr[hi1.i] && hi2.i-hi1.i>=10) {
+        patterns.push({ name: 'RSI Bear Divergence', type: 'reversal', direction: 'bearish', baseWinRate: 0.65, stage: 'confirmed', score: scoreP(0.65, 'confirmed', 'reversal'), expiresInBars: DECAY[tf]||10, description: 'Price higher high, RSI lower high' });
+      }
+    }
+  }
+
+  if (patterns.length === 0) return empty;
+
+  // Score with diminishing returns
+  patterns.sort((a,b) => b.score - a.score);
+  const factors = [1.0, 0.67, 0.50, 0.40, 0.33];
+  let composite = 0;
+  for (let i=0; i<patterns.length; i++) composite += patterns[i].score * (factors[i] || 0.20);
+
+  const normalized = (composite - 0.50) / 0.50;
+  const compressed = Math.tanh(normalized * 1.5);
+  let probAdj = Math.round(compressed * 15 * 100) / 100;
+  probAdj = Math.max(-15, Math.min(15, probAdj));
+
+  const summary = patterns.slice(0,3).map(p => `${p.name} (${p.stage})`).join(', ');
+  return { patterns, compositeScore: composite, probabilityAdj: probAdj, patternSummary: summary };
+}
+
 // ── Compute all signals on the last bar ──────────────────────
 function computeLiveSignals(d, tf) {
   const last = d.length - 1;
@@ -15398,6 +15554,9 @@ async function runProbEngine() {
         };
       }
 
+      // ── Chart Pattern Detection ──
+      const patternResult = detectChartPatterns(d, tf, regimeData.regime);
+
       // Get live funding rate — use cached history or fetch on-demand
       let fundingRate = fundingHistory[asset.sym]?.slice(-1)[0]?.rate ?? null;
       if (fundingRate === null) {
@@ -15411,6 +15570,14 @@ async function runProbEngine() {
       const shortScore = scoreConfluence(signals, 'short', regimeData.regime, fundingRate, tf, crossTFData, marketQuality, etfBias);
 
       const best = longScore.prob >= shortScore.prob ? { ...longScore, direction: 'long' } : { ...shortScore, direction: 'short' };
+
+      // Apply chart pattern probability adjustment (±15% cap)
+      const patternAdj = patternResult.probabilityAdj || 0;
+      if (patternAdj !== 0) {
+        best.prob = Math.max(25, Math.min(85, best.prob + patternAdj));
+        longScore.prob = Math.max(25, Math.min(85, longScore.prob + (patternResult.patterns.some(p => p.direction === 'bullish') ? Math.abs(patternAdj) : -Math.abs(patternAdj))));
+        shortScore.prob = Math.max(25, Math.min(85, shortScore.prob + (patternResult.patterns.some(p => p.direction === 'bearish') ? Math.abs(patternAdj) : -Math.abs(patternAdj))));
+      }
 
       // Leverage penalty — non-linear (research: risk degrades exponentially past optimal)
       // 2× = -2, 5× = -7, 10× = -15, 20× = -25
@@ -15462,6 +15629,9 @@ async function runProbEngine() {
         calibratedProb:  rrData.calibratedProb,
         mqSizeMult:      rrData.mqSizeMult,
         etfFlowBias:     etfBias,
+        patterns:        patternResult.patterns,
+        patternAdj:      patternAdj,
+        patternSummary:  patternResult.patternSummary,
       });
     } catch (e) {
       console.warn(`[Probe] ${asset.label} failed:`, e.message);
@@ -15655,6 +15825,21 @@ function renderProbeResults(results, tf) {
         ${hitBars}
         ${missBars}
       </div>
+
+      <!-- Chart Patterns -->
+      ${r.patterns && r.patterns.length > 0 ? `
+      <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center">
+        <span style="font-size:6px;color:#5a7a68;font-family:'Space Mono',monospace;margin-right:2px">PATTERNS:</span>
+        ${r.patterns.slice(0,4).map(p => {
+          const isBull = p.direction === 'bullish';
+          const stageIcon = p.stage === 'breakout' ? '🔥' : p.stage === 'confirmed' || p.stage === 'retest' ? '✓' : '◌';
+          const col = isBull ? '#00f5a0' : '#ff4d6d';
+          const bg = isBull ? 'rgba(0,245,160,0.08)' : 'rgba(255,77,109,0.08)';
+          const border = isBull ? 'rgba(0,245,160,0.2)' : 'rgba(255,77,109,0.2)';
+          return '<span style="font-size:6px;padding:2px 5px;border-radius:3px;background:' + bg + ';border:1px solid ' + border + ';color:' + col + ';font-family:\'Space Mono\',monospace;font-weight:700">' + stageIcon + ' ' + p.name + '</span>';
+        }).join('')}
+        ${r.patternAdj ? '<span style="font-size:6px;color:' + (r.patternAdj > 0 ? '#00f5a0' : '#ff4d6d') + ';font-family:\'Space Mono\',monospace;font-weight:700">' + (r.patternAdj > 0 ? '+' : '') + r.patternAdj.toFixed(1) + '%</span>' : ''}
+      </div>` : ''}
 
       <!-- Optimal leverage + mode + EV -->
       <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:7px;font-family:'Space Mono',monospace;padding:6px 8px;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.12);border-radius:6px">
@@ -23182,6 +23367,21 @@ renderProbeResults = function(results, tf) {
       <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:8px;margin-bottom:10px">
         ${hitBars}${missBars}
       </div>
+
+      <!-- Chart Patterns -->
+      ${r.patterns && r.patterns.length > 0 ? `
+      <div style="margin-bottom:8px;display:flex;flex-wrap:wrap;gap:4px;align-items:center">
+        <span style="font-size:6px;color:#5a7a68;font-family:'Space Mono',monospace;margin-right:2px">PATTERNS:</span>
+        ${r.patterns.slice(0,4).map(p => {
+          const isBull = p.direction === 'bullish';
+          const stageIcon = p.stage === 'breakout' ? '🔥' : p.stage === 'confirmed' || p.stage === 'retest' ? '✓' : '◌';
+          const col = isBull ? '#00f5a0' : '#ff4d6d';
+          const bg = isBull ? 'rgba(0,245,160,0.08)' : 'rgba(255,77,109,0.08)';
+          const border = isBull ? 'rgba(0,245,160,0.2)' : 'rgba(255,77,109,0.2)';
+          return '<span style="font-size:6px;padding:2px 5px;border-radius:3px;background:' + bg + ';border:1px solid ' + border + ';color:' + col + ';font-family:\'Space Mono\',monospace;font-weight:700">' + stageIcon + ' ' + p.name + '</span>';
+        }).join('')}
+        ${r.patternAdj ? '<span style="font-size:6px;color:' + (r.patternAdj > 0 ? '#00f5a0' : '#ff4d6d') + ';font-family:\'Space Mono\',monospace;font-weight:700">' + (r.patternAdj > 0 ? '+' : '') + r.patternAdj.toFixed(1) + '%</span>' : ''}
+      </div>` : ''}
 
       <!-- No-Trade Reasons -->
       ${(() => {
