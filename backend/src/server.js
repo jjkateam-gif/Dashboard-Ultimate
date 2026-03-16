@@ -55,7 +55,7 @@ app.use((req, res, next) => {
 });
 
 // Health check - always works even if DB is down
-app.get('/health', (req, res) => res.json({ status: 'ok', version: 'v2.3-autotrade-fix', time: new Date().toISOString() }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: 'v2.4-chasing-fix', time: new Date().toISOString() }));
 app.get('/', (req, res) => res.json({ status: 'ok', service: 'Crypto Backtester Backend' }));
 
 // Start HTTP server FIRST so Railway sees it's alive
@@ -190,7 +190,7 @@ async function initDB() {
             liveTest = { error: testErr.message, stack: testErr.stack?.split('\n').slice(0, 3) };
           }
           res.json({
-            version: 'v2.3-autotrade-fix',
+            version: 'v2.4-chasing-fix',
             scannerRunning: Object.keys(bestTradesScanner.scanTimers || {}).length > 0,
             activeTimers: Object.keys(bestTradesScanner.scanTimers || {}),
             lastResults: (bestTradesScanner.getLastResults() || []).length,
