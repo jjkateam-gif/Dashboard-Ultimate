@@ -2696,8 +2696,14 @@ function switchAuthView(view) {
           <input id="autoTradeMinProb" type="number" value="70" min="60" max="95" step="5" style="width:100%;font-size:13px;padding:8px 10px;background:#0a1a10;border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:5px;font-family:'Space Mono',monospace;box-sizing:border-box;font-weight:700">
         </div>
         <div>
-          <label style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Position Size $</label>
-          <input id="autoTradeSize" type="number" value="100" min="10" step="10" style="width:100%;font-size:13px;padding:8px 10px;background:#0a1a10;border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:5px;font-family:'Space Mono',monospace;box-sizing:border-box;font-weight:700">
+          <label id="autoTradeSizeLabel" style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Position Size $</label>
+          <div style="display:flex;gap:4px;align-items:stretch">
+            <input id="autoTradeSize" type="number" value="100" min="1" step="1" style="flex:1;font-size:13px;padding:8px 10px;background:#0a1a10;border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:5px;font-family:'Space Mono',monospace;box-sizing:border-box;font-weight:700">
+            <select id="autoTradeSizeMode" onchange="toggleTradeSizeMode()" style="width:50px;font-size:11px;padding:4px;background:#0a1a10;border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:5px;font-family:'Space Mono',monospace;font-weight:700;cursor:pointer">
+              <option value="fixed">$</option>
+              <option value="percent">%</option>
+            </select>
+          </div>
         </div>
         <div>
           <label style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Max Open Positions</label>
@@ -17066,27 +17072,42 @@ function collectTFRules() {
   return rules;
 }
 
+// Toggle position size mode label
+function toggleTradeSizeMode() {
+  const mode = $('autoTradeSizeMode')?.value || 'fixed';
+  const label = $('autoTradeSizeLabel');
+  const input = $('autoTradeSize');
+  if (mode === 'percent') {
+    if (label) label.textContent = 'Position Size % of Balance';
+    if (input) { input.min = '1'; input.max = '100'; input.step = '1'; if (parseFloat(input.value) > 100) input.value = '10'; }
+  } else {
+    if (label) label.textContent = 'Position Size $';
+    if (input) { input.min = '1'; input.max = ''; input.step = '1'; }
+  }
+}
+
 // Confirm & save auto-trade settings
 function confirmAutoTradeSettings() {
   const on = $('autoTradeEnabled')?.checked;
   const mode = $('autoTradeMode')?.value || 'confirm';
   const minProb = $('autoTradeMinProb')?.value || 70;
   const size = $('autoTradeSize')?.value || 100;
+  const sizeMode = $('autoTradeSizeMode')?.value || 'fixed';
   const maxOpen = $('autoTradeMaxOpen')?.value || 3;
 
   // Collect per-TF rules
   const tfRules = collectTFRules();
 
   // Save to localStorage
-  localStorage.setItem('dash_autoTrade', JSON.stringify({ on, mode, minProb, size, maxOpen, tfRules }));
+  localStorage.setItem('dash_autoTrade', JSON.stringify({ on, mode, minProb, size, sizeMode, maxOpen, tfRules }));
 
   // Sync to backend server-side scanner (runs 24/7 even when browser is closed)
-  const tf = $('probeTimeframe')?.value || '4h';
+  const tf = $('probeTimeframe')?.value || '15m';
   const lev = parseInt($('probeLeverage')?.value || 1);
   fetch((window.CBP_BACKEND || 'http://localhost:3001') + '/best-trades/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('dash_token') },
-    body: JSON.stringify({ enabled: on, mode, timeframe: tf, minProb: parseInt(minProb), tradeSizeUsd: parseFloat(size), maxOpen: parseInt(maxOpen), leverage: lev, tfRules }),
+    body: JSON.stringify({ enabled: on, mode, timeframe: tf, minProb: parseInt(minProb), tradeSizeUsd: parseFloat(size), tradeSizeMode: sizeMode, maxOpen: parseInt(maxOpen), leverage: lev, tfRules }),
   }).then(r => r.json()).then(d => {
     if (d.success) console.log('[AutoTrade] Settings synced to server — scanner runs 24/7');
     else console.warn('[AutoTrade] Server sync failed:', d.error);
@@ -17127,6 +17148,7 @@ function loadAutoTradeSettings() {
     if (saved.mode && $('autoTradeMode')) $('autoTradeMode').value = saved.mode;
     if (saved.minProb && $('autoTradeMinProb')) $('autoTradeMinProb').value = saved.minProb;
     if (saved.size && $('autoTradeSize')) $('autoTradeSize').value = saved.size;
+    if (saved.sizeMode && $('autoTradeSizeMode')) { $('autoTradeSizeMode').value = saved.sizeMode; toggleTradeSizeMode(); }
     if (saved.maxOpen && $('autoTradeMaxOpen')) $('autoTradeMaxOpen').value = saved.maxOpen;
     // Load per-TF rules grid
     if (saved.tfRules && typeof saved.tfRules === 'object') {
@@ -17143,10 +17165,14 @@ function loadAutoTradeSettings() {
     fetch((window.CBP_BACKEND || 'http://localhost:3001') + '/best-trades/settings', {
       headers: { 'Authorization': 'Bearer ' + localStorage.getItem('dash_token') },
     }).then(r => r.json()).then(d => {
-      const serverRules = d && (d.tfRules || d.tf_rules);
+      if (!d) return;
+      const serverRules = d.tfRules || d.tf_rules;
       if (serverRules && typeof serverRules === 'object' && Object.keys(serverRules).length > 0) {
         renderTFRulesGrid(serverRules);
       }
+      // Sync size mode from server
+      const serverSizeMode = d.tradeSizeMode || d.trade_size_mode;
+      if (serverSizeMode && $('autoTradeSizeMode')) { $('autoTradeSizeMode').value = serverSizeMode; toggleTradeSizeMode(); }
     }).catch(() => {});
   } catch (e) {}
 }

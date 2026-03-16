@@ -957,6 +957,7 @@ class BestTradesScanner {
       timeframe: '15m',  // kept for frontend display, but server scans ALL TFs
       minProb: 70,
       tradeSizeUsd: 100,
+      tradeSizeMode: 'fixed',  // 'fixed' ($) or 'percent' (% of wallet balance)
       maxOpen: 3,
       leverage: 1,
       tfRules: {},  // Per-TF overrides: { "5m": { enabled: true, minProb: 60, minQuality: "B" }, ... }
@@ -1430,7 +1431,13 @@ class BestTradesScanner {
     const toTrade = qualifying.slice(0, slotsAvailable);
 
     for (const setup of toTrade) {
-      const posSize = Math.round(this.settings.tradeSizeUsd * (setup.mqSizeMult || 1));
+      // Position sizing: fixed $ or % of total wallet balance
+      let basePosSize = this.settings.tradeSizeUsd;
+      if (this.settings.tradeSizeMode === 'percent') {
+        basePosSize = Math.round(totalAccountUsd * (this.settings.tradeSizeUsd / 100));
+        console.log(`[BestTrades] % sizing: ${this.settings.tradeSizeUsd}% of $${totalAccountUsd.toFixed(2)} = $${basePosSize}`);
+      }
+      const posSize = Math.round(basePosSize * (setup.mqSizeMult || 1));
       if (availableBalance < posSize) {
         console.log(`[BestTrades] Insufficient balance ($${availableBalance.toFixed(2)} < $${posSize})`);
         break;
@@ -1544,6 +1551,7 @@ class BestTradesScanner {
         this.settings.timeframe = row.timeframe || '15m';
         this.settings.minProb = row.min_prob || 70;
         this.settings.tradeSizeUsd = parseFloat(row.trade_size_usd) || 100;
+        this.settings.tradeSizeMode = row.trade_size_mode || 'fixed';
         this.settings.maxOpen = row.max_open || 3;
         this.settings.leverage = row.leverage || 1;
         this.settings.tfRules = row.tf_rules || {};
@@ -1558,17 +1566,33 @@ class BestTradesScanner {
     if (!pool) return;
     try {
       await pool.query(
-        `INSERT INTO best_trades_settings (id, enabled, mode, timeframe, min_prob, trade_size_usd, max_open, leverage, tf_rules, updated_at)
-         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, NOW())
+        `INSERT INTO best_trades_settings (id, enabled, mode, timeframe, min_prob, trade_size_usd, trade_size_mode, max_open, leverage, tf_rules, updated_at)
+         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
          ON CONFLICT (id) DO UPDATE SET
            enabled=$1, mode=$2, timeframe=$3, min_prob=$4,
-           trade_size_usd=$5, max_open=$6, leverage=$7, tf_rules=$8, updated_at=NOW()`,
+           trade_size_usd=$5, trade_size_mode=$6, max_open=$7, leverage=$8, tf_rules=$9, updated_at=NOW()`,
         [this.settings.enabled, this.settings.mode, this.settings.timeframe,
-         this.settings.minProb, this.settings.tradeSizeUsd, this.settings.maxOpen, this.settings.leverage,
+         this.settings.minProb, this.settings.tradeSizeUsd, this.settings.tradeSizeMode || 'fixed',
+         this.settings.maxOpen, this.settings.leverage,
          JSON.stringify(this.settings.tfRules || {})]
       );
     } catch (e) {
-      console.warn('[BestTrades] Settings save error:', e.message);
+      console.warn('[BestTrades] Settings save error (trying without trade_size_mode):', e.message);
+      try {
+        await pool.query(
+          `INSERT INTO best_trades_settings (id, enabled, mode, timeframe, min_prob, trade_size_usd, max_open, leverage, tf_rules, updated_at)
+           VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, NOW())
+           ON CONFLICT (id) DO UPDATE SET
+             enabled=$1, mode=$2, timeframe=$3, min_prob=$4,
+             trade_size_usd=$5, max_open=$6, leverage=$7, tf_rules=$8, updated_at=NOW()`,
+          [this.settings.enabled, this.settings.mode, this.settings.timeframe,
+           this.settings.minProb, this.settings.tradeSizeUsd,
+           this.settings.maxOpen, this.settings.leverage,
+           JSON.stringify(this.settings.tfRules || {})]
+        );
+      } catch (e2) {
+        console.error('[BestTrades] Settings save fallback also failed:', e2.message);
+      }
     }
   }
 

@@ -18,13 +18,14 @@ router.get('/settings', async (req, res) => {
 // POST /best-trades/settings — update settings (syncs from frontend)
 router.post('/settings', async (req, res) => {
   try {
-    const { enabled, mode, timeframe, minProb, tradeSizeUsd, maxOpen, leverage, tfRules } = req.body;
+    const { enabled, mode, timeframe, minProb, tradeSizeUsd, tradeSizeMode, maxOpen, leverage, tfRules } = req.body;
     const update = {};
     if (enabled !== undefined) update.enabled = !!enabled;
     if (mode && ['confirm', 'auto'].includes(mode)) update.mode = mode;
     if (timeframe) update.timeframe = timeframe;
     if (minProb) update.minProb = parseInt(minProb);
     if (tradeSizeUsd) update.tradeSizeUsd = parseFloat(tradeSizeUsd);
+    if (tradeSizeMode && ['fixed', 'percent'].includes(tradeSizeMode)) update.tradeSizeMode = tradeSizeMode;
     if (maxOpen) update.maxOpen = parseInt(maxOpen);
     if (leverage) update.leverage = parseInt(leverage);
     if (tfRules && typeof tfRules === 'object') update.tfRules = tfRules;
