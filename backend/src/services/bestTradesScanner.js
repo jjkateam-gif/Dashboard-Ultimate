@@ -477,7 +477,7 @@ function getCalibratedKellyBonus(confidence, marketQuality) {
 }
 
 // Quality grade ordering for per-TF min quality filters
-const QUALITY_ORDER = { 'A': 3, 'B': 2, 'C': 1, 'No-Trade': 0 };
+const QUALITY_ORDER = { 'A': 4, 'B+': 3, 'B': 2, 'C': 1, 'No-Trade': 0 };
 
 // ══════════════════════════════════════════════════════════════
 // INDICATOR HELPERS (ported from frontend)
@@ -692,7 +692,7 @@ function computeSignals(d, tf) {
   if (squeeze) mqScore += 1; else if (bbwp != null && bbwp > 0.50) mqScore += 1;
   const alignedCount = Object.values(results).filter(s => s.bull || s.bear).length;
   if (alignedCount >= 5) mqScore += 2; else if (alignedCount >= 3) mqScore += 1;
-  const marketQuality = mqScore >= 7 ? 'A' : mqScore >= 4 ? 'B' : mqScore >= 1 ? 'C' : 'No-Trade';
+  const marketQuality = mqScore >= 7 ? 'A' : mqScore >= 5 ? 'B+' : mqScore >= 4 ? 'B' : mqScore >= 1 ? 'C' : 'No-Trade';
 
   // ── Entry Efficiency ──
   const ema21Arr = ema(c, 21);
@@ -954,7 +954,7 @@ class BestTradesScanner {
     this.settings = {
       enabled: false,
       mode: 'confirm',  // 'confirm' or 'auto'
-      timeframe: '4h',  // kept for frontend display, but server scans ALL TFs
+      timeframe: '15m',  // kept for frontend display, but server scans ALL TFs
       minProb: 70,
       tradeSizeUsd: 100,
       maxOpen: 3,
@@ -1281,7 +1281,7 @@ class BestTradesScanner {
   async scan() {
     if (!this.settings.enabled) return [];
     // Scan the user's preferred TF first, then all others
-    const tf = this.settings.timeframe || '4h';
+    const tf = this.settings.timeframe || '15m';
     await this._scanTimeframe(tf);
     return this.lastResults;
   }
@@ -1522,7 +1522,7 @@ class BestTradesScanner {
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
           [setup.asset, setup.direction, setup.prob, setup.confidence,
            setup.marketQuality, setup.rr, setup.price, setup.stopPrice, setup.targetPrice,
-           setup.stopPct, setup.targetPct, setup.regime, true, result.orderId || null, setup.timeframe || '4h']
+           setup.stopPct, setup.targetPct, setup.regime, true, result.orderId || null, setup.timeframe || '15m']
         );
       } catch {}
     }
@@ -1541,7 +1541,7 @@ class BestTradesScanner {
         const row = result.rows[0];
         this.settings.enabled = row.enabled;
         this.settings.mode = row.mode || 'confirm';
-        this.settings.timeframe = row.timeframe || '4h';
+        this.settings.timeframe = row.timeframe || '15m';
         this.settings.minProb = row.min_prob || 70;
         this.settings.tradeSizeUsd = parseFloat(row.trade_size_usd) || 100;
         this.settings.maxOpen = row.max_open || 3;
@@ -1586,7 +1586,7 @@ class BestTradesScanner {
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
           [r.asset, r.direction, r.prob, r.confidence,
            r.marketQuality, r.rr, r.price, r.stopPrice, r.targetPrice,
-           r.stopPct, r.targetPct, r.regime, false, r.timeframe || '4h',
+           r.stopPct, r.targetPct, r.regime, false, r.timeframe || '15m',
            JSON.stringify(r.signalSnapshot || {}), r.rawProb, r.ev, r.optimalLev,
            r.atrValue, JSON.stringify(r.hits || []), JSON.stringify(r.misses || []),
            r.volumeRatio, r.confluenceScore]
@@ -1602,7 +1602,7 @@ class BestTradesScanner {
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
             [r.asset, r.direction, r.prob, r.confidence,
              r.marketQuality, r.rr, r.price, r.stopPrice, r.targetPrice,
-             r.stopPct, r.targetPct, r.regime, false, r.timeframe || '4h']
+             r.stopPct, r.targetPct, r.regime, false, r.timeframe || '15m']
           );
           console.log(`[BestTrades] Basic insert succeeded for ${r.asset}`);
         } catch (e2) {
@@ -1712,7 +1712,7 @@ class BestTradesScanner {
           const entryPrice = parseFloat(row.entry_price);
           const stopPrice = parseFloat(row.stop_price);
           const targetPrice = parseFloat(row.target_price);
-          const tf = row.timeframe || '4h';
+          const tf = row.timeframe || '15m';
 
           // How many candles since this prediction was created?
           const predAgeMs = Date.now() - new Date(row.created_at).getTime();
@@ -1844,7 +1844,7 @@ class BestTradesScanner {
       // Per-timeframe win rates
       const byTimeframe = await pool.query(`
         SELECT
-          COALESCE(timeframe, '4h') AS timeframe,
+          COALESCE(timeframe, '15m') AS timeframe,
           COUNT(*) FILTER (WHERE outcome IS NOT NULL) AS total_resolved,
           COUNT(*) FILTER (WHERE outcome = 'win') AS wins,
           COUNT(*) FILTER (WHERE outcome = 'loss') AS losses,
@@ -1858,8 +1858,8 @@ class BestTradesScanner {
           ) AS win_rate,
           ROUND(AVG(pnl) FILTER (WHERE outcome IN ('win','loss')), 4) AS avg_pnl
         FROM best_trades_log ${filterWhere}
-        GROUP BY COALESCE(timeframe, '4h')
-        ORDER BY COALESCE(timeframe, '4h')
+        GROUP BY COALESCE(timeframe, '15m')
+        ORDER BY COALESCE(timeframe, '15m')
       `, filterParams);
 
       // Per-confidence win rates
