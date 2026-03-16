@@ -1747,7 +1747,9 @@ class BestTradesScanner {
         }
       }
     }
-    if (inserted > 0 || updated > 0) console.log(`[BestTrades] Logged: ${inserted} new, ${updated} updated (dedup) to best_trades_log`);
+    // Always log — even when 0 inserts — so we can diagnose issues
+    const topInfo = top.map(r => `${r.asset}/${r.direction}/${r.timeframe}(${r.prob}%,ev=${r.ev?.toFixed(3)})`).join(', ');
+    console.log(`[BestTrades] _logResults: ${inserted} new, ${updated} updated, ${top.length} candidates from ${results.length} results [${topInfo}]`);
   }
 
   // ── SSE ──
