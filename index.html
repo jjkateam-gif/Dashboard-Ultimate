@@ -15631,7 +15631,7 @@ function renderProbeResults(results, tf) {
         <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
           <span style="font-size:7px;font-weight:700;font-family:'Space Mono',monospace;padding:2px 6px;border-radius:4px;background:${r.marketQuality === 'A' ? 'rgba(0,245,160,0.15)' : r.marketQuality === 'B' ? 'rgba(245,196,0,0.15)' : r.marketQuality === 'C' ? 'rgba(255,140,105,0.15)' : 'rgba(255,77,109,0.15)'};color:${r.marketQuality === 'A' ? '#00f5a0' : r.marketQuality === 'B' ? '#f5c400' : r.marketQuality === 'C' ? '#ff8c69' : '#ff4d6d'};border:1px solid ${r.marketQuality === 'A' ? 'rgba(0,245,160,0.3)' : r.marketQuality === 'B' ? 'rgba(245,196,0,0.3)' : r.marketQuality === 'C' ? 'rgba(255,140,105,0.3)' : 'rgba(255,77,109,0.3)'}">${r.marketQuality === 'No-Trade' ? '⛔ NO TRADE' : r.marketQuality + '-Grade'}</span>
           ${r.snappedStop ? '<span style="font-size:6px;color:#a78bfa;font-family:\'Space Mono\',monospace">🎯 SL snapped to structure</span>' : ''}
-          ${r.entryEfficiency && r.entryEfficiency !== 'Acceptable' ? '<span style="font-size:6px;font-family:\'Space Mono\',monospace;color:' + (r.entryEfficiency === 'Excellent' ? '#00f5a0' : r.entryEfficiency === 'Chasing' ? '#ff4d6d' : '#f5c400') + '">' + (r.entryEfficiency === 'Excellent' ? '✦ Excellent entry' : r.entryEfficiency === 'Chasing' ? '⚠ Chasing' : '⏳ Late entry') + '</span>' : ''}
+          ${r.entryEfficiency && r.entryEfficiency !== 'Acceptable' ? '<span style="font-size:6px;font-family:\'Space Mono\',monospace;color:' + (r.entryEfficiency === 'Excellent' ? '#00f5a0' : r.entryEfficiency === 'Chasing' ? '#ff4d6d' : '#f5c400') + '">' + (r.entryEfficiency === 'Excellent' ? '✦ Excellent entry' : r.entryEfficiency === 'Chasing' ? '⚠ Chasing (½ size)' : '⏳ Late entry') + '</span>' : ''}
         </div>
       </div>
 
@@ -17561,14 +17561,19 @@ async function processAutoTrades(results, tf) {
   const maxSize = +($('policyMaxSize')?.value || 500);
   const posSize = Math.min(+($('autoTradeSize')?.value || 100), maxSize);
 
-  // Filter setups — prob threshold + basic quality gates (not too strict, just sensible)
+  // Filter setups — prob threshold + basic quality gates
+  // Chasing + negative EV = soft penalties (reduced size), NOT hard rejects
   const qualifying = results.filter(r =>
     r.prob >= minProb &&
-    r.marketQuality !== 'No-Trade' &&        // Don't trade dead/choppy markets
-    r.confidence !== 'Low' &&                 // Require at least Medium confidence
-    r.entryEfficiency !== 'Chasing' &&        // Don't chase extended moves
-    parseFloat(r.ev || 0) > 0                 // Only positive expected value
-  );
+    r.marketQuality !== 'No-Trade'            // Don't trade dead/choppy markets
+  ).map(r => {
+    r._sizeMultiplier = 1;
+    r._sizeReasons = [];
+    if (r.entryEfficiency === 'Chasing') { r._sizeMultiplier *= 0.5; r._sizeReasons.push('Chasing entry (50%)'); }
+    if (parseFloat(r.ev || 0) <= 0) { r._sizeMultiplier *= 0.5; r._sizeReasons.push('Negative EV (50%)'); }
+    if (r.confidence === 'Low') { r._sizeMultiplier *= 0.75; r._sizeReasons.push('Low confidence (75%)'); }
+    return r;
+  });
   if (!qualifying.length) return;
 
   // Refresh balance and sync open positions from BloFin
@@ -17597,8 +17602,8 @@ async function processAutoTrades(results, tf) {
   // Only trade as many as balance allows
   let remainingBalance = availBalance;
   for (const r of toTrade) {
-    // Apply market quality sizing: A=100%, B=80%, C=50%
-    const mqAdjSize = Math.round(posSize * (r.mqSizeMult || 1));
+    // Apply market quality sizing + soft penalty multipliers (Chasing/EV/Low conf)
+    let mqAdjSize = Math.round(posSize * (r.mqSizeMult || 1) * (r._sizeMultiplier || 1));
     if (remainingBalance < mqAdjSize) {
       toast('🤖 Auto-trade: insufficient remaining balance for more trades ($' + remainingBalance.toFixed(2) + ' left)', 'warn', 4000);
       break;
@@ -17607,8 +17612,9 @@ async function processAutoTrades(results, tf) {
     if (mode === 'auto') {
       // Full auto — execute directly via API (no modal)
       const sizeNote = r.mqSizeMult < 1 ? ` (${r.marketQuality}-grade: ${Math.round(r.mqSizeMult*100)}% size)` : '';
+      const penaltyNote = (r._sizeReasons && r._sizeReasons.length) ? ' ⚠ ' + r._sizeReasons.join(', ') : '';
       const levNote = r.marketQuality === 'A' && r.optimalLev >= 2 ? ` · A-grade ${r.optimalLev}× lev` : '';
-      toast('🤖 Auto-executing: ' + r.asset + ' ' + r.direction.toUpperCase() + ' (' + r.prob + '% prob) · $' + mqAdjSize + sizeNote + levNote, 'info', 3000);
+      toast('🤖 Auto-executing: ' + r.asset + ' ' + r.direction.toUpperCase() + ' (' + r.prob + '% prob) · $' + mqAdjSize + sizeNote + penaltyNote + levNote, 'info', 5000);
       (async () => {
         try {
           await autoExecDirect(r, idx, mqAdjSize);
@@ -17685,7 +17691,8 @@ function showAutoTradeConfirm(r, idx, tf) {
   div.innerHTML = `
     <div style="font-size:9px;font-weight:700;color:#ff6b35;margin-bottom:6px">🤖 AUTO-TRADE SIGNAL</div>
     <div style="font-size:12px;font-weight:700;color:${r.direction==='long'?'#00f5a0':'#ff4d6d'};margin-bottom:4px">${r.asset} ${r.direction.toUpperCase()} — ${r.prob}%</div>
-    <div style="font-size:8px;color:#5a7a68;margin-bottom:8px">${tf} · R/R ${r.rr}:1 · Confidence: ${r.confidence || 'Medium'}</div>
+    <div style="font-size:8px;color:#5a7a68;margin-bottom:4px">${tf} · R/R ${r.rr}:1 · Confidence: ${r.confidence || 'Medium'}</div>
+    ${r._sizeReasons && r._sizeReasons.length ? '<div style="font-size:7px;color:#ff8c00;margin-bottom:6px;padding:3px 6px;background:rgba(255,140,0,0.1);border-radius:4px;border:1px solid rgba(255,140,0,0.2)">⚠ Reduced size: ' + r._sizeReasons.join(' · ') + '</div>' : ''}
     <div style="display:flex;gap:6px">
       <button onclick="confirmAutoExec(${idx},'${id}')" style="flex:2;font-size:9px;padding:6px;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);color:#00f5a0;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700">⚡ Execute</button>
       <button onclick="dismissAutoConfirm('${id}')" style="flex:1;font-size:9px;padding:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#5a7a68;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace">Skip</button>
@@ -23080,7 +23087,7 @@ renderProbeResults = function(results, tf) {
         <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
           <span style="font-size:7px;font-weight:700;font-family:'Space Mono',monospace;padding:2px 6px;border-radius:4px;background:${r.marketQuality === 'A' ? 'rgba(0,245,160,0.15)' : r.marketQuality === 'B' ? 'rgba(245,196,0,0.15)' : r.marketQuality === 'C' ? 'rgba(255,140,105,0.15)' : 'rgba(255,77,109,0.15)'};color:${r.marketQuality === 'A' ? '#00f5a0' : r.marketQuality === 'B' ? '#f5c400' : r.marketQuality === 'C' ? '#ff8c69' : '#ff4d6d'};border:1px solid ${r.marketQuality === 'A' ? 'rgba(0,245,160,0.3)' : r.marketQuality === 'B' ? 'rgba(245,196,0,0.3)' : r.marketQuality === 'C' ? 'rgba(255,140,105,0.3)' : 'rgba(255,77,109,0.3)'}">${r.marketQuality === 'No-Trade' ? '⛔ NO TRADE' : (r.marketQuality || '?') + '-Grade'}</span>
           ${r.snappedStop ? '<span style="font-size:6px;color:#a78bfa;font-family:\'Space Mono\',monospace">🎯 SL snapped to structure</span>' : ''}
-          ${r.entryEfficiency && r.entryEfficiency !== 'Acceptable' ? '<span style="font-size:6px;font-family:\'Space Mono\',monospace;color:' + (r.entryEfficiency === 'Excellent' ? '#00f5a0' : r.entryEfficiency === 'Chasing' ? '#ff4d6d' : '#f5c400') + '">' + (r.entryEfficiency === 'Excellent' ? '✦ Excellent entry' : r.entryEfficiency === 'Chasing' ? '⚠ Chasing' : '⏳ Late entry') + '</span>' : ''}
+          ${r.entryEfficiency && r.entryEfficiency !== 'Acceptable' ? '<span style="font-size:6px;font-family:\'Space Mono\',monospace;color:' + (r.entryEfficiency === 'Excellent' ? '#00f5a0' : r.entryEfficiency === 'Chasing' ? '#ff4d6d' : '#f5c400') + '">' + (r.entryEfficiency === 'Excellent' ? '✦ Excellent entry' : r.entryEfficiency === 'Chasing' ? '⚠ Chasing (½ size)' : '⏳ Late entry') + '</span>' : ''}
         </div>
       </div>
 
