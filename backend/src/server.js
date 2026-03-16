@@ -166,12 +166,21 @@ async function initDB() {
           const pendingRes = await dbPool.query("SELECT COUNT(*) AS cnt FROM best_trades_log WHERE outcome IS NULL");
           const lastRow = await dbPool.query('SELECT id, asset, direction, probability, timeframe, created_at FROM best_trades_log ORDER BY created_at DESC LIMIT 3');
           const colCheck = await dbPool.query("SELECT column_name FROM information_schema.columns WHERE table_name='best_trades_log' AND column_name='signal_snapshot'");
+          // Show top results per TF for debugging
+          const perTfSummary = {};
+          for (const [tf, results] of Object.entries(bestTradesScanner.lastResultsByTF || {})) {
+            perTfSummary[tf] = {
+              total: results.length,
+              top3: results.slice(0, 3).map(r => ({ asset: r.asset, dir: r.direction, prob: r.prob, rawProb: r.rawProb, ev: r.ev, mq: r.marketQuality, conf: r.confidence })),
+            };
+          }
           res.json({
             version: 'v2.1-consensus-upgrades',
             scannerRunning: Object.keys(bestTradesScanner.scanTimers || {}).length > 0,
             activeTimers: Object.keys(bestTradesScanner.scanTimers || {}),
             lastResults: (bestTradesScanner.getLastResults() || []).length,
             lastScanTimes: bestTradesScanner.lastScanTimeByTF || {},
+            perTfResults: perTfSummary,
             db: {
               totalRows: parseInt(countRes.rows[0].cnt),
               pendingRows: parseInt(pendingRes.rows[0].cnt),
