@@ -2569,10 +2569,11 @@ function switchAuthView(view) {
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       <select id="probeTimeframe" style="font-size:9px;padding:6px 10px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:6px;font-family:'Space Mono',monospace">
-        <option value="4h" selected>4H setups</option>
+        <option value="4h">4H setups</option>
         <option value="1d">Daily setups</option>
         <option value="1h">1H setups</option>
-        <option value="15m">15m scalps</option>
+        <option value="30m">30m setups</option>
+        <option value="15m" selected>15m scalps</option>
         <option value="5m">5m scalps</option>
       </select>
       <select id="probeLeverage" style="font-size:9px;padding:6px 10px;background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:6px;font-family:'Space Mono',monospace" title="Leverage level — adjusts SL/TP and probability">
@@ -14337,7 +14338,7 @@ function _renderHistoryTable(history) {
       '<span style="color:#5a7a68">⏰ Expired</span>';
     const pnlStr = e.pnl !== null ? `<span style="color:${e.pnl >= 0 ? '#00f5a0' : '#ff4d6d'}">${e.pnl >= 0 ? '+' : ''}${e.pnl.toFixed(2)}%</span>` : '—';
     const timeAgo = formatTimeAgo(e.ts);
-    const mqColor = e.marketQuality === 'A' ? '#00f5a0' : e.marketQuality === 'B' ? '#f5c400' : '#ff8c69';
+    const mqColor = e.marketQuality === 'A' ? '#00f5a0' : e.marketQuality === 'B+' ? '#7ef5d0' : e.marketQuality === 'B' ? '#f5c400' : '#ff8c69';
     const execIcon = e.executed ? '⚡' : '';
 
     return `<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">

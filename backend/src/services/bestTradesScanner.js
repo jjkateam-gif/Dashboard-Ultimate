@@ -827,8 +827,8 @@ function scoreConfluence(signals, direction, regime, tf, marketQuality) {
   if (regime === 'bear' && direction === 'short') prob += 4;
   if (regime === 'bear' && direction === 'long') prob -= 4;
 
-  // Confidence + caps
-  const confidence = confluence >= 0.65 ? 'High' : confluence >= 0.45 ? 'Medium' : 'Low';
+  // Confidence + caps (lowered thresholds so labels spread evenly)
+  const confidence = confluence >= 0.55 ? 'High' : confluence >= 0.35 ? 'Medium' : 'Low';
   let probCap = confidence === 'High' ? 76 : confidence === 'Medium' ? 68 : 58;
   if (confidence === 'High' && marketQuality === 'A') probCap = 82;
   else if (confidence === 'High' && marketQuality === 'B') probCap = 76;
@@ -993,7 +993,7 @@ class BestTradesScanner {
     this._startAllTimers();
     // Always start resolution tracker (resolves predictions even if scanner is disabled)
     this._startResolutionTimer();
-    console.log(`[BestTrades] Scanner v2.1 initialized. Auto-trade: ${this.settings.enabled ? 'ON (' + this.settings.mode + ')' : 'OFF (scan-only)'}. Scanning ALL timeframes: ${ALL_TIMEFRAMES.join(', ')}`);
+    console.log(`[BestTrades] Scanner v2.2 initialized. Auto-trade: ${this.settings.enabled ? 'ON (' + this.settings.mode + ')' : 'OFF (scan-only)'}. Scanning ALL timeframes: ${ALL_TIMEFRAMES.join(', ')}`);
   }
 
   stop() {
@@ -1036,7 +1036,7 @@ class BestTradesScanner {
       setTimeout(() => {
         this._scanTimeframe(tf).catch(e => console.error(`[BestTrades] ${tf} initial scan error:`, e.message));
       }, delay);
-      delay += 10000;
+      delay += 30000; // 30s stagger between TFs to avoid BloFin rate limits
 
       // Recurring scan
       this.scanTimers[tf] = setInterval(() => {
@@ -1600,8 +1600,45 @@ class BestTradesScanner {
     if (!pool) return;
     // Log top 3 results with EV > 0 for calibration data (#24: EV-first, fallback to prob >= 50%)
     const top = results.filter(r => (r.ev > 0) || r.prob >= 50).slice(0, 3);
+    let inserted = 0, updated = 0;
     for (const r of top) {
       try {
+        // DEDUPLICATION: Check if identical pending signal already exists
+        const existing = await pool.query(
+          `SELECT id, scan_count FROM best_trades_log
+           WHERE asset = $1 AND direction = $2 AND timeframe = $3 AND outcome IS NULL
+           ORDER BY created_at DESC LIMIT 1`,
+          [r.asset, r.direction, r.timeframe || '15m']
+        );
+
+        if (existing.rows.length > 0) {
+          // Signal already pending — increment scan_count and update latest data
+          const row = existing.rows[0];
+          try {
+            await pool.query(
+              `UPDATE best_trades_log SET
+                scan_count = COALESCE(scan_count, 1) + 1,
+                last_seen_at = NOW(),
+                probability = $2, confidence = $3, market_quality = $4,
+                ev = $5, raw_probability = $6, confluence_score = $7,
+                signal_snapshot = $8
+               WHERE id = $1`,
+              [row.id, r.prob, r.confidence, r.marketQuality,
+               r.ev, r.rawProb, r.confluenceScore,
+               JSON.stringify(r.signalSnapshot || {})]
+            );
+          } catch (updateErr) {
+            // Fallback if scan_count/last_seen_at columns don't exist yet
+            await pool.query(
+              `UPDATE best_trades_log SET probability = $2, confidence = $3, market_quality = $4 WHERE id = $1`,
+              [row.id, r.prob, r.confidence, r.marketQuality]
+            );
+          }
+          updated++;
+          continue;
+        }
+
+        // No existing pending signal — insert new row
         await pool.query(
           `INSERT INTO best_trades_log
            (asset, direction, probability, confidence, market_quality, rr_ratio,
@@ -1615,6 +1652,7 @@ class BestTradesScanner {
            r.atrValue, JSON.stringify(r.hits || []), JSON.stringify(r.misses || []),
            r.volumeRatio, r.confluenceScore]
         );
+        inserted++;
       } catch (e) {
         console.warn(`[BestTrades] Extended insert failed for ${r.asset}:`, e.message, '- trying basic insert...');
         // Fallback: insert with only original columns (in case migration 012 hasn't run yet)
@@ -1628,13 +1666,13 @@ class BestTradesScanner {
              r.marketQuality, r.rr, r.price, r.stopPrice, r.targetPrice,
              r.stopPct, r.targetPct, r.regime, false, r.timeframe || '15m']
           );
-          console.log(`[BestTrades] Basic insert succeeded for ${r.asset}`);
+          inserted++;
         } catch (e2) {
           console.error(`[BestTrades] BOTH inserts failed for ${r.asset}:`, e2.message);
         }
       }
     }
-    if (top.length > 0) console.log(`[BestTrades] Logged ${top.length} predictions to best_trades_log`);
+    if (inserted > 0 || updated > 0) console.log(`[BestTrades] Logged: ${inserted} new, ${updated} updated (dedup) to best_trades_log`);
   }
 
   // ── SSE ──
