@@ -1676,6 +1676,11 @@ class BestTradesScanner {
     }));
     // Log top 3 results with EV > 0 for calibration data (#24: EV-first, fallback to prob >= 50%)
     const top = results.filter(r => (r.ev > 0) || r.prob >= 50).slice(0, 3);
+    // CRITICAL: probability column is INTEGER in PostgreSQL — must round all decimal probs
+    for (const r of top) {
+      r.prob = Math.round(r.prob);
+      if (r.rawProb != null) r.rawProb = Math.round(r.rawProb);
+    }
     let inserted = 0, updated = 0;
     const debugInfo = { candidates: top.length, fromResults: results.length, rawTop5, errors: [] };
     for (const r of top) {
