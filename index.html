@@ -14577,6 +14577,10 @@ function _renderCalibrationChart(stats, activeTF) {
     allPills.push(`<span onclick="_filterCalibrationByConf('${window._calActiveConf}')" style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.08);border:1px solid ${cc};border-radius:12px;padding:2px 8px;cursor:pointer;color:${cc};font-size:9px;font-weight:600">${window._calActiveConf} conf ×</span>`);
   }
   if (probFilterActive) allPills.push(`<span onclick="window._calMinProb=0;window._calMaxProb=100;_refetchWithFilters()" style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.08);border:1px solid #a78bfa;border-radius:12px;padding:2px 8px;cursor:pointer;color:#a78bfa;font-size:9px;font-weight:600">Prob ${minProb}-${maxProb}% ×</span>`);
+  if (window._calDateFrom || window._calDateTo) {
+    const dl = (window._calDateFrom || 'start') + ' → ' + (window._calDateTo || 'now');
+    allPills.push(`<span onclick="window._calDateFrom='';window._calDateTo='';_refetchWithFilters()" style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.08);border:1px solid #f5c400;border-radius:12px;padding:2px 8px;cursor:pointer;color:#f5c400;font-size:9px;font-weight:600">📅 ${dl} ×</span>`);
+  }
 
   const hasAnyFilterFull = allPills.length > 0;
   const activePillsHtml = hasAnyFilterFull ? `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px;padding:8px 10px;background:rgba(255,107,53,0.05);border:1px solid rgba(255,107,53,0.15);border-radius:6px">
@@ -14608,6 +14612,28 @@ function _renderCalibrationChart(stats, activeTF) {
           <div><span style="color:#5a7a68;font-weight:700;font-size:8px">REGIME</span><br/>${regimeRows || '<span style="color:#3a5a48">No data</span>'}</div>
           <div><span style="color:#5a7a68;font-weight:700;font-size:8px">QUALITY</span><br/>${mqRows || '<span style="color:#3a5a48">No data</span>'}</div>
           <div><span style="color:#5a7a68;font-weight:700;font-size:8px">CONFIDENCE</span><br/>${confRows || '<span style="color:#3a5a48">No data</span>'}</div>
+        </div>
+
+        <!-- Date range filter -->
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(167,139,250,0.04);border:1px solid rgba(167,139,250,0.1);border-radius:6px;font-family:'Space Mono',monospace;font-size:9px;flex-wrap:wrap;margin-bottom:6px">
+          <span style="color:#a78bfa;font-weight:700;font-size:8px">DATE RANGE:</span>
+          <label style="color:#5a7a68;font-size:8px">From</label>
+          <input type="date" id="dateFilterFrom" value="${window._calDateFrom || ''}"
+            style="padding:2px 4px;background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.25);border-radius:4px;color:#e2e8f0;font-family:'Space Mono',monospace;font-size:9px"
+            onchange="window._calDateFrom=this.value;_refetchWithFilters()" />
+          <label style="color:#5a7a68;font-size:8px">To</label>
+          <input type="date" id="dateFilterTo" value="${window._calDateTo || ''}"
+            style="padding:2px 4px;background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.25);border-radius:4px;color:#e2e8f0;font-family:'Space Mono',monospace;font-size:9px"
+            onchange="window._calDateTo=this.value;_refetchWithFilters()" />
+          <span style="color:#3a5a48;font-size:7px;margin:0 2px">│</span>
+          <button onclick="const d=new Date();d.setDate(d.getDate()-1);window._calDateFrom=d.toISOString().split('T')[0];window._calDateTo='';_refetchWithFilters()"
+            style="font-size:7px;padding:2px 6px;background:rgba(0,245,160,0.08);border:1px solid rgba(0,245,160,0.25);color:#00f5a0;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">24h</button>
+          <button onclick="const d=new Date();d.setDate(d.getDate()-7);window._calDateFrom=d.toISOString().split('T')[0];window._calDateTo='';_refetchWithFilters()"
+            style="font-size:7px;padding:2px 6px;background:rgba(0,245,160,0.08);border:1px solid rgba(0,245,160,0.25);color:#00f5a0;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">7d</button>
+          <button onclick="const d=new Date();d.setDate(d.getDate()-30);window._calDateFrom=d.toISOString().split('T')[0];window._calDateTo='';_refetchWithFilters()"
+            style="font-size:7px;padding:2px 6px;background:rgba(0,245,160,0.08);border:1px solid rgba(0,245,160,0.25);color:#00f5a0;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">30d</button>
+          ${window._calDateFrom || window._calDateTo ? `<button onclick="window._calDateFrom='';window._calDateTo='';_refetchWithFilters()"
+            style="font-size:7px;padding:2px 6px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">Clear</button>` : ''}
         </div>
 
         <!-- Probability range filter -->
@@ -14690,6 +14716,18 @@ function _renderHistoryTable(history) {
   const maxProb = parseInt(window._calMaxProb) || 100;
   if (minProb > 0 || maxProb < 100) {
     filteredEntries = filteredEntries.filter(e => e.prob >= minProb && e.prob <= maxProb);
+  }
+
+  // Apply date range filter
+  const dateFrom = window._calDateFrom || '';
+  const dateTo = window._calDateTo || '';
+  if (dateFrom) {
+    const fromTs = new Date(dateFrom).getTime();
+    filteredEntries = filteredEntries.filter(e => (e.createdTs || e.ts) >= fromTs);
+  }
+  if (dateTo) {
+    const toTs = new Date(dateTo + 'T23:59:59').getTime();
+    filteredEntries = filteredEntries.filter(e => (e.createdTs || e.ts) <= toTs);
   }
 
   const totalFiltered = filteredEntries.length;
@@ -14804,6 +14842,8 @@ function _clearAllFilters() {
   window._calActiveOutcome = null;
   window._calMinProb = 0;
   window._calMaxProb = 100;
+  window._calDateFrom = '';
+  window._calDateTo = '';
   _refetchWithFilters();
 }
 async function _filterByOutcome(outcome) {

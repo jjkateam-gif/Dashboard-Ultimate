@@ -68,6 +68,18 @@
 </div>
 
 <p><strong>Key insight:</strong> Avg win (+2.88%) exceeds avg loss (-1.87%), giving a reward-to-risk ratio of ~1.54:1. At this R:R, we only need ~39% WR to break even. But Sharpe is deeply negative (-134.4), suggesting the per-trade expectancy after fees is poor despite the R:R edge.</p>
+
+<h3>Pending Trades Breakdown (89 total)</h3>
+<table>
+  <tr><th>Category</th><th>Pending Count</th></tr>
+  <tr><td>5m</td><td>1</td></tr>
+  <tr><td>15m</td><td>7</td></tr>
+  <tr><td>30m</td><td>24</td></tr>
+  <tr><td>1h</td><td>25</td></tr>
+  <tr><td>4h</td><td>17</td></tr>
+  <tr><td>1d</td><td>15</td></tr>
+</table>
+<p><strong>Note:</strong> The 89 pending predictions will resolve over the coming days. 1h, 4h, and 1d have the most pending because they expire after 7-30 days vs shorter TFs. Once resolved, these will significantly impact the WR statistics for those timeframes (currently 1h=35% on just 23 resolved, 4h=71% on 7 resolved, 1d=0% on 1 resolved).</p>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ -->
@@ -294,6 +306,25 @@ STAGE_MOD:  { forming: 0.20, developing: 0.50, confirmed: 0.75, breakout: 1.0, r
 Multiple patterns: diminishing returns [1.0, 0.67, 0.50, 0.40, 0.33, 0.28, 0.25]
 Final adjustment: tanh compression, capped ±15% probability adjustment
 </pre>
+
+<h3 style="color:#00f5a0">✅ Pattern Detection Status: WORKING</h3>
+<p>Verified by code audit:</p>
+<ul style="margin:8px 0;padding-left:20px;color:#c8d6e5">
+  <li><code>detectPatterns(candles, tf, regime)</code> is called on every asset/TF scan (line 1153)</li>
+  <li>Returns <code>probabilityAdj</code> (±15% max) applied to calibrated probability (line 1165)</li>
+  <li>Pattern data saved to <code>signal_snapshot.chartPatterns</code> in DB for every logged prediction</li>
+  <li>Each pattern has strict detection criteria — many scans legitimately return 0 patterns:
+    <ul>
+      <li>Flags: Need 1.5x ATR impulse move + consolidation</li>
+      <li>Wedges: Need converging trendlines with 5+ price touches</li>
+      <li>Triangles: Need converging trendlines within tolerance</li>
+      <li>Doubles: Need swing pivots within 2% tolerance, 10-50 bar separation</li>
+    </ul>
+  </li>
+  <li>Pattern logging limited to first 5 assets per TF scan (visibility gap, not bug)</li>
+  <li>200 candles fetched per asset — well above all pattern minimums (20-35 candles)</li>
+</ul>
+<p><strong>Question for reviewers:</strong> Given the strict criteria, pattern detection may contribute to very few predictions. Should the criteria be relaxed, or is selectivity appropriate? Are the base win rates accurate for crypto (the 0.90x crypto modifier may be too aggressive or not aggressive enough)?</p>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ -->
