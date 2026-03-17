@@ -166,6 +166,17 @@ async function initDB() {
           const pendingRes = await dbPool.query("SELECT COUNT(*) AS cnt FROM best_trades_log WHERE outcome IS NULL");
           const lastRow = await dbPool.query('SELECT id, asset, direction, probability, timeframe, created_at FROM best_trades_log ORDER BY created_at DESC LIMIT 3');
           const colCheck = await dbPool.query("SELECT column_name FROM information_schema.columns WHERE table_name='best_trades_log' AND column_name='signal_snapshot'");
+          // Per-asset win rate stats
+          const assetStatsRes = await dbPool.query(`
+            SELECT asset,
+              COUNT(*) FILTER (WHERE outcome IS NOT NULL) AS resolved,
+              COUNT(*) FILTER (WHERE outcome = 'win') AS wins,
+              COUNT(*) FILTER (WHERE outcome = 'loss') AS losses,
+              COUNT(*) FILTER (WHERE outcome IS NULL) AS pending,
+              ROUND(AVG(CASE WHEN pnl IS NOT NULL THEN pnl END)::numeric, 2) AS avg_pnl,
+              ROUND(100.0 * COUNT(*) FILTER (WHERE outcome = 'win') / NULLIF(COUNT(*) FILTER (WHERE outcome IS NOT NULL), 0), 1) AS win_rate
+            FROM best_trades_log GROUP BY asset ORDER BY resolved DESC
+          `);
           // Show top results per TF for debugging
           const perTfSummary = {};
           for (const [tf, results] of Object.entries(bestTradesScanner.lastResultsByTF || {})) {
@@ -204,6 +215,7 @@ async function initDB() {
               migration012: colCheck.rows.length > 0 ? 'PRESENT' : 'MISSING',
               lastEntries: lastRow.rows,
             },
+            assetStats: assetStatsRes.rows,
             settings: bestTradesScanner.settings,
             lastLogAttempt: bestTradesScanner.lastLogAttempt || 'none yet',
             tradeRejections: bestTradesScanner.lastTradeRejections || {},
