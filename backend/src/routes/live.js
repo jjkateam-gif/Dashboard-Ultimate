@@ -193,7 +193,7 @@ router.delete('/strategies/:id', async (req, res) => {
    POSITIONS & TRADE HISTORY
    ====================================================== */
 
-// GET /live/positions - Open positions
+// GET /live/positions - Open positions (merged: DB + live BloFin)
 router.get('/positions', async (req, res) => {
   try {
     const result = await pool.query(
@@ -205,16 +205,21 @@ router.get('/positions', async (req, res) => {
       [req.user.id]
     );
 
-    // Enrich with live mark price + PnL from BloFin if credentials are unlocked
+    // Fetch LIVE positions directly from BloFin
     const creds = liveEngine.getCredentials(req.user.id);
     const demo = liveEngine.isDemo(req.user.id);
     let livePositions = [];
     if (creds) {
       try {
         livePositions = await blofinClient.getPositions(creds, demo);
-      } catch {}
+        // Filter out zero-size positions
+        livePositions = livePositions.filter(lp => lp.size > 0);
+      } catch (e) {
+        console.warn('[Live] Failed to fetch BloFin positions:', e.message);
+      }
     }
 
+    // Enrich DB positions with live data
     const positions = result.rows.map(p => {
       const live = livePositions.find(lp => lp.instId === p.market && lp.direction === p.direction);
       return {
@@ -222,11 +227,39 @@ router.get('/positions', async (req, res) => {
         markPrice: live ? live.markPrice : null,
         livePnl: live ? live.pnl : null,
         liquidationPrice: live ? live.liquidationPrice : parseFloat(p.liq_price) || null,
+        source: 'db',
       };
     });
 
+    // Add BloFin positions NOT in DB (auto-traded or manually opened on exchange)
+    const dbMarkets = new Set(result.rows.map(p => `${p.market}_${p.direction}`));
+    for (const lp of livePositions) {
+      const key = `${lp.instId}_${lp.direction}`;
+      if (!dbMarkets.has(key)) {
+        const asset = lp.instId.replace('-USDT', '').replace('USDT', '');
+        positions.push({
+          id: `blofin_${lp.instId}_${lp.direction}`,
+          market: lp.instId,
+          asset,
+          direction: lp.direction,
+          size: lp.size,
+          size_usd: lp.sizeUsd,
+          entry_price: lp.entryPrice,
+          markPrice: lp.markPrice,
+          livePnl: lp.pnl,
+          leverage: lp.leverage,
+          margin_mode: lp.marginMode,
+          liquidationPrice: lp.liquidationPrice,
+          collateral: lp.collateral,
+          opened_at: null, // Unknown — opened outside dashboard
+          source: 'exchange',
+        });
+      }
+    }
+
     res.json({ positions });
   } catch (err) {
+    console.error('[Live] Positions error:', err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
