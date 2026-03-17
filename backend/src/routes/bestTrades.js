@@ -78,7 +78,7 @@ router.get('/stats', async (req, res) => {
     // Scanner heartbeat — so frontend knows scanner is alive even when nothing qualifies
     stats.scannerHeartbeat = {
       running: status.scannerRunning,
-      activeTimers: status.activeTimers,
+      activeTimers: Object.keys(scanner.scanTimers || {}),
       lastScanTimes: scanner.lastScanTimeByTF || {},
       lastLogAttempt: Object.fromEntries(
         Object.entries(scanner.lastLogAttempt || {}).map(([tf, v]) => [tf, {
