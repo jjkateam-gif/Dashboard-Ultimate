@@ -5,6 +5,16 @@ const { pool } = require('../db');
 const router = express.Router();
 router.use(authenticate);
 
+// GET /best-trades/watchlist — current watchlist candidates
+router.get('/watchlist', async (req, res) => {
+  try {
+    const candidates = scanner.getWatchlistCandidates();
+    res.json({ candidates });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /best-trades/status — scanner status
 router.get('/status', (req, res) => {
   res.json(scanner.getStatus());
@@ -31,6 +41,7 @@ router.post('/settings', async (req, res) => {
     if (leverage) update.leverage = parseInt(leverage);
     if (tfRules && typeof tfRules === 'object') update.tfRules = tfRules;
     if (req.body.bannedAssets && Array.isArray(req.body.bannedAssets)) update.bannedAssets = req.body.bannedAssets;
+    if (req.body.assetOverrides && typeof req.body.assetOverrides === 'object') update.assetOverrides = req.body.assetOverrides;
 
     const settings = await scanner.updateSettings(update);
     res.json({ success: true, settings });

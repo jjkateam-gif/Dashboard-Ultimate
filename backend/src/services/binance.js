@@ -1,5 +1,28 @@
 const fetch = require('node-fetch');
 
+// Global rate limiter for BloFin API (max 4 req/sec with queue)
+const _rateQueue = [];
+let _rateTokens = 4;
+const _rateMax = 4;
+const _rateRefillMs = 250;
+let _rateInterval = null;
+function _ensureRateInterval() {
+  if (_rateInterval) return;
+  _rateInterval = setInterval(() => {
+    if (_rateTokens < _rateMax) _rateTokens++;
+    while (_rateTokens > 0 && _rateQueue.length > 0) {
+      _rateTokens--;
+      _rateQueue.shift()();
+    }
+  }, _rateRefillMs);
+  if (_rateInterval.unref) _rateInterval.unref();
+}
+function _waitForRateSlot() {
+  _ensureRateInterval();
+  if (_rateTokens > 0) { _rateTokens--; return Promise.resolve(); }
+  return new Promise(resolve => _rateQueue.push(resolve));
+}
+
 const cache = new Map();
 const CACHE_TTL = 55000; // 55 seconds
 
@@ -23,6 +46,7 @@ async function fetchKlinesBloFin(symbol, interval, limit) {
   const bar = BLOFIN_BAR_MAP[interval] || interval;
   const blofinLimit = Math.min(limit || 200, 300); // BloFin max is 300
   const url = `https://openapi.blofin.com/api/v1/market/candles?instId=${instId}&bar=${bar}&limit=${blofinLimit}`;
+  await _waitForRateSlot();
   const resp = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
   if (!resp.ok) throw new Error(`BloFin candles API error: ${resp.status}`);
   const json = await resp.json();

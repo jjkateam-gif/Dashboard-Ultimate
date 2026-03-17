@@ -98,7 +98,7 @@ const TRADING_FEE_PCT = 0.06; // BloFin taker fee per side
 // ══════════════════════════════════════════════════════════════
 const calibrationCache = {
   lastRefresh: 0,
-  refreshIntervalMs: 30 * 60_000, // 30 minutes
+  refreshIntervalMs: 10 * 60_000, // 10 minutes
   minSamples: 30,                  // need ≥30 resolved trades before adjusting (#20 consensus: raised from 8)
   // Keyed data from DB
   byProbBucket: {},   // { '50-54': { predicted: 52, actual: 0.83, n: 12 }, ... }
@@ -421,7 +421,7 @@ function calibrateProb(rawProb, regime, tf, marketQuality) {
     const diff = actualWR - bucket.predicted;  // e.g. 83 - 67 = +16
     // Shrinkage: weight correction by min(1, n/100) — full correction at 100+ samples (#20 consensus: raised from 50)
     const shrinkage = Math.min(1, bucket.n / 100);
-    const correction = diff * shrinkage * 0.6; // apply 60% of the correction (conservative)
+    const correction = diff * shrinkage * 0.8; // apply 80% of the correction
     adjustedProb += correction;
   }
 
@@ -820,7 +820,7 @@ function scoreConfluence(signals, direction, regime, tf, marketQuality) {
 
   // Sigmoid probability mapping
   const sigK = 7;
-  let prob = 28 + (78 - 28) / (1 + Math.exp(-sigK * (confluence - 0.5)));
+  let prob = 35 + (65 - 35) / (1 + Math.exp(-sigK * (confluence - 0.5)));
 
   // Regime adjustment (±4)
   if (regime === 'bull' && direction === 'long') prob += 4;
@@ -969,6 +969,7 @@ class BestTradesScanner {
       leverage: 1,
       tfRules: {},  // Per-TF overrides: { "5m": { enabled: true, minProb: 60, minQuality: "B" }, ... }
       bannedAssets: [],  // Assets banned from LIVE TRADING (still scanned & logged for data collection)
+      assetOverrides: { 'ETH': { minProb: 72 } },  // Per-asset minimum probability overrides
     };
     this.scanTimers = {};       // { '5m': timer, '15m': timer, ... }
     this.lastResults = [];      // combined results across all TFs
@@ -979,6 +980,49 @@ class BestTradesScanner {
     this.openTradeCount = 0;
     this.recentTrades = new Set(); // 'BTC_long' — prevent duplicate trades across TFs
     this.sseClients = [];
+    this.watchlistCandidates = {};
+  }
+
+  _updateWatchlistCandidate(asset, tf, scanResult) {
+    const key = `${asset}_${tf}`;
+    const prev = this.watchlistCandidates[key];
+
+    // Calculate readiness from available scan data
+    // scanResult has: prob, direction, marketQuality, confidence, indicators from signal computation
+    // Readiness = how close to qualifying (prob >= 50 and EV > 0)
+    const probReadiness = Math.min(100, Math.max(0, (scanResult.prob || 0) / 50 * 100));
+    const evReadiness = scanResult.ev > 0 ? 100 : Math.min(100, Math.max(0, 50 + (scanResult.ev || -1) * 50));
+    const qualityBonus = scanResult.marketQuality === 'A' ? 20 : scanResult.marketQuality === 'B+' ? 10 : 0;
+
+    const readiness = Math.round(Math.min(100, probReadiness * 0.5 + evReadiness * 0.3 + qualityBonus));
+
+    if (readiness < 40) {
+      delete this.watchlistCandidates[key];
+      return;
+    }
+
+    const history = [...(prev?.history || []).slice(-4), readiness];
+    const trajectory = history.length >= 3 ? history[history.length - 1] - history[0] : 0;
+
+    this.watchlistCandidates[key] = {
+      asset,
+      timeframe: tf,
+      direction: scanResult.direction || 'long',
+      readinessScore: readiness,
+      prob: scanResult.prob || 0,
+      ev: scanResult.ev || 0,
+      marketQuality: scanResult.marketQuality || '?',
+      confidence: scanResult.confidence || '?',
+      history,
+      trajectory,
+      lastUpdate: new Date().toISOString(),
+    };
+  }
+
+  getWatchlistCandidates() {
+    return Object.values(this.watchlistCandidates)
+      .filter(c => c.readinessScore >= 40)
+      .sort((a, b) => b.readinessScore - a.readinessScore);
   }
 
   async start() {
@@ -1078,14 +1122,14 @@ class BestTradesScanner {
     const results = [];
     let btcRegime = 'neutral';
 
-    // Scan BTC first for macro regime
+    // Scan BTC on 1d for macro regime (always daily, regardless of scan TF)
     try {
-      const btcCandles = await fetchKlines('BTCUSDT', tf, 200);
+      const btcCandles = await fetchKlines('BTCUSDT', '1d', 200);
       if (btcCandles && btcCandles.length > 50) {
         btcRegime = detectRegime(btcCandles);
       }
     } catch (e) {
-      console.warn(`[BestTrades] BTC regime fetch error (${tf}):`, e.message);
+      console.warn(`[BestTrades] BTC regime fetch error (1d):`, e.message);
     }
 
     // Scan all assets
@@ -1104,11 +1148,8 @@ class BestTradesScanner {
           continue; // not trending — skip this asset on 4h
         }
 
-        // Detect local regime, blend with BTC
-        const localRegime = detectRegime(candles);
-        const isMajor = ['BTC', 'ETH', 'SOL', 'BNB'].includes(asset.label);
-        const regime = asset.label === 'BTC' ? btcRegime
-          : (isMajor ? localRegime : btcRegime);
+        // All assets use BTC 1d regime for consistency
+        const regime = btcRegime;
 
         // Score both directions
         const longScore = scoreConfluence(signals, 'long', regime, tf, marketQuality);
@@ -1212,7 +1253,7 @@ class BestTradesScanner {
           signalSnapshot.patternComposite = patternResult.compositeScore;
         }
 
-        results.push({
+        const _scanResult = {
           asset: asset.label,
           sym: asset.sym,
           timeframe: tf,
@@ -1244,7 +1285,11 @@ class BestTradesScanner {
           patternSummary: patternResult.patternSummary,
           signalSnapshot,
           timestamp: new Date().toISOString(),
-        });
+        };
+        results.push(_scanResult);
+
+        // Update watchlist candidate (before qualifying filter)
+        this._updateWatchlistCandidate(_scanResult.asset, tf, _scanResult);
 
         // Small delay to avoid Binance rate limits
         await new Promise(r => setTimeout(r, 200));
@@ -1374,8 +1419,11 @@ class BestTradesScanner {
     const qualifying = results.filter(r => {
       // BANNED ASSET CHECK — asset is banned from live trading (still logged for data collection)
       if (bannedSet.has(r.asset.toUpperCase())) { rejectReasons[r.asset] = `BANNED from live trading`; return false; }
-      if (r.prob < minProb) { rejectReasons[r.asset] = `prob ${r.prob}% < min ${minProb}%`; return false; }
-      if (r.marketQuality === 'No-Trade') { rejectReasons[r.asset] = 'No-Trade quality'; return false; }
+      // Per-asset minimum probability override
+      const assetOverride = (this.settings.assetOverrides || {})[r.asset.toUpperCase()] || {};
+      const effectiveMinProb = assetOverride.minProb || minProb;
+      if (r.prob < effectiveMinProb) { rejectReasons[r.asset] = `prob ${r.prob}% < min ${effectiveMinProb}%`; return false; }
+      if (r.marketQuality !== 'A') { rejectReasons[r.asset] = `quality ${r.marketQuality} — only A-grade allowed`; return false; }
       if (minQuality && (QUALITY_ORDER[r.marketQuality] || 0) < (QUALITY_ORDER[minQuality] || 0)) { rejectReasons[r.asset] = `quality ${r.marketQuality} < min ${minQuality}`; return false; }
       // Confidence filter: only apply if per-TF rule explicitly sets minConfidence
       if (minConfidence) {
@@ -1628,7 +1676,8 @@ class BestTradesScanner {
         this.settings.leverage = row.leverage || 1;
         this.settings.tfRules = row.tf_rules || {};
         this.settings.bannedAssets = row.banned_assets || [];
-        console.log(`[BestTrades] Settings loaded from DB: enabled=${this.settings.enabled}, tf=${this.settings.timeframe}, banned=${(this.settings.bannedAssets || []).length} assets, tfRules=${JSON.stringify(this.settings.tfRules)}`);
+        this.settings.assetOverrides = row.asset_overrides || { 'ETH': { minProb: 72 } };
+        console.log(`[BestTrades] Settings loaded from DB: enabled=${this.settings.enabled}, tf=${this.settings.timeframe}, banned=${(this.settings.bannedAssets || []).length} assets, tfRules=${JSON.stringify(this.settings.tfRules)}, assetOverrides=${JSON.stringify(this.settings.assetOverrides)}`);
       }
     } catch (e) {
       console.warn('[BestTrades] Settings load error:', e.message);
@@ -1637,24 +1686,28 @@ class BestTradesScanner {
 
   async _saveSettings() {
     if (!pool) return;
-    // Ensure banned_assets column exists (auto-migration)
+    // Ensure banned_assets and asset_overrides columns exist (auto-migration)
     try {
       await pool.query(`ALTER TABLE best_trades_settings ADD COLUMN IF NOT EXISTS banned_assets JSONB DEFAULT '[]'::jsonb`);
     } catch (migErr) { /* column may already exist or table doesn't support IF NOT EXISTS */ }
+    try {
+      await pool.query(`ALTER TABLE best_trades_settings ADD COLUMN IF NOT EXISTS asset_overrides JSONB DEFAULT '{}'::jsonb`);
+    } catch (migErr) { /* column may already exist */ }
 
     try {
       await pool.query(
-        `INSERT INTO best_trades_settings (id, enabled, mode, timeframe, min_prob, trade_size_usd, trade_size_mode, sizing_mode, max_open, leverage, tf_rules, banned_assets, updated_at)
-         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+        `INSERT INTO best_trades_settings (id, enabled, mode, timeframe, min_prob, trade_size_usd, trade_size_mode, sizing_mode, max_open, leverage, tf_rules, banned_assets, asset_overrides, updated_at)
+         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
          ON CONFLICT (id) DO UPDATE SET
            enabled=$1, mode=$2, timeframe=$3, min_prob=$4,
-           trade_size_usd=$5, trade_size_mode=$6, sizing_mode=$7, max_open=$8, leverage=$9, tf_rules=$10, banned_assets=$11, updated_at=NOW()`,
+           trade_size_usd=$5, trade_size_mode=$6, sizing_mode=$7, max_open=$8, leverage=$9, tf_rules=$10, banned_assets=$11, asset_overrides=$12, updated_at=NOW()`,
         [this.settings.enabled, this.settings.mode, this.settings.timeframe,
          this.settings.minProb, this.settings.tradeSizeUsd, this.settings.tradeSizeMode || 'fixed',
          this.settings.sizingMode || 'kelly',
          this.settings.maxOpen, this.settings.leverage,
          JSON.stringify(this.settings.tfRules || {}),
-         JSON.stringify(this.settings.bannedAssets || [])]
+         JSON.stringify(this.settings.bannedAssets || []),
+         JSON.stringify(this.settings.assetOverrides || {})]
       );
     } catch (e) {
       console.warn('[BestTrades] Settings save error (trying without banned_assets):', e.message);

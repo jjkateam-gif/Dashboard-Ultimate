@@ -424,7 +424,7 @@ function detectWedges(candles, tf, regime) {
     // Rising wedge: both slopes positive, highs less steep than lows
     else if (highReg.slope > 0 && lowReg.slope > 0 && highReg.slope < lowReg.slope) {
       patternName = 'Rising Wedge';
-      baseWinRate = 0.73;
+      baseWinRate = 0.58;
       direction = 'bearish';
     }
 

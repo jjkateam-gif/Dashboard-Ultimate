@@ -2786,6 +2786,8 @@ function switchAuthView(view) {
     <div id="scanCalibrationChart" style="margin-bottom:12px"></div>
     <!-- Per-Asset Performance & Ban Management -->
     <div id="assetStatsPanel" style="margin-bottom:12px"></div>
+    <!-- Watchlist: Pre-Signal Tracking -->
+    <div id="watchlistPanel" style="margin-bottom:12px"></div>
     <!-- Scan History Table -->
     <div id="scanHistoryTable" style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-radius:8px;padding:12px;font-family:'Space Mono',monospace;font-size:10px;color:#5a7a68;max-height:400px;overflow-y:auto">
       Loading scan history from server...
@@ -4852,7 +4854,7 @@ function renderWalkForward(wf){
 }
 
 function calcMaxDD(eq,cap){let peak=cap,maxDD=0;for(const v of eq){if(v>peak)peak=v;const dd=(peak-v)/peak*100;if(dd>maxDD)maxDD=dd}return maxDD}
-function calcSharpe(eq){if(eq.length<3)return 0;const rets=[];for(let i=1;i<eq.length;i++){if(eq[i-1]>0&&eq[i]>0)rets.push(eq[i]/eq[i-1]-1)}if(rets.length<3)return 0;const mean=rets.reduce((a,b)=>a+b,0)/rets.length,varr=rets.reduce((a,b)=>a+(b-mean)**2,0)/(rets.length-1),sd=Math.sqrt(varr);return sd===0?0:Math.sqrt(252)*(mean/sd)}
+function calcSharpe(eq){if(eq.length<3)return 0;const rets=[];for(let i=1;i<eq.length;i++){if(eq[i-1]>0&&eq[i]>0)rets.push(eq[i]/eq[i-1]-1)}if(rets.length<3)return 0;const mean=rets.reduce((a,b)=>a+b,0)/rets.length,varr=rets.reduce((a,b)=>a+(b-mean)**2,0)/(rets.length-1),sd=Math.sqrt(varr);return sd===0?0:(mean/sd)}
 
 // ══════════════════════════════════════════════════════════════
 // EXTENDED RISK METRICS (#8) — Sortino, Profit Factor, Calmar, Recovery
@@ -4867,7 +4869,7 @@ function calcSortino(eq) {
   if (downside.length === 0) return mean > 0 ? 99 : 0;
   const dsVar = downside.reduce((a, b) => a + b * b, 0) / downside.length;
   const dsDev = Math.sqrt(dsVar);
-  return dsDev === 0 ? 0 : Math.sqrt(252) * (mean / dsDev);
+  return dsDev === 0 ? 0 : (mean / dsDev);
 }
 
 function calcProfitFactor(trades) {
@@ -14468,8 +14470,98 @@ function _renderUnifiedUI(stats, history) {
   // Per-asset stats panel
   _renderAssetStatsPanel();
 
+  // Watchlist panel
+  _renderWatchlistPanel();
+
   // Scan history table
   _renderHistoryTable(history);
+}
+
+// ── Watchlist: Signals Building Up ────────────────────
+let _watchlistInterval = null;
+
+async function _renderWatchlistPanel() {
+  const panel = document.getElementById('watchlistPanel');
+  if (!panel) return;
+
+  const token = localStorage.getItem('dash_token');
+  const backend = window.CBP_BACKEND || 'http://localhost:3001';
+
+  try {
+    const r = await fetch(`${backend}/best-trades/watchlist`, { headers: { 'Authorization': 'Bearer ' + token } });
+    const data = await r.json();
+    const candidates = data.candidates || [];
+
+    const collapsed = window._watchlistCollapsed === true;
+    const toggleBtn = `<button onclick="window._watchlistCollapsed = !window._watchlistCollapsed; _renderWatchlistPanel();" style="background:none;border:1px solid rgba(167,139,250,0.2);color:#a78bfa;padding:3px 10px;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-size:8px">${collapsed ? '\u25b6 SHOW' : '\u25bc HIDE'}</button>`;
+
+    if (collapsed) {
+      panel.innerHTML = `
+        <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-radius:8px;padding:10px 14px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-size:10px;font-weight:700;color:#a78bfa;font-family:'Space Mono',monospace">WATCHLIST — Signals Building Up <span style="color:#5a7a68;font-size:8px">(${candidates.length} developing)</span></div>
+            ${toggleBtn}
+          </div>
+        </div>`;
+      return;
+    }
+
+    if (candidates.length === 0) {
+      panel.innerHTML = `
+        <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-radius:8px;padding:12px 14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div style="font-size:10px;font-weight:700;color:#a78bfa;font-family:'Space Mono',monospace">WATCHLIST — Signals Building Up</div>
+            ${toggleBtn}
+          </div>
+          <div style="text-align:center;padding:15px;color:#5a7a68;font-size:9px;font-family:'Space Mono',monospace">No developing signals — market is quiet</div>
+        </div>`;
+      return;
+    }
+
+    const cards = candidates.slice(0, 12).map(c => {
+      const dirColor = c.direction === 'long' ? '#00f5a0' : '#ff4d6d';
+      const dirArrow = c.direction === 'long' ? '\u25b2' : '\u25bc';
+      const barColor = c.readinessScore >= 80 ? '#00f5a0' : c.readinessScore >= 60 ? '#f5c400' : '#ff8c69';
+      const trajIcon = c.trajectory > 5 ? '<span style="color:#00f5a0">\u25b2</span>' : c.trajectory < -5 ? '<span style="color:#ff4d6d">\u25bc</span>' : '<span style="color:#5a7a68">\u2500</span>';
+      const mqColor = c.marketQuality === 'A' ? '#00f5a0' : c.marketQuality === 'B+' ? '#7ef5d0' : c.marketQuality === 'B' ? '#f5c400' : '#ff8c69';
+
+      return `<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(167,139,250,0.08);border-radius:6px;padding:8px 10px;min-width:140px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-weight:700;font-size:10px">${c.asset} <span style="color:${dirColor}">${dirArrow}</span></span>
+          <span style="font-size:7px;color:${mqColor}">${c.marketQuality}</span>
+        </div>
+        <div style="background:rgba(255,255,255,0.05);border-radius:3px;height:6px;margin-bottom:4px;overflow:hidden">
+          <div style="height:100%;width:${c.readinessScore}%;background:${barColor};border-radius:3px;transition:width 0.5s"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:7px;color:#5a7a68">
+          <span style="color:${barColor};font-weight:700">${c.readinessScore}%</span>
+          <span>${c.timeframe}</span>
+          <span>P:${c.prob}%</span>
+          <span>${trajIcon}</span>
+        </div>
+      </div>`;
+    }).join('');
+
+    panel.innerHTML = `
+      <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-radius:8px;padding:12px 14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-size:10px;font-weight:700;color:#a78bfa;font-family:'Space Mono',monospace">WATCHLIST — Signals Building Up <span style="color:#5a7a68;font-size:8px">(${candidates.length} developing)</span></div>
+          ${toggleBtn}
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;font-family:'Space Mono',monospace;font-size:8px">
+          ${cards}
+        </div>
+        <div style="margin-top:8px;font-size:7px;color:#3a5a48;font-family:'Space Mono',monospace;text-align:right">Auto-refreshes every 60s</div>
+      </div>`;
+
+  } catch (e) {
+    console.warn('[Watchlist] Error:', e.message);
+  }
+
+  // Auto-refresh every 60 seconds
+  if (!_watchlistInterval) {
+    _watchlistInterval = setInterval(_renderWatchlistPanel, 60000);
+  }
 }
 
 // ── Per-Asset Stats & Ban Management Panel ────────────────────
@@ -15660,18 +15752,17 @@ function estimateRR(price, atrVal, direction, prob, leverage = 1, confidence, ca
   // Kelly-based optimal leverage — uses CALIBRATED probability for sizing (feedback from all 3 AIs)
   // Display shows raw prob (what indicators say), Kelly uses what actually happens
   const calibratedProb = getCalibratedProb(prob, currentRegime);
-  // ── Graduated Kelly fraction by market quality (research: let math determine leverage) ──
-  // A+High=0.6×, A+Med=0.5×, B=0.4×, C=0.25× Kelly
-  // This replaces the forced 2× leverage floor — higher fraction on best setups naturally
-  // pushes Kelly toward higher leverage when the math supports it
+  // ── Graduated Kelly fraction by market quality (eighth-Kelly to match backend) ──
+  // A+High=0.30×, A+Med=0.25×, B=0.20×, C=0.125× Kelly
+  // Halved from previous values to match backend eighth-Kelly sizing
   const conf = confidence || 'Low';
-  let kellyMult = 0.4; // default
-  if (marketQuality === 'A' && conf === 'High') kellyMult = 0.6;
-  else if (marketQuality === 'A' && conf === 'Medium') kellyMult = 0.5;
-  else if (marketQuality === 'A') kellyMult = 0.4;
-  else if (marketQuality === 'B') kellyMult = 0.4;
-  else if (marketQuality === 'C') kellyMult = 0.25;
-  else kellyMult = 0.15; // No-Trade
+  let kellyMult = 0.20; // default
+  if (marketQuality === 'A' && conf === 'High') kellyMult = 0.30;
+  else if (marketQuality === 'A' && conf === 'Medium') kellyMult = 0.25;
+  else if (marketQuality === 'A') kellyMult = 0.20;
+  else if (marketQuality === 'B') kellyMult = 0.20;
+  else if (marketQuality === 'C') kellyMult = 0.125;
+  else kellyMult = 0.075; // No-Trade
 
   // Kelly fraction graduation via calibration accuracy (research: increase as engine proves itself)
   // As calibration data accumulates and accuracy improves, allow more aggressive Kelly
@@ -15687,10 +15778,10 @@ function estimateRR(price, atrVal, direction, prob, leverage = 1, confidence, ca
       return s + Math.abs(actualWR - bucketMid);
     }, 0) / _populatedBuckets.length;
   }
-  // Graduate Kelly multiplier based on proven accuracy
-  if (_totalResolved >= 200 && _calAccuracy <= 3) kellyMult = Math.min(0.7, kellyMult + 0.2);
-  else if (_totalResolved >= 100 && _calAccuracy <= 5) kellyMult = Math.min(0.6, kellyMult + 0.1);
-  else if (_totalResolved >= 50 && _calAccuracy <= 8) kellyMult = Math.min(0.55, kellyMult + 0.05);
+  // Graduate Kelly multiplier based on proven accuracy (halved caps to match eighth-Kelly)
+  if (_totalResolved >= 200 && _calAccuracy <= 3) kellyMult = Math.min(0.35, kellyMult + 0.10);
+  else if (_totalResolved >= 100 && _calAccuracy <= 5) kellyMult = Math.min(0.30, kellyMult + 0.05);
+  else if (_totalResolved >= 50 && _calAccuracy <= 8) kellyMult = Math.min(0.275, kellyMult + 0.025);
 
   const kellyFrac = rr > 0 ? ((calibratedProb / 100) * rr - (1 - calibratedProb / 100)) / rr : 0;
   const safeKelly = Math.max(0, kellyFrac * kellyMult);
@@ -15947,12 +16038,11 @@ async function runProbEngine() {
       const discount = Math.min(4, i + 1); // 2nd=-2, 3rd=-3, 4th+=-4
       group[i].prob = Math.max(25, group[i].prob - discount);
       group[i]._correlationDiscount = discount;
-      // Size reduction: divide by sqrt(n_correlated) for position sizing
-      // 3 correlated: each at ~58% size. 4 correlated: each at ~50% size.
-      group[i]._correlationSizeMult = 1 / Math.sqrt(group.length);
+      // No sqrt(n) discount — each position's heat is real. Portfolio heat capped at 6% instead.
+      group[i]._correlationSizeMult = 1;
     }
-    // First asset also gets size reduction but less aggressively
-    group[0]._correlationSizeMult = 1 / Math.sqrt(group.length) * 1.3; // top gets 30% bonus
+    // No sqrt(n) discount for top asset either — rely on portfolio heat cap
+    group[0]._correlationSizeMult = 1;
   }
   applyCorrelationDiscount(longAbove60);
   applyCorrelationDiscount(shortAbove60);
@@ -21932,6 +22022,56 @@ function stopOnePaperStrategy(id) {
   toast('Strategy paused');
 }
 
+// ── Kill Switch Warning Modal (10s cooldown before dismiss) ──
+function showKillSwitchModal(strategyLabel, reason) {
+  // Remove existing modal if any
+  const existing = document.getElementById('killSwitchModal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'killSwitchModal';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:99999;display:flex;align-items:center;justify-content:center;font-family:"Space Mono",monospace';
+
+  overlay.innerHTML = `
+    <div style="background:#1a1a2e;border:2px solid #ff4d6d;border-radius:12px;padding:30px 40px;max-width:480px;width:90%;text-align:center;box-shadow:0 0 60px rgba(255,77,109,0.3)">
+      <div style="font-size:36px;margin-bottom:12px">&#x1F6D1;</div>
+      <div style="font-size:16px;font-weight:700;color:#ff4d6d;margin-bottom:8px;letter-spacing:1px">KILL SWITCH ACTIVATED</div>
+      <div style="font-size:11px;color:#e0e0e0;margin-bottom:6px">[${strategyLabel}]</div>
+      <div style="font-size:10px;color:#ff8fa3;margin-bottom:20px;line-height:1.5">${reason}</div>
+      <div style="font-size:9px;color:#5a7a68;margin-bottom:16px;line-height:1.4">Trading has been automatically paused to protect your capital.<br>Take a moment to review your strategy before resuming.</div>
+      <button id="killSwitchDismissBtn" disabled
+        onclick="dismissKillSwitch()"
+        style="background:rgba(255,77,109,0.2);border:1px solid rgba(255,77,109,0.4);color:#ff4d6d;padding:8px 20px;border-radius:6px;cursor:not-allowed;opacity:0.4;font-family:'Space Mono',monospace;font-size:9px">
+        Wait 10s...
+      </button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  // 10-second countdown before dismiss is allowed
+  let countdown = 10;
+  const countdownInterval = setInterval(() => {
+    countdown--;
+    const btn = document.getElementById('killSwitchDismissBtn');
+    if (!btn) { clearInterval(countdownInterval); return; }
+    if (countdown <= 0) {
+      clearInterval(countdownInterval);
+      btn.disabled = false;
+      btn.style.cursor = 'pointer';
+      btn.style.opacity = '1';
+      btn.textContent = 'I understand the risks \u2014 Resume Trading';
+    } else {
+      btn.textContent = 'Wait ' + countdown + 's...';
+    }
+  }, 1000);
+}
+
+function dismissKillSwitch() {
+  const modal = document.getElementById('killSwitchModal');
+  if (modal) modal.remove();
+}
+
 function resumePaperStrategy(id) {
   ptRegUpdate(id, { active: true, pausedReason: null });
   ptStartPoll(id);
@@ -22163,7 +22303,7 @@ async function pollOneStrategy(id) {
         ptStateSave(id, state);
         stopOnePaperStrategy(id);
         ptRegUpdate(id, { active:false, pausedReason:`Kill switch: ${streakLimit} consecutive losses` });
-        toast(`⛔ [${label}] Kill switch — ${streakLimit} consecutive losses`, 'error');
+        showKillSwitchModal(label, `${streakLimit} consecutive losses`);
         renderPaperDashboard(); killed = true; break;
       }
       // 2) Max loss kill (total P&L dropped below -X% of starting capital)
@@ -22173,7 +22313,7 @@ async function pollOneStrategy(id) {
           ptStateSave(id, state);
           stopOnePaperStrategy(id);
           ptRegUpdate(id, { active:false, pausedReason:`Kill switch: max loss -${ks.maxLoss}% hit (${totalPnlPct.toFixed(1)}%)` });
-          toast(`⛔ [${label}] Kill switch — max loss -${ks.maxLoss}% hit`, 'error');
+          showKillSwitchModal(label, `Max loss -${ks.maxLoss}% hit (${totalPnlPct.toFixed(1)}%)`);
           renderPaperDashboard(); killed = true; break;
         }
       }
@@ -22185,7 +22325,7 @@ async function pollOneStrategy(id) {
           ptStateSave(id, state);
           stopOnePaperStrategy(id);
           ptRegUpdate(id, { active:false, pausedReason:`Kill switch: drawdown -${ddPct.toFixed(1)}% exceeded ${ks.maxDD}% limit` });
-          toast(`⛔ [${label}] Kill switch — drawdown exceeded ${ks.maxDD}%`, 'error');
+          showKillSwitchModal(label, `Drawdown -${ddPct.toFixed(1)}% exceeded ${ks.maxDD}% limit`);
           renderPaperDashboard(); killed = true; break;
         }
       }
