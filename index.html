@@ -2724,6 +2724,20 @@ function switchAuthView(view) {
         </div>
       </details>
 
+      <!-- Banned Assets Toggle -->
+      <div style="margin-top:10px">
+        <div onclick="const p = document.getElementById('bannedAssetsPanel'); p.style.display = p.style.display === 'none' ? 'block' : 'none'; if (p.style.display !== 'none') _renderBannedAssetsGrid();"
+             style="cursor:pointer;font-size:10px;font-weight:700;color:#ff4d6d;font-family:'Space Mono',monospace;padding:6px 0">
+          ▼ 🚫 <span style="text-decoration:underline">BANNED ASSETS</span> — coins excluded from live trading
+        </div>
+        <div id="bannedAssetsPanel" style="display:none;padding:10px 0">
+          <div id="bannedAssetsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;font-family:'Space Mono',monospace"></div>
+          <div style="margin-top:8px;font-size:7px;color:#3a5a48;font-family:'Space Mono',monospace">
+            Click to toggle · Banned coins still scan & log data but NEVER execute live trades · WR% shown from all-time resolved trades
+          </div>
+        </div>
+      </div>
+
       <!-- Confirm Button -->
       <button id="autoTradeConfirmBtn" onclick="confirmAutoTradeSettings()" style="width:100%;font-size:12px;padding:10px 20px;background:rgba(255,107,53,0.15);border:1px solid rgba(255,107,53,0.4);color:#ff6b35;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;transition:all 0.2s" onmouseenter="this.style.background='rgba(255,107,53,0.25)'" onmouseleave="this.style.background='rgba(255,107,53,0.15)'">
         ✅ Save & Apply Settings
@@ -9647,6 +9661,7 @@ function switchPageTab(tab) {
     if (!PROBE.lastRun) runProbEngine();
     loadRecommendations();
     loadAutoTradeSettings();
+    _renderBannedAssetsGrid();
     autoUnlockBlofin().then(() => checkBlofinConnection());
     refreshBtPositions();
     liveRefreshBalance();
@@ -14562,6 +14577,104 @@ async function _renderWatchlistPanel() {
   if (!_watchlistInterval) {
     _watchlistInterval = setInterval(_renderWatchlistPanel, 60000);
   }
+}
+
+// ── Banned Assets Grid (Auto-Trade Settings) ──────────────────
+async function _renderBannedAssetsGrid() {
+  const grid = document.getElementById('bannedAssetsGrid');
+  if (!grid) return;
+
+  const token = localStorage.getItem('dash_token');
+  const backend = window.CBP_BACKEND || 'http://localhost:3001';
+
+  try {
+    // Fetch banned list and asset stats
+    const [bannedRes, statsRes] = await Promise.all([
+      fetch(`${backend}/best-trades/banned`, { headers: { 'Authorization': 'Bearer ' + token } }),
+      fetch(`${backend}/best-trades/asset-stats`, { headers: { 'Authorization': 'Bearer ' + token } })
+    ]);
+    const bannedData = await bannedRes.json();
+    const statsData = await statsRes.json();
+
+    const bannedSet = new Set((bannedData.bannedAssets || []).map(a => a.toUpperCase()));
+    const assetStats = {};
+    (statsData.assets || []).forEach(a => { assetStats[a.asset.toUpperCase()] = a; });
+
+    // All known assets
+    const allAssets = ['BTC','ETH','SOL','SUI','BNB','XRP','DOGE','ADA','AVAX','LINK','DOT','NEAR','ARB','OP','APT','INJ','PEPE','WIF','RENDER'];
+
+    grid.innerHTML = allAssets.map(asset => {
+      const isBanned = bannedSet.has(asset);
+      const stats = assetStats[asset] || {};
+      const wr = stats.win_rate != null ? Number(stats.win_rate).toFixed(1) : '?';
+      const resolved = (stats.wins || 0) + (stats.losses || 0);
+      const wrColor = wr === '?' ? '#5a7a68' : Number(wr) >= 55 ? '#00f5a0' : Number(wr) >= 45 ? '#f5c400' : '#ff4d6d';
+
+      const bgColor = isBanned ? 'rgba(255,77,109,0.1)' : 'rgba(0,245,160,0.05)';
+      const borderColor = isBanned ? 'rgba(255,77,109,0.3)' : 'rgba(0,245,160,0.15)';
+      const labelColor = isBanned ? '#ff4d6d' : '#00f5a0';
+      const statusIcon = isBanned ? '🚫' : '✅';
+      const statusText = isBanned ? 'BANNED' : 'ACTIVE';
+
+      return `<div onclick="_toggleBanAsset('${asset}')"
+        style="background:${bgColor};border:1px solid ${borderColor};border-radius:6px;padding:8px 10px;cursor:pointer;transition:all 0.2s;user-select:none"
+        onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:10px;font-weight:700;color:#e0e0e0">${asset}</span>
+          <span style="font-size:7px;color:${labelColor}">${statusIcon} ${statusText}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:8px">
+          <span style="color:${wrColor}">${wr}% WR</span>
+          <span style="color:#5a7a68">${resolved} trades</span>
+        </div>
+      </div>`;
+    }).join('');
+
+  } catch (e) {
+    grid.innerHTML = `<div style="color:#ff4d6d;font-size:8px">Error loading: ${e.message}</div>`;
+  }
+}
+
+async function _toggleBanAsset(asset) {
+  const token = localStorage.getItem('dash_token');
+  const backend = window.CBP_BACKEND || 'http://localhost:3001';
+
+  // Check current banned status
+  const bannedRes = await fetch(`${backend}/best-trades/banned`, { headers: { 'Authorization': 'Bearer ' + token } });
+  const bannedData = await bannedRes.json();
+  const bannedSet = new Set((bannedData.bannedAssets || []).map(a => a.toUpperCase()));
+
+  const isBanned = bannedSet.has(asset.toUpperCase());
+  const endpoint = isBanned ? 'unban' : 'ban';
+
+  // Confirm before unbanning (safety)
+  if (isBanned) {
+    if (!confirm(`Unban ${asset}? This will allow live trading of ${asset} again.`)) return;
+  }
+
+  try {
+    const r = await fetch(`${backend}/best-trades/${endpoint}/${asset}`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const data = await r.json();
+
+    if (data.success || data.ok) {
+      // Show toast
+      if (typeof toast === 'function') {
+        toast(`${asset} ${isBanned ? 'unbanned ✅' : 'banned 🚫'}`, isBanned ? 'success' : 'warning');
+      }
+    }
+  } catch (e) {
+    if (typeof toast === 'function') toast(`Error: ${e.message}`, 'error');
+  }
+
+  // Re-render
+  _renderBannedAssetsGrid();
+
+  // Also refresh the asset stats and scan history if those functions exist
+  if (typeof _renderAssetStatsPanel === 'function') _renderAssetStatsPanel();
+  if (typeof renderScanHistory === 'function') renderScanHistory();
 }
 
 // ── Per-Asset Stats & Ban Management Panel ────────────────────
