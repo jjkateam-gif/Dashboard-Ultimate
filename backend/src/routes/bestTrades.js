@@ -75,6 +75,19 @@ router.get('/stats', async (req, res) => {
     // Attach leverage risk / Sharpe data from scanner status
     const status = scanner.getStatus();
     stats.leverageRisk = status.leverageRisk || {};
+    // Scanner heartbeat — so frontend knows scanner is alive even when nothing qualifies
+    stats.scannerHeartbeat = {
+      running: status.scannerRunning,
+      activeTimers: status.activeTimers,
+      lastScanTimes: scanner.lastScanTimeByTF || {},
+      lastLogAttempt: Object.fromEntries(
+        Object.entries(scanner.lastLogAttempt || {}).map(([tf, v]) => [tf, {
+          candidates: v.candidates, inserted: v.inserted, updated: v.updated,
+          fromResults: v.fromResults,
+          topSignal: v.rawTop5?.[0] ? `${v.rawTop5[0].a} ${v.rawTop5[0].d} ${v.rawTop5[0].prob?.toFixed(0)}%` : null,
+        }])
+      ),
+    };
     res.json(stats);
   } catch (err) {
     console.error('[BestTrades] Stats error:', err);

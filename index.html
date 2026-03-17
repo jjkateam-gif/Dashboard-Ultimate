@@ -2780,6 +2780,8 @@ function switchAuthView(view) {
     </div>
     <!-- Accuracy Summary -->
     <div id="scanAccuracySummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px"></div>
+    <!-- Scanner Heartbeat -->
+    <div id="scannerHeartbeat" style="padding:6px 12px;margin-bottom:8px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.06);border-radius:6px;font-family:'Space Mono',monospace;font-size:8px;color:#5a7a68"></div>
     <!-- Calibration Chart (Predicted vs Actual Win Rate) -->
     <div id="scanCalibrationChart" style="margin-bottom:12px"></div>
     <!-- Scan History Table -->
@@ -14409,6 +14411,41 @@ function _renderUnifiedUI(stats, history) {
     _renderCalibrationChart(stats, window._calActiveTF);
   } else if (chartEl) {
     chartEl.innerHTML = '';
+  }
+
+  // Scanner heartbeat status bar
+  const hbEl = document.getElementById('scannerHeartbeat');
+  if (hbEl && stats.scannerHeartbeat) {
+    const hb = stats.scannerHeartbeat;
+    const lastScans = hb.lastScanTimes || {};
+    const mostRecentScan = Object.values(lastScans).sort().pop();
+    const scanAgoMs = mostRecentScan ? Date.now() - new Date(mostRecentScan).getTime() : null;
+    const scanAgo = scanAgoMs !== null ? (scanAgoMs < 60000 ? 'just now' : Math.round(scanAgoMs / 60000) + 'm ago') : 'never';
+    const isAlive = scanAgoMs !== null && scanAgoMs < 20 * 60 * 1000;
+    const dot = isAlive ? '🟢' : '🔴';
+
+    // Show what the scanner is seeing even when nothing qualifies
+    const logInfo = hb.lastLogAttempt || {};
+    const totalScanned = Object.values(logInfo).reduce((s, v) => s + (v.fromResults || 0), 0);
+    const totalCandidates = Object.values(logInfo).reduce((s, v) => s + (v.candidates || 0), 0);
+    const topSignals = Object.values(logInfo).map(v => v.topSignal).filter(Boolean);
+    const topSignalStr = topSignals.length > 0 ? topSignals[0] : 'no qualifying signals';
+
+    const timers = (hb.activeTimers || []).map(tf => {
+      const la = logInfo[tf];
+      const scanTime = lastScans[tf];
+      const ago = scanTime ? Math.round((Date.now() - new Date(scanTime).getTime()) / 60000) + 'm' : '?';
+      const cand = la ? la.candidates : '?';
+      const candColor = cand > 0 ? '#00f5a0' : '#ff8c69';
+      return `<span style="color:#5a7a68" title="Last scan ${ago} ago, ${cand} candidates">${tf}:<span style="color:${candColor}">${cand}</span></span>`;
+    }).join(' · ');
+
+    hbEl.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
+        <span>${dot} <strong style="color:${isAlive ? '#00f5a0' : '#ff4d6d'}">${isAlive ? 'SCANNING' : 'OFFLINE'}</strong> · last scan: ${scanAgo} · ${totalScanned} assets scanned · <span style="color:${totalCandidates > 0 ? '#00f5a0' : '#f5c400'}">${totalCandidates} qualifying</span></span>
+        <span style="font-size:7px">${timers}</span>
+        <span style="font-size:7px;color:#5a7a68" title="Best signal across all TFs">top: <span style="color:#a78bfa">${topSignalStr}</span></span>
+      </div>`;
   }
 
   // Scan history table
