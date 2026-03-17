@@ -2784,6 +2784,8 @@ function switchAuthView(view) {
     <div id="scannerHeartbeat" style="padding:6px 12px;margin-bottom:8px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.06);border-radius:6px;font-family:'Space Mono',monospace;font-size:8px;color:#5a7a68"></div>
     <!-- Calibration Chart (Predicted vs Actual Win Rate) -->
     <div id="scanCalibrationChart" style="margin-bottom:12px"></div>
+    <!-- Per-Asset Performance & Ban Management -->
+    <div id="assetStatsPanel" style="margin-bottom:12px"></div>
     <!-- Scan History Table -->
     <div id="scanHistoryTable" style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-radius:8px;padding:12px;font-family:'Space Mono',monospace;font-size:10px;color:#5a7a68;max-height:400px;overflow-y:auto">
       Loading scan history from server...
@@ -14289,17 +14291,20 @@ async function renderScanHistory() {
   const headers = { 'Authorization': 'Bearer ' + token };
 
   try {
-    // Fetch stats and ALL history in parallel (no limit — show everything the engine has logged)
-    const [statsR, historyR] = await Promise.all([
+    // Fetch stats, history, and per-asset stats in parallel
+    const [statsR, historyR, assetStatsR] = await Promise.all([
       fetch(`${backend}/best-trades/stats`, { headers }),
       fetch(`${backend}/best-trades/history-all?outcome=all`, { headers }),
+      fetch(`${backend}/best-trades/asset-stats`, { headers }).catch(() => ({ json: () => ({}) })),
     ]);
     const stats = await statsR.json();
     const history = await historyR.json();
+    const assetStats = await assetStatsR.json();
     if (stats.error) { console.warn('[ScanHistory] Stats error:', stats.error); return; }
 
     window._serverStats = stats;
     window._serverHistory = (history.history || []).map(_mapDbRow);
+    window._assetStats = assetStats; // { assets, bannedAssets, dualWinRate, banSuggestions }
     window._historyPageSize = 50;  // Show 50 initially, load more on demand
     window._historyShowCount = 50;
 
@@ -14360,8 +14365,20 @@ function _renderUnifiedUI(stats, history) {
         <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">${label}${isActive ? ' ✕' : ''}</div>
       </div>`;
     };
+    // Dual win rate: All assets vs Tradeable (non-banned) assets
+    const dualWR = (window._assetStats || {}).dualWinRate || {};
+    const tradeableWR = dualWR.tradeable ? dualWR.tradeable.winRate.toFixed(1) : null;
+    const tradeableColor = tradeableWR ? (parseFloat(tradeableWR) >= 55 ? '#00f5a0' : parseFloat(tradeableWR) >= 45 ? '#f5c400' : '#ff4d6d') : '#5a7a68';
+    const bannedCount = ((window._assetStats || {}).bannedAssets || []).length;
+    const hasBanned = bannedCount > 0;
+
     summaryEl.innerHTML = `
-      ${_sc(null, 'rgba(167,139,250,0.06)', 'rgba(167,139,250,0.15)', wrColor, wrValue + (wrValue !== 'N/A' ? '%' : ''), 'WIN RATE')}
+      ${_sc(null, 'rgba(167,139,250,0.06)', 'rgba(167,139,250,0.15)', wrColor, wrValue + (wrValue !== 'N/A' ? '%' : ''), 'WIN RATE (ALL)')}
+      ${hasBanned ? `<div style="background:rgba(0,245,160,0.08);border:2px solid rgba(0,245,160,0.25);border-radius:8px;padding:10px;text-align:center;position:relative" title="Win rate excluding ${bannedCount} banned asset(s)">
+        <div style="font-size:18px;font-weight:800;color:${tradeableColor};font-family:'Space Mono',monospace">${tradeableWR || '—'}%</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">TRADEABLE WR</div>
+        <div style="position:absolute;top:3px;right:5px;font-size:7px;color:#00f5a0">🚫 ${bannedCount} banned</div>
+      </div>` : ''}
       ${_sc('win', 'rgba(0,245,160,0.06)', 'rgba(0,245,160,0.12)', '#00f5a0', o.wins || 0, 'WINS')}
       ${_sc('loss', 'rgba(255,77,109,0.06)', 'rgba(255,77,109,0.12)', '#ff4d6d', o.losses || 0, 'LOSSES')}
       ${_sc('pending', 'rgba(245,196,0,0.06)', 'rgba(245,196,0,0.12)', '#f5c400', o.pending || 0, 'PENDING')}
@@ -14448,8 +14465,153 @@ function _renderUnifiedUI(stats, history) {
       </div>`;
   }
 
+  // Per-asset stats panel
+  _renderAssetStatsPanel();
+
   // Scan history table
   _renderHistoryTable(history);
+}
+
+// ── Per-Asset Stats & Ban Management Panel ────────────────────
+function _renderAssetStatsPanel() {
+  const panel = document.getElementById('assetStatsPanel');
+  if (!panel) return;
+  const data = window._assetStats;
+  if (!data || !data.assets || data.assets.length === 0) { panel.innerHTML = ''; return; }
+
+  const collapsed = window._assetPanelCollapsed !== false; // default collapsed
+  const assets = [...data.assets].sort((a, b) => b.winRate - a.winRate);
+  const bannedSet = new Set((data.bannedAssets || []).map(a => a.toUpperCase()));
+  const suggestions = data.banSuggestions || [];
+
+  // Ban suggestion alert
+  const suggestHtml = suggestions.length > 0 ? `
+    <div style="background:rgba(255,77,109,0.08);border:1px solid rgba(255,77,109,0.2);border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:8px;font-family:'Space Mono',monospace">
+      <span style="color:#ff4d6d;font-weight:700">⚠ BAN SUGGESTIONS:</span>
+      ${suggestions.map(s => `<span style="color:#ff8c69;margin-left:8px">${s.asset} (${s.winRate}% WR, ${s.resolved} trades)</span>
+        <button onclick="_banAsset('${s.asset}')" style="background:rgba(255,77,109,0.15);border:1px solid rgba(255,77,109,0.3);color:#ff4d6d;padding:1px 6px;border-radius:3px;cursor:pointer;font-size:7px;margin-left:3px">BAN</button>`).join('')}
+    </div>` : '';
+
+  const toggleBtn = `<button onclick="window._assetPanelCollapsed = !window._assetPanelCollapsed; _renderAssetStatsPanel();" style="background:none;border:1px solid rgba(167,139,250,0.2);color:#a78bfa;padding:3px 10px;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-size:8px">${collapsed ? '▶ SHOW' : '▼ HIDE'}</button>`;
+
+  if (collapsed) {
+    const bannedCount = bannedSet.size;
+    const dwr = data.dualWinRate || {};
+    const allWR = dwr.all ? dwr.all.winRate.toFixed(1) + '%' : '—';
+    const tWR = dwr.tradeable ? dwr.tradeable.winRate.toFixed(1) + '%' : '—';
+    panel.innerHTML = `
+      <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-radius:8px;padding:10px 14px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:10px;font-weight:700;color:#a78bfa;font-family:'Space Mono',monospace">📊 PER-ASSET PERFORMANCE ${bannedCount > 0 ? `<span style="color:#ff4d6d;font-size:8px">(${bannedCount} banned)</span>` : ''}</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:8px;font-family:'Space Mono',monospace;color:#5a7a68">All: <strong>${allWR}</strong> · Tradeable: <strong style="color:#00f5a0">${tWR}</strong></span>
+            ${toggleBtn}
+          </div>
+        </div>
+        ${suggestHtml}
+      </div>`;
+    return;
+  }
+
+  // Expanded view: full per-asset table
+  const rows = assets.map(a => {
+    const isBanned = bannedSet.has(a.asset.toUpperCase());
+    const wrColor = a.winRate >= 60 ? '#00f5a0' : a.winRate >= 50 ? '#f5c400' : a.winRate >= 40 ? '#ff8c69' : '#ff4d6d';
+    const pnlColor = a.avgPnl >= 0 ? '#00f5a0' : '#ff4d6d';
+    const banBtn = isBanned
+      ? `<button onclick="_unbanAsset('${a.asset}')" style="background:rgba(0,245,160,0.1);border:1px solid rgba(0,245,160,0.25);color:#00f5a0;padding:2px 8px;border-radius:3px;cursor:pointer;font-size:7px;font-family:'Space Mono',monospace;font-weight:700">UNBAN</button>`
+      : `<button onclick="_banAsset('${a.asset}')" style="background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.25);color:#ff4d6d;padding:2px 8px;border-radius:3px;cursor:pointer;font-size:7px;font-family:'Space Mono',monospace;font-weight:700">BAN</button>`;
+    const bannedTag = isBanned ? '<span style="color:#ff4d6d;font-size:7px;margin-left:3px">🚫 BANNED</span>' : '';
+    const rowOpacity = isBanned ? 'opacity:0.5' : '';
+
+    return `<tr style="border-bottom:1px solid rgba(255,255,255,0.03);${rowOpacity}">
+      <td style="padding:4px 8px;font-weight:700">${a.asset}${bannedTag}</td>
+      <td style="padding:4px 8px;color:${wrColor};font-weight:700">${a.resolved > 0 ? a.winRate.toFixed(1) + '%' : '—'}</td>
+      <td style="padding:4px 8px;color:#00f5a0">${a.wins}</td>
+      <td style="padding:4px 8px;color:#ff4d6d">${a.losses}</td>
+      <td style="padding:4px 8px">${a.resolved}</td>
+      <td style="padding:4px 8px;color:#f5c400">${a.pending}</td>
+      <td style="padding:4px 8px;color:${pnlColor}">${a.avgPnl >= 0 ? '+' : ''}${a.avgPnl.toFixed(2)}%</td>
+      <td style="padding:4px 8px">${banBtn}</td>
+    </tr>`;
+  }).join('');
+
+  panel.innerHTML = `
+    <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-radius:8px;padding:12px 14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:10px;font-weight:700;color:#a78bfa;font-family:'Space Mono',monospace">📊 PER-ASSET PERFORMANCE & BAN MANAGEMENT</div>
+        ${toggleBtn}
+      </div>
+      ${suggestHtml}
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-family:'Space Mono',monospace;font-size:8px">
+          <thead><tr style="border-bottom:1px solid rgba(167,139,250,0.15)">
+            <th style="text-align:left;padding:4px 8px;color:#a78bfa;font-size:7px">ASSET</th>
+            <th style="text-align:left;padding:4px 8px;color:#a78bfa;font-size:7px">WIN RATE</th>
+            <th style="text-align:left;padding:4px 8px;color:#a78bfa;font-size:7px">WINS</th>
+            <th style="text-align:left;padding:4px 8px;color:#a78bfa;font-size:7px">LOSSES</th>
+            <th style="text-align:left;padding:4px 8px;color:#a78bfa;font-size:7px">RESOLVED</th>
+            <th style="text-align:left;padding:4px 8px;color:#a78bfa;font-size:7px">PENDING</th>
+            <th style="text-align:left;padding:4px 8px;color:#a78bfa;font-size:7px">AVG P&L</th>
+            <th style="text-align:left;padding:4px 8px;color:#a78bfa;font-size:7px">ACTION</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// Ban/unban asset API calls
+async function _banAsset(asset) {
+  const token = localStorage.getItem('dash_token');
+  const backend = window.CBP_BACKEND || 'http://localhost:3001';
+  try {
+    const r = await fetch(`${backend}/best-trades/ban/${asset}`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } });
+    const data = await r.json();
+    if (data.success) {
+      window._assetStats.bannedAssets = data.bannedAssets;
+      // Update local asset data
+      if (window._assetStats.assets) {
+        const a = window._assetStats.assets.find(x => x.asset.toUpperCase() === asset.toUpperCase());
+        if (a) a.banned = true;
+      }
+      // Recalculate dual WR
+      await _refreshAssetStats();
+      _renderAssetStatsPanel();
+      _renderHistoryTable(window._serverHistory);
+      // Re-render summary to update dual WR card
+      if (window._serverStats) _renderUnifiedUI(window._serverStats, window._serverHistory);
+    }
+  } catch (e) { console.error('Ban error:', e); }
+}
+
+async function _unbanAsset(asset) {
+  const token = localStorage.getItem('dash_token');
+  const backend = window.CBP_BACKEND || 'http://localhost:3001';
+  try {
+    const r = await fetch(`${backend}/best-trades/unban/${asset}`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } });
+    const data = await r.json();
+    if (data.success) {
+      window._assetStats.bannedAssets = data.bannedAssets;
+      if (window._assetStats.assets) {
+        const a = window._assetStats.assets.find(x => x.asset.toUpperCase() === asset.toUpperCase());
+        if (a) a.banned = false;
+      }
+      await _refreshAssetStats();
+      _renderAssetStatsPanel();
+      _renderHistoryTable(window._serverHistory);
+      if (window._serverStats) _renderUnifiedUI(window._serverStats, window._serverHistory);
+    }
+  } catch (e) { console.error('Unban error:', e); }
+}
+
+async function _refreshAssetStats() {
+  const token = localStorage.getItem('dash_token');
+  const backend = window.CBP_BACKEND || 'http://localhost:3001';
+  try {
+    const r = await fetch(`${backend}/best-trades/asset-stats`, { headers: { 'Authorization': 'Bearer ' + token } });
+    window._assetStats = await r.json();
+  } catch (e) { console.warn('Asset stats refresh error:', e); }
 }
 
 // ── Render the calibration chart from server stats ────────────
@@ -14748,10 +14910,13 @@ function _renderHistoryTable(history) {
     const scanBadge = e.scanCount > 1 ? `<span style="color:#a78bfa;font-size:6px" title="Seen ${e.scanCount} scans">×${e.scanCount}</span>` : '';
     const mqColor = e.marketQuality === 'A' ? '#00f5a0' : e.marketQuality === 'B+' ? '#7ef5d0' : e.marketQuality === 'B' ? '#f5c400' : '#ff8c69';
     const execIcon = e.executed ? '⚡' : '';
+    const bannedAssetSet = new Set(((window._assetStats || {}).bannedAssets || []).map(a => a.toUpperCase()));
+    const isBanned = bannedAssetSet.has((e.asset || '').toUpperCase());
+    const bannedBadge = isBanned ? '<span style="color:#ff4d6d;font-size:6px;margin-left:2px" title="BANNED from live trading — still logging for data">🚫</span>' : '';
 
-    return `<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+    return `<tr style="border-bottom:1px solid rgba(255,255,255,0.03)${isBanned ? ';opacity:0.6' : ''}">
       <td style="padding:4px 6px;color:#5a7a68;font-size:7px;white-space:nowrap">${timeAgo} ${scanBadge}</td>
-      <td style="padding:4px 6px;font-weight:700">${execIcon}${e.asset}</td>
+      <td style="padding:4px 6px;font-weight:700">${execIcon}${e.asset}${bannedBadge}</td>
       <td style="padding:4px 6px;color:${dirColor}">${dirArrow} ${(e.direction || '').toUpperCase()}</td>
       <td style="padding:4px 6px;color:${probColor};font-weight:700">${e.prob}%</td>
       <td style="padding:4px 6px">${e.rr}:1</td>

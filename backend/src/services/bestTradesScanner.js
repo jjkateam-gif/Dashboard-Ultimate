@@ -968,6 +968,7 @@ class BestTradesScanner {
       maxOpen: 3,
       leverage: 1,
       tfRules: {},  // Per-TF overrides: { "5m": { enabled: true, minProb: 60, minQuality: "B" }, ... }
+      bannedAssets: [],  // Assets banned from LIVE TRADING (still scanned & logged for data collection)
     };
     this.scanTimers = {};       // { '5m': timer, '15m': timer, ... }
     this.lastResults = [];      // combined results across all TFs
@@ -1369,7 +1370,10 @@ class BestTradesScanner {
 
     // Filter qualifying setups using per-TF rules (with debug logging)
     const rejectReasons = {};
+    const bannedSet = new Set((this.settings.bannedAssets || []).map(a => a.toUpperCase()));
     const qualifying = results.filter(r => {
+      // BANNED ASSET CHECK — asset is banned from live trading (still logged for data collection)
+      if (bannedSet.has(r.asset.toUpperCase())) { rejectReasons[r.asset] = `BANNED from live trading`; return false; }
       if (r.prob < minProb) { rejectReasons[r.asset] = `prob ${r.prob}% < min ${minProb}%`; return false; }
       if (r.marketQuality === 'No-Trade') { rejectReasons[r.asset] = 'No-Trade quality'; return false; }
       if (minQuality && (QUALITY_ORDER[r.marketQuality] || 0) < (QUALITY_ORDER[minQuality] || 0)) { rejectReasons[r.asset] = `quality ${r.marketQuality} < min ${minQuality}`; return false; }
@@ -1623,7 +1627,8 @@ class BestTradesScanner {
         this.settings.maxOpen = row.max_open || 3;
         this.settings.leverage = row.leverage || 1;
         this.settings.tfRules = row.tf_rules || {};
-        console.log(`[BestTrades] Settings loaded from DB: enabled=${this.settings.enabled}, tf=${this.settings.timeframe}, tfRules=${JSON.stringify(this.settings.tfRules)}`);
+        this.settings.bannedAssets = row.banned_assets || [];
+        console.log(`[BestTrades] Settings loaded from DB: enabled=${this.settings.enabled}, tf=${this.settings.timeframe}, banned=${(this.settings.bannedAssets || []).length} assets, tfRules=${JSON.stringify(this.settings.tfRules)}`);
       }
     } catch (e) {
       console.warn('[BestTrades] Settings load error:', e.message);
@@ -1632,30 +1637,37 @@ class BestTradesScanner {
 
   async _saveSettings() {
     if (!pool) return;
+    // Ensure banned_assets column exists (auto-migration)
+    try {
+      await pool.query(`ALTER TABLE best_trades_settings ADD COLUMN IF NOT EXISTS banned_assets JSONB DEFAULT '[]'::jsonb`);
+    } catch (migErr) { /* column may already exist or table doesn't support IF NOT EXISTS */ }
+
     try {
       await pool.query(
-        `INSERT INTO best_trades_settings (id, enabled, mode, timeframe, min_prob, trade_size_usd, trade_size_mode, sizing_mode, max_open, leverage, tf_rules, updated_at)
-         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+        `INSERT INTO best_trades_settings (id, enabled, mode, timeframe, min_prob, trade_size_usd, trade_size_mode, sizing_mode, max_open, leverage, tf_rules, banned_assets, updated_at)
+         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
          ON CONFLICT (id) DO UPDATE SET
            enabled=$1, mode=$2, timeframe=$3, min_prob=$4,
-           trade_size_usd=$5, trade_size_mode=$6, sizing_mode=$7, max_open=$8, leverage=$9, tf_rules=$10, updated_at=NOW()`,
+           trade_size_usd=$5, trade_size_mode=$6, sizing_mode=$7, max_open=$8, leverage=$9, tf_rules=$10, banned_assets=$11, updated_at=NOW()`,
         [this.settings.enabled, this.settings.mode, this.settings.timeframe,
          this.settings.minProb, this.settings.tradeSizeUsd, this.settings.tradeSizeMode || 'fixed',
          this.settings.sizingMode || 'kelly',
          this.settings.maxOpen, this.settings.leverage,
-         JSON.stringify(this.settings.tfRules || {})]
+         JSON.stringify(this.settings.tfRules || {}),
+         JSON.stringify(this.settings.bannedAssets || [])]
       );
     } catch (e) {
-      console.warn('[BestTrades] Settings save error (trying without trade_size_mode):', e.message);
+      console.warn('[BestTrades] Settings save error (trying without banned_assets):', e.message);
       try {
         await pool.query(
-          `INSERT INTO best_trades_settings (id, enabled, mode, timeframe, min_prob, trade_size_usd, max_open, leverage, tf_rules, updated_at)
-           VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, NOW())
+          `INSERT INTO best_trades_settings (id, enabled, mode, timeframe, min_prob, trade_size_usd, trade_size_mode, sizing_mode, max_open, leverage, tf_rules, updated_at)
+           VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
            ON CONFLICT (id) DO UPDATE SET
              enabled=$1, mode=$2, timeframe=$3, min_prob=$4,
-             trade_size_usd=$5, max_open=$6, leverage=$7, tf_rules=$8, updated_at=NOW()`,
+             trade_size_usd=$5, trade_size_mode=$6, sizing_mode=$7, max_open=$8, leverage=$9, tf_rules=$10, updated_at=NOW()`,
           [this.settings.enabled, this.settings.mode, this.settings.timeframe,
-           this.settings.minProb, this.settings.tradeSizeUsd,
+           this.settings.minProb, this.settings.tradeSizeUsd, this.settings.tradeSizeMode || 'fixed',
+           this.settings.sizingMode || 'kelly',
            this.settings.maxOpen, this.settings.leverage,
            JSON.stringify(this.settings.tfRules || {})]
         );

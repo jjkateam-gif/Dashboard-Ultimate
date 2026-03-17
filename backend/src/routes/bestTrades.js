@@ -30,6 +30,7 @@ router.post('/settings', async (req, res) => {
     if (maxOpen) update.maxOpen = parseInt(maxOpen);
     if (leverage) update.leverage = parseInt(leverage);
     if (tfRules && typeof tfRules === 'object') update.tfRules = tfRules;
+    if (req.body.bannedAssets && Array.isArray(req.body.bannedAssets)) update.bannedAssets = req.body.bannedAssets;
 
     const settings = await scanner.updateSettings(update);
     res.json({ success: true, settings });
@@ -92,6 +93,117 @@ router.get('/stats', async (req, res) => {
   } catch (err) {
     console.error('[BestTrades] Stats error:', err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Asset Ban Management ──
+
+// GET /best-trades/banned — get banned assets list
+router.get('/banned', async (req, res) => {
+  const settings = await scanner.getSettings();
+  res.json({ bannedAssets: settings.bannedAssets || [] });
+});
+
+// POST /best-trades/banned — update banned assets list
+router.post('/banned', async (req, res) => {
+  try {
+    const { bannedAssets } = req.body;
+    if (!Array.isArray(bannedAssets)) return res.status(400).json({ error: 'bannedAssets must be an array' });
+    const cleaned = bannedAssets.map(a => String(a).toUpperCase().trim()).filter(Boolean);
+    await scanner.updateSettings({ bannedAssets: cleaned });
+    console.log(`[BestTrades] Banned assets updated: ${cleaned.length ? cleaned.join(', ') : 'NONE'}`);
+    res.json({ success: true, bannedAssets: cleaned });
+  } catch (err) {
+    console.error('[BestTrades] Ban update error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /best-trades/ban/:asset — ban a single asset
+router.post('/ban/:asset', async (req, res) => {
+  try {
+    const asset = req.params.asset.toUpperCase().trim();
+    const settings = await scanner.getSettings();
+    const banned = new Set(settings.bannedAssets || []);
+    banned.add(asset);
+    await scanner.updateSettings({ bannedAssets: [...banned] });
+    console.log(`[BestTrades] BANNED: ${asset} — will continue scanning but NO live trades`);
+    res.json({ success: true, bannedAssets: [...banned] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /best-trades/unban/:asset — unban a single asset
+router.post('/unban/:asset', async (req, res) => {
+  try {
+    const asset = req.params.asset.toUpperCase().trim();
+    const settings = await scanner.getSettings();
+    const banned = new Set(settings.bannedAssets || []);
+    banned.delete(asset);
+    await scanner.updateSettings({ bannedAssets: [...banned] });
+    console.log(`[BestTrades] UNBANNED: ${asset} — now eligible for live trading`);
+    res.json({ success: true, bannedAssets: [...banned] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /best-trades/asset-stats — per-asset win rates + dual WR (all vs tradeable)
+router.get('/asset-stats', async (req, res) => {
+  try {
+    const settings = await scanner.getSettings();
+    const bannedSet = new Set((settings.bannedAssets || []).map(a => a.toUpperCase()));
+
+    const result = await pool.query(`
+      SELECT
+        asset,
+        COUNT(*) FILTER (WHERE outcome IS NOT NULL) AS resolved,
+        COUNT(*) FILTER (WHERE outcome = 'win') AS wins,
+        COUNT(*) FILTER (WHERE outcome = 'loss') AS losses,
+        COUNT(*) FILTER (WHERE outcome IS NULL) AS pending,
+        ROUND(AVG(CASE WHEN pnl IS NOT NULL THEN pnl END)::numeric, 2) AS avg_pnl,
+        ROUND(100.0 * COUNT(*) FILTER (WHERE outcome = 'win') / NULLIF(COUNT(*) FILTER (WHERE outcome IS NOT NULL), 0), 1) AS win_rate
+      FROM best_trades_log
+      GROUP BY asset
+      ORDER BY resolved DESC
+    `);
+
+    const assets = result.rows.map(r => ({
+      asset: r.asset,
+      resolved: parseInt(r.resolved),
+      wins: parseInt(r.wins),
+      losses: parseInt(r.losses),
+      pending: parseInt(r.pending),
+      avgPnl: parseFloat(r.avg_pnl) || 0,
+      winRate: parseFloat(r.win_rate) || 0,
+      banned: bannedSet.has(r.asset.toUpperCase()),
+    }));
+
+    // Calculate dual win rates
+    const allResolved = assets.reduce((s, a) => s + a.resolved, 0);
+    const allWins = assets.reduce((s, a) => s + a.wins, 0);
+    const tradeableAssets = assets.filter(a => !a.banned);
+    const tradeableResolved = tradeableAssets.reduce((s, a) => s + a.resolved, 0);
+    const tradeableWins = tradeableAssets.reduce((s, a) => s + a.wins, 0);
+
+    // Auto-ban suggestions: WR < 40% after 20+ resolved trades
+    const banSuggestions = assets
+      .filter(a => !a.banned && a.resolved >= 20 && a.winRate < 40)
+      .map(a => ({ asset: a.asset, winRate: a.winRate, resolved: a.resolved, reason: `${a.winRate}% WR on ${a.resolved} trades (< 40% threshold)` }));
+
+    res.json({
+      assets,
+      bannedAssets: [...bannedSet],
+      dualWinRate: {
+        all: { resolved: allResolved, wins: allWins, winRate: allResolved > 0 ? parseFloat((allWins / allResolved * 100).toFixed(1)) : 0 },
+        tradeable: { resolved: tradeableResolved, wins: tradeableWins, winRate: tradeableResolved > 0 ? parseFloat((tradeableWins / tradeableResolved * 100).toFixed(1)) : 0 },
+      },
+      banSuggestions,
+    });
+  } catch (err) {
+    console.error('[BestTrades] Asset stats error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
