@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Engine Data Review — For AI Analysis</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0e14; color: #c8d6e5; font-family: 'Segoe UI', system-ui, sans-serif; padding: 20px; line-height: 1.6; }
+  h1 { color: #a78bfa; font-size: 28px; border-bottom: 2px solid #a78bfa; padding-bottom: 8px; margin-bottom: 20px; }
+  h2 { color: #00f5a0; font-size: 20px; margin: 30px 0 12px; border-left: 4px solid #00f5a0; padding-left: 12px; }
+  h3 { color: #f5c400; font-size: 16px; margin: 20px 0 8px; }
+  h4 { color: #ff8c69; font-size: 14px; margin: 15px 0 6px; }
+  .section { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+  .critical { background: rgba(255,77,109,0.08); border-color: rgba(255,77,109,0.3); }
+  .success { background: rgba(0,245,160,0.05); border-color: rgba(0,245,160,0.2); }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+  th { background: rgba(167,139,250,0.15); color: #a78bfa; text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 6px 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  tr:hover { background: rgba(255,255,255,0.02); }
+  .win { color: #00f5a0; font-weight: 700; }
+  .loss { color: #ff4d6d; font-weight: 700; }
+  .warn { color: #f5c400; font-weight: 700; }
+  .neutral { color: #5a7a68; }
+  code { background: rgba(167,139,250,0.1); color: #e2b4ff; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+  pre { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 12px; overflow-x: auto; font-size: 12px; color: #a8d8ea; margin: 8px 0; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+  .badge-red { background: rgba(255,77,109,0.2); color: #ff4d6d; }
+  .badge-green { background: rgba(0,245,160,0.2); color: #00f5a0; }
+  .badge-yellow { background: rgba(245,196,0,0.2); color: #f5c400; }
+  .badge-purple { background: rgba(167,139,250,0.2); color: #a78bfa; }
+  .question { background: rgba(167,139,250,0.08); border: 1px solid rgba(167,139,250,0.2); border-radius: 8px; padding: 15px; margin: 15px 0; font-style: italic; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 15px 0; }
+  .stat-card { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px; text-align: center; }
+  .stat-value { font-size: 24px; font-weight: 800; }
+  .stat-label { font-size: 10px; color: #5a7a68; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+  .tabs { display: flex; gap: 2px; margin-bottom: 0; flex-wrap: wrap; }
+  .tab { padding: 8px 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-bottom: none; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 12px; color: #5a7a68; }
+  .tab.active { background: rgba(167,139,250,0.15); color: #a78bfa; font-weight: 700; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+</style>
+</head>
+<body>
+
+<h1>🔬 Ultimate Crypto Backtester Pro — Complete Engine Data Review</h1>
+<p style="color:#5a7a68;margin-bottom:20px;font-size:14px">
+  <strong>Date:</strong> March 17, 2026 · <strong>Version:</strong> v2.7 · <strong>Purpose:</strong> Comprehensive data export for AI review (ChatGPT, Grok, Claude)
+  <br><strong>Request:</strong> Analyze all data, identify root causes of declining win rate, recommend adjustments, and advise whether we need more data before making changes.
+</p>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>📊 1. CURRENT PERFORMANCE SNAPSHOT</h2>
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="section critical">
+<h3>Overall Performance — <span class="loss">BELOW BREAKEVEN</span></h3>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-value loss">48.7%</div><div class="stat-label">Win Rate</div></div>
+  <div class="stat-card"><div class="stat-value win">273</div><div class="stat-label">Wins</div></div>
+  <div class="stat-card"><div class="stat-value loss">288</div><div class="stat-label">Losses</div></div>
+  <div class="stat-card"><div class="stat-value warn">89</div><div class="stat-label">Pending</div></div>
+  <div class="stat-card"><div class="stat-value" style="color:#a78bfa">650</div><div class="stat-label">Total Logged</div></div>
+  <div class="stat-card"><div class="stat-value loss">-134.4</div><div class="stat-label">Sharpe Ratio</div></div>
+  <div class="stat-card"><div class="stat-value win">+2.88%</div><div class="stat-label">Avg Win P&L</div></div>
+  <div class="stat-card"><div class="stat-value loss">-1.87%</div><div class="stat-label">Avg Loss P&L</div></div>
+  <div class="stat-card"><div class="stat-value" style="color:#ccc">0.0%</div><div class="stat-label">Drawdown</div></div>
+</div>
+
+<p><strong>Key insight:</strong> Avg win (+2.88%) exceeds avg loss (-1.87%), giving a reward-to-risk ratio of ~1.54:1. At this R:R, we only need ~39% WR to break even. But Sharpe is deeply negative (-134.4), suggesting the per-trade expectancy after fees is poor despite the R:R edge.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>📈 2. WIN RATE BY TIMEFRAME</h2>
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="section">
+<table>
+  <tr><th>Timeframe</th><th>Win Rate</th><th>Wins</th><th>Losses</th><th>Resolved</th><th>Pending</th><th>Avg P&L</th><th>Assessment</th></tr>
+  <tr><td><strong>5m</strong></td><td class="loss">49%</td><td>135</td><td>140</td><td>275</td><td>1</td><td class="win">+0.42%</td><td><span class="badge badge-red">HIGH NOISE</span></td></tr>
+  <tr><td><strong>15m</strong></td><td class="loss">48%</td><td>91</td><td>97</td><td>188</td><td>7</td><td class="win">+0.52%</td><td><span class="badge badge-red">BELOW BREAKEVEN</span></td></tr>
+  <tr><td><strong>30m</strong></td><td class="win">51%</td><td>34</td><td>33</td><td>67</td><td>24</td><td class="win">+0.62%</td><td><span class="badge badge-yellow">BORDERLINE</span></td></tr>
+  <tr><td><strong>1h</strong></td><td class="loss">35%</td><td>8</td><td>15</td><td>23</td><td>25</td><td class="loss">-0.81%</td><td><span class="badge badge-red">TERRIBLE</span></td></tr>
+  <tr><td><strong>4h</strong></td><td class="win">71%</td><td>5</td><td>2</td><td>7</td><td>17</td><td class="win">+2.58%</td><td><span class="badge badge-green">STRONG</span> (low n)</td></tr>
+  <tr><td><strong>1d</strong></td><td class="loss">0%</td><td>0</td><td>1</td><td>1</td><td>15</td><td class="loss">-8.12%</td><td><span class="badge badge-yellow">INSUFFICIENT DATA</span></td></tr>
+</table>
+
+<p><strong>Key insight:</strong> 5m + 15m account for <strong>463 of 561 resolved trades (82.5%)</strong> and both are below 50% WR. They dominate the overall stats. 4h looks promising at 71% but only 7 resolved trades — statistically unreliable.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>🏆 3. WIN RATE BY MARKET QUALITY GRADE</h2>
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="section">
+<table>
+  <tr><th>Grade</th><th>Win Rate</th><th>Trades</th><th>Assessment</th></tr>
+  <tr><td><strong>A</strong> (best conditions)</td><td class="win">58%</td><td>262</td><td><span class="badge badge-green">PROFITABLE</span></td></tr>
+  <tr><td><strong>B+</strong></td><td class="loss">48%</td><td>62</td><td><span class="badge badge-yellow">BORDERLINE</span></td></tr>
+  <tr><td><strong>B</strong></td><td class="loss">44%</td><td>167</td><td><span class="badge badge-red">LOSING</span></td></tr>
+  <tr><td><strong>C</strong></td><td class="loss">27%</td><td>66</td><td><span class="badge badge-red">HEAVILY LOSING</span></td></tr>
+  <tr><td><strong>No-Trade</strong></td><td class="loss">21%</td><td>14</td><td><span class="badge badge-red">CATASTROPHIC</span></td></tr>
+</table>
+
+<h4>Grading Formula (5 factors, max 10 points):</h4>
+<pre>
+ATR ratio (recent/old):  >1.2 → +2, >0.8 → +1, else -1
+Volume ratio:            >1.2 → +2, >0.7 → +1, else -1
+EMA spread:              >1% → +2, >0.5% → +1, else -1
+Squeeze:                 active → +1, BBWP >0.50 → +1
+Aligned indicators:      ≥5 → +2, ≥3 → +1
+
+A: ≥7 pts  |  B+: ≥5 pts  |  B: ≥4 pts  |  C: ≥1 pt  |  No-Trade: <1 pt
+</pre>
+
+<p><strong>Key insight:</strong> Only A-grade trades are profitable. B trades lose, C trades hemorrhage. The engine should NOT be logging C or No-Trade signals — they destroy the calibration data and overall performance metrics.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>🎯 4. WIN RATE BY CONFIDENCE LEVEL</h2>
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="section">
+<table>
+  <tr><th>Confidence</th><th>Win Rate</th><th>Trades</th><th>Assessment</th></tr>
+  <tr><td><strong>High</strong> (confluence ≥ 0.38)</td><td class="loss">0%</td><td>1</td><td><span class="badge badge-yellow">NO DATA</span></td></tr>
+  <tr><td><strong>Medium</strong> (confluence ≥ 0.22)</td><td class="loss">7%</td><td>28</td><td><span class="badge badge-red">CATASTROPHIC</span></td></tr>
+  <tr><td><strong>Low</strong> (confluence < 0.22)</td><td class="win">51%</td><td>532</td><td><span class="badge badge-yellow">BEST (but barely)</span></td></tr>
+</table>
+
+<h4>Confidence Formula:</h4>
+<pre>
+confluence = aligned_score / max_possible_score  (after family dampening)
+
+High:   confluence ≥ 0.38
+Medium: confluence ≥ 0.22
+Low:    confluence < 0.22
+</pre>
+
+<p><strong>Key insight:</strong> This is INVERTED from what you'd expect. "Low" confidence trades perform best (51%), while "Medium" is catastrophic at 7%. This strongly suggests the confidence thresholds are miscalibrated — or that the scoring formula itself has issues. With family dampening of [1.0, 0.60, 0.35], achieving 0.38 confluence is extremely difficult, so almost everything falls into "Low."</p>
+<p><strong>The 7% WR on Medium confidence (28 trades)</strong> is deeply concerning. These 28 trades that supposedly had MORE indicator alignment performed drastically worse than the 532 with LOW alignment. This needs investigation.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>🔴 5. CALIBRATION DATA — PREDICTED vs ACTUAL</h2>
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="section critical">
+<h3>Probability Bucket Calibration</h3>
+
+<table>
+  <tr><th>Predicted Range</th><th>Avg Predicted</th><th>Actual WR</th><th>Deviation</th><th>Trades</th><th>Status</th></tr>
+  <tr><td>50-55%</td><td>53%</td><td class="win">51%</td><td>-2%</td><td>398</td><td><span class="badge badge-green">✓ Well-calibrated</span></td></tr>
+  <tr><td>55-60%</td><td>58%</td><td class="loss">43%</td><td class="loss">-15%</td><td>108</td><td><span class="badge badge-red">⚠ SEVERELY MISCALIBRATED</span></td></tr>
+  <tr><td>60-65%</td><td>63%</td><td class="loss">45%</td><td class="loss">-18%</td><td>44</td><td><span class="badge badge-red">⚠ SEVERELY MISCALIBRATED</span></td></tr>
+  <tr><td>65-70%</td><td>68%</td><td class="warn">50%</td><td class="loss">-18%</td><td>10</td><td><span class="badge badge-red">⚠ MISCALIBRATED</span> (low n)</td></tr>
+  <tr><td>70-75%</td><td>73%</td><td class="win">100%</td><td class="win">+27%</td><td>1</td><td><span class="badge badge-yellow">⚠ Needs data</span></td></tr>
+</table>
+
+<p><strong>Critical finding:</strong> The 50-55% bucket is well-calibrated (only -2% off), but EVERY bucket above 55% is severely over-confident. The engine says "58% chance" but only wins 43% of the time. This means the higher the engine's confidence, the LESS accurate it becomes — a fundamental problem.</p>
+
+<h4>Bayesian Calibration Logic (should self-correct):</h4>
+<pre>
+// Shrinkage factor: starts weak, strengthens with data
+shrinkage = min(1, bucket_n / 100)
+
+// 3-layer correction:
+1. Prob bucket:     diff × shrinkage × 0.6    (60% correction weight)
+2. Regime+TF:       diff × shrinkage × 0.3    (30% correction weight)
+3. Market quality:  diff × shrinkage × 0.2    (20% correction weight)
+
+// Example for 55-60% bucket (n=108):
+//   shrinkage = min(1, 108/100) = 1.0
+//   correction = (43% - 58%) × 1.0 × 0.6 = -9.0%
+//   So 58% raw → 49% calibrated (if working correctly)
+</pre>
+
+<p><strong>Question:</strong> The Bayesian calibration should have corrected this by now (n=108, shrinkage=1.0). Is it being applied before logging? Or is the calibrated probability what's shown, and the RAW probability is even more over-confident?</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>📊 6. WIN RATE BY REGIME</h2>
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="section">
+<table>
+  <tr><th>Regime</th><th>Win Rate</th><th>Trades</th></tr>
+  <tr><td><strong>Bull</strong></td><td class="loss">49%</td><td>559</td></tr>
+  <tr><td><strong>Bear</strong></td><td class="loss">0%</td><td>2</td></tr>
+  <tr><td><strong>Sideways</strong></td><td class="neutral">—</td><td>0</td></tr>
+</table>
+
+<h4>Regime Detection:</h4>
+<pre>
+if (price > EMA200 && EMA50 > EMA200) → bull
+if (price < EMA200 && EMA50 < EMA200) → bear
+else → sideways
+</pre>
+
+<p><strong>Note:</strong> 559 of 561 resolved trades are in "bull" regime. The engine has essentially zero data for bear or sideways conditions. Regime adjustment (±4 prob) may not be meaningful with this imbalance.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>🔧 7. COMPLETE INDICATOR SYSTEM</h2>
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="section">
+<h3>7 Technical Indicators with TF-Aware Weights</h3>
+
+<table>
+  <tr><th>Indicator</th><th>Family</th><th>5m/15m</th><th>30m/1h</th><th>4h</th><th>1d+</th></tr>
+  <tr><td><strong>RSI</strong></td><td>Mean Reversion</td><td class="win">22</td><td>18</td><td>12</td><td>10</td></tr>
+  <tr><td><strong>StochRSI</strong></td><td>Mean Reversion</td><td class="win">22</td><td>18</td><td>10</td><td>8</td></tr>
+  <tr><td><strong>BB (Bollinger)</strong></td><td>Mean Reversion</td><td>18</td><td>14</td><td>12</td><td>7</td></tr>
+  <tr><td><strong>MACD</strong></td><td>Trend</td><td>10</td><td>14</td><td>16</td><td>18</td></tr>
+  <tr><td><strong>EMA</strong></td><td>Trend</td><td>8</td><td>14</td><td class="win">20</td><td class="win">25</td></tr>
+  <tr><td><strong>Ichimoku</strong></td><td>Trend</td><td>5</td><td>10</td><td>16</td><td class="win">22</td></tr>
+  <tr><td><strong>Volume</strong></td><td>Flow</td><td>15</td><td>12</td><td>14</td><td>10</td></tr>
+</table>
+
+<h4>Family Dampening (reduces correlated signals):</h4>
+<pre>
+Mean Reversion: RSI, StochRSI, BB     → [1.0, 0.60, 0.35]
+Trend:          EMA, MACD, Ichimoku   → [1.0, 0.60, 0.35]
+Flow:           Volume                → [1.0] (only 1 member)
+
+1st indicator in family: 100% weight
+2nd indicator in family: 60% weight
+3rd indicator in family: 35% weight
+</pre>
+
+<h4>Scoring Logic:</h4>
+<pre>
+For each indicator:
+  IF aligned with trade direction:
+    score += weight × dampening
+    IF crossover detected: score += weight × 1.3 × dampening (30% cross bonus)
+  IF opposing trade direction:
+    score -= weight × 0.4
+  IF mean-rev vs trend conflict:
+    score += weight × 0.5 × dampening
+
+Additional:
+  Squeeze detected: score += 8, maxScore += 8
+  Volume drying up: score -= 5
+</pre>
+
+<h4>Probability Mapping (sigmoid):</h4>
+<pre>
+confluence = score / maxScore  (0 to 1)
+prob = 28 + (78 - 28) / (1 + exp(-7 × (confluence - 0.5)))
+
+This maps confluence to a 28-78% range via sigmoid:
+  0.0 → ~28%
+  0.3 → ~35%
+  0.5 → ~53%
+  0.7 → ~71%
+  1.0 → ~78%
+</pre>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>📐 8. CHART PATTERN DETECTION</h2>
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="section">
+<h3>7 Pattern Types with Base Win Rates</h3>
+
+<table>
+  <tr><th>Pattern</th><th>Base WR</th><th>Source</th><th>Concern</th></tr>
+  <tr><td>Double Bottom</td><td class="win">79%</td><td>Bulkowski</td><td>—</td></tr>
+  <tr><td>Ascending Triangle</td><td class="win">75%</td><td>Bulkowski</td><td>—</td></tr>
+  <tr><td><strong>Rising Wedge</strong></td><td class="warn">73%</td><td>?</td><td class="loss">Bulkowski ranks it LAST (~60%). Needs reduction to 55-60%</td></tr>
+  <tr><td>Double Top</td><td class="win">73%</td><td>Bulkowski</td><td>—</td></tr>
+  <tr><td>Falling Wedge</td><td>67%</td><td>Bulkowski</td><td>—</td></tr>
+  <tr><td>Descending Triangle</td><td>64%</td><td>Bulkowski</td><td>—</td></tr>
+  <tr><td>RSI Divergence</td><td>65%</td><td>General</td><td>—</td></tr>
+  <tr><td>MACD Divergence</td><td>60%</td><td>General</td><td>—</td></tr>
+  <tr><td>S/R Retest</td><td>66%</td><td>General</td><td>—</td></tr>
+  <tr><td>S/R Breakout</td><td>52%</td><td>General</td><td>—</td></tr>
+  <tr><td>Symmetrical Triangle</td><td>49%</td><td>Bulkowski</td><td>—</td></tr>
+  <tr><td>Bull/Bear Flag</td><td>41%</td><td>Modified</td><td>—</td></tr>
+  <tr><td>High-Tight Bull Flag</td><td class="win">77%</td><td>Bulkowski</td><td>—</td></tr>
+  <tr><td>MACD Cross</td><td>35%</td><td>General</td><td>Low — used more as confluence</td></tr>
+</table>
+
+<h4>Pattern Composite Score:</h4>
+<pre>
+score = baseWinRate × 0.90 (crypto modifier) × TF_WEIGHT × volumeMod × stageMod × regimeMod
+
+TF_WEIGHTS: { 5m: 0.30, 15m: 0.50, 30m: 0.60, 1h: 0.70, 4h: 0.90, 1D: 1.00 }
+STAGE_MOD:  { forming: 0.20, developing: 0.50, confirmed: 0.75, breakout: 1.0, retest: 1.15 }
+
+Multiple patterns: diminishing returns [1.0, 0.67, 0.50, 0.40, 0.33, 0.28, 0.25]
+Final adjustment: tanh compression, capped ±15% probability adjustment
+</pre>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>💰 9. RISK MANAGEMENT SYSTEM</h2>
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="section">
+<h3>Kelly Criterion — Eighth-Kelly (Backend)</h3>
+<pre>
+Base multipliers:
+  A + High confidence:   0.30
+  A + Medium confidence: 0.25
+  B:                     0.20
+  C:                     0.125
+  No-Trade:              0.075
+
+Kelly fraction: (prob × R:R - (1 - prob)) / R:R
+Safe Kelly: max(0, kellyFrac × kellyMult)
+Optimal leverage: floor(safeKelly / stopPct)
+
+Leverage caps by confidence:
+  High:   max 10x
+  Medium: max 5x
+  Low:    max 2x
+
+× MQ multiplier: A=1.0, B=0.8, C=0.5, No-Trade=0
+</pre>
+
+<h3 style="color:#ff4d6d">⚠ KNOWN BUG: Frontend Kelly Mismatch</h3>
+<pre>
+Frontend uses QUARTER-Kelly (2x the backend values):
+  A + High:   0.60 (vs backend 0.30)
+  A + Medium: 0.50 (vs backend 0.25)
+  B:          0.40 (vs backend 0.20)
+  C:          0.25 (vs backend 0.125)
+  No-Trade:   0.15 (vs backend 0.075)
+
+This means frontend position sizing suggestions are 2x too aggressive.
+</pre>
+
+<h3>Kill Switch & Safety Gates</h3>
+<pre>
+Kill Switch:
+  ≥20% drawdown → HALT all auto-trading (scanner keeps logging)
+  ≥5 consecutive losses → HALT all trading for 24h
+
+Leverage Gates:
+  WR <50% → max 1x
+  WR <55% → max 2x
+  WR <57% → max 3x
+  <200 resolved trades → max 2x
+  DD ≥15% → max 1x
+  DD ≥10% → max 2x
+  DD ≥5% → reduce 1 tier
+  ≥3 consecutive losses → max 2x
+  ≥2 consecutive losses → reduce 1 tier
+  Funding rate >0.1% opposing → max 2x
+  Portfolio heat cap: 6% max exposure
+</pre>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>🔄 10. R:R AND STOP/TARGET CALCULATION</h2>
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="section">
+<pre>
+Stop Loss:
+  Base: 2.0 × ATR
+  Structural snap: if S/R level within ±0.5 ATR window → snap to it
+  Clamp: [1.2x, 3.0x] ATR
+
+Take Profit:
+  prob ≥ 72%: 2.0 × ATR
+  prob ≥ 62%: 2.5 × ATR
+  else:       3.0 × ATR
+
+  MQ boost: A=1.25x, B=1.0x, C=0.85x
+
+Fees:
+  BloFin taker fee: 0.06% per side
+  Round-trip: 0.12% × leverage
+  Net target: targetPct - (roundTripFee / leverage)
+
+EV = (prob/100 × leveraged_target%) - ((1-prob/100) × leveraged_stop%)
+</pre>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>🧠 11. RESOLUTION LOGIC</h2>
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="section">
+<pre>
+Resolution runs every 5 minutes.
+
+For each pending prediction:
+  Fetch candles since prediction created_at
+  For LONG: check if any candle.low ≤ stopPrice (SL hit) or candle.high ≥ targetPrice (TP hit)
+  For SHORT: check if any candle.high ≥ stopPrice (SL hit) or candle.low ≤ targetPrice (TP hit)
+
+  If BOTH hit in same candle: compare which is closer to candle.open
+
+  Expiry:
+    Short TFs (5m, 15m, 30m): 7 days
+    Long TFs (1h, 4h, 1d): 30 days
+    Expired = outcome "expired" (neither win nor loss)
+
+PnL calculation:
+  Win (long):  ((targetPrice - entryPrice) / entryPrice) × 100
+  Loss (long): ((stopPrice - entryPrice) / entryPrice) × 100
+  (Inverted for shorts)
+</pre>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>🔍 12. CURRENT SCANNER STATE</h2>
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="section">
+<h3>Live Debug Data (as of March 17, 2026 08:33 UTC)</h3>
+
+<table>
+  <tr><th>Timeframe</th><th>Assets Scanned</th><th>Errors</th><th>Top Signal</th><th>Top Prob</th><th>Top EV</th><th>Candidates Logged</th></tr>
+  <tr><td>5m</td><td>19</td><td>1</td><td>SUI short</td><td>36%</td><td class="loss">-0.024</td><td class="loss">0</td></tr>
+  <tr><td>15m</td><td>19</td><td>1</td><td>BNB long</td><td>25%</td><td class="loss">-0.287</td><td class="loss">0</td></tr>
+  <tr><td>30m</td><td>19</td><td>1</td><td>BNB long</td><td>25%</td><td class="loss">-0.501</td><td class="loss">0</td></tr>
+  <tr><td>1h</td><td>10</td><td>9</td><td>SOL long</td><td>27%</td><td class="loss">-0.565</td><td class="loss">0</td></tr>
+  <tr><td>4h</td><td>9</td><td>9</td><td>XRP long</td><td>38%</td><td class="loss">-0.714</td><td class="loss">0</td></tr>
+  <tr><td>1d</td><td>19</td><td>1</td><td>DOT short</td><td>41%</td><td class="loss">-0.043</td><td class="loss">0</td></tr>
+</table>
+
+<p><strong>Current market conditions:</strong> No asset across any timeframe meets the logging threshold (prob ≥50% OR EV >0). All EVs are negative. This is why no new predictions have been logged for the past 2+ hours. The scanner is running correctly — the market is simply not offering any signals.</p>
+<p><strong>Note:</strong> 1h and 4h have 9 errors each — likely API rate limits or data gaps for some assets.</p>
+
+<h4>Auto-Trade Settings:</h4>
+<pre>
+Enabled: YES (Full Auto mode)
+Min Prob: 58%
+Trade Size: 10% of balance
+Max Open: 10 positions
+Leverage: 1x
+
+Per-TF Rules:
+  5m:  DISABLED (minProb 60)
+  15m: ENABLED  (minProb 58, minQuality C)
+  30m: ENABLED  (minProb 58, minQuality B)
+  1h:  ENABLED  (minProb 58, minQuality B)
+  4h:  DISABLED (minProb 60)
+  1d:  DISABLED (minProb 60)
+</pre>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>⚠️ 13. KNOWN BUGS & ISSUES</h2>
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="section critical">
+<table>
+  <tr><th>Bug</th><th>Severity</th><th>Status</th><th>Impact</th></tr>
+  <tr><td><strong>Kelly mismatch</strong> — Frontend uses 2× backend Kelly fractions</td><td><span class="badge badge-red">HIGH</span></td><td>NOT FIXED</td><td>Frontend sizing suggestions are 2x too aggressive</td></tr>
+  <tr><td><strong>sqrt(n) correlation discount</strong> — mathematically wrong</td><td><span class="badge badge-red">HIGH</span></td><td>NOT FIXED</td><td>4 positions at 50% each = 200% exposure (should be capped)</td></tr>
+  <tr><td><strong>Kill switch auto-dismiss</strong> — safety hole in confirm mode</td><td><span class="badge badge-yellow">MED</span></td><td>NOT FIXED</td><td>Kill switch can be accidentally dismissed</td></tr>
+  <tr><td><strong>Rising Wedge base WR</strong> — 0.73 vs Bulkowski's ~0.60</td><td><span class="badge badge-yellow">MED</span></td><td>NOT FIXED</td><td>Over-confident bearish wedge signals</td></tr>
+  <tr><td><strong>Confidence thresholds inverted</strong> — Medium=7% WR vs Low=51% WR</td><td><span class="badge badge-red">HIGH</span></td><td>NOT INVESTIGATED</td><td>Higher confluence = worse performance</td></tr>
+  <tr><td><strong>55-60% bucket miscalibrated</strong> — predicted 58%, actual 43%</td><td><span class="badge badge-red">HIGH</span></td><td>SELF-CORRECTING?</td><td>Over-confident signals in the most-traded bucket</td></tr>
+</table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>🤔 14. QUESTIONS FOR AI REVIEWERS</h2>
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="section" style="background:rgba(167,139,250,0.06);border-color:rgba(167,139,250,0.2)">
+
+<div class="question">
+<strong>Q1: Is it too early to make adjustments?</strong><br>
+We have 561 resolved trades (273W/288L) with 89 pending. By timeframe, 5m and 15m have strong sample sizes (275 and 188), but 4h has only 7 and 1d has 1. By quality grade, A has 262 trades (reliable) but others are thinner. Is this enough data to draw conclusions and make changes, or do we risk overfitting to a small sample?
+</div>
+
+<div class="question">
+<strong>Q2: Why does higher confidence = worse performance?</strong><br>
+Medium confidence (28 trades) has 7% WR vs Low (532 trades) at 51%. Is the confluence scoring fundamentally broken, or is this a sample size artifact? The family dampening [1.0, 0.60, 0.35] makes it nearly impossible to reach "High" (0.38 threshold) — is the compression too aggressive?
+</div>
+
+<div class="question">
+<strong>Q3: Should we stop logging 5m timeframe?</strong><br>
+5m is 49% WR on 275 trades with +0.42% avg P&L. The positive P&L suggests the R:R is carrying it, but the noise level is high. Is the volume of data from 5m useful for calibration learning, or is it polluting the model?
+</div>
+
+<div class="question">
+<strong>Q4: The 55-60% calibration bucket shows 43% actual WR (n=108). The Bayesian calibration should have corrected this (shrinkage=1.0, correction = -9%). Is the calibration being applied BEFORE logging, or is the logged probability the post-calibration value?</strong><br>
+If the logged 58% IS post-calibration, then the raw probability was even higher and the calibration isn't pulling hard enough. If the logged 58% is PRE-calibration, then the calibration should be working but maybe the correction weights (0.6, 0.3, 0.2) are too weak.
+</div>
+
+<div class="question">
+<strong>Q5: What specific changes would you recommend, in order of priority?</strong><br>
+Please rank: (a) raise minimum prob threshold, (b) stop logging C/No-Trade, (c) disable specific TFs, (d) recalibrate confidence thresholds, (e) increase Bayesian correction strength, (f) reduce indicator weights, (g) other.
+</div>
+
+<div class="question">
+<strong>Q6: The sigmoid mapping caps probability at 28-78%. Is this range appropriate?</strong><br>
+With a max of 78% + regime adjustment (+4) + pattern adjustment (+15 max) = theoretical max ~97%, but practical max is much lower due to dampening. Should the sigmoid range be tightened (e.g., 35-70%) to reduce over-confidence?
+</div>
+
+<div class="question">
+<strong>Q7: Architecture question — the engine logs predictions and self-corrects via Bayesian calibration. But the correction is applied to FUTURE predictions, not retroactively. Over time, should the early (uncalibrated) data be downweighted or discarded since the engine has learned from it?</strong>
+</div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>📋 15. RAW DATA SUMMARY</h2>
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="section">
+<h3>Complete System Constants</h3>
+<pre>
+ASSETS (20): BTC, ETH, SOL, SUI, BNB, DOGE, XRP, ADA, AVAX, LINK,
+             DOT, NEAR, ARB, OP, APT, INJ, PEPE, BONK, WIF, RENDER
+
+ALL_TIMEFRAMES: [5m, 15m, 30m, 1h, 4h, 1d]
+
+SCAN_INTERVALS: 5m→3min, 15m→5min, 30m→15min, 1h→30min, 4h→2h, 1d→8h
+
+TRADING_FEE_PCT: 0.06% per side (BloFin taker)
+
+FAMILY_DECAY: [1.0, 0.60, 0.35]
+
+PROB_RANGE: 28% (floor) to 78% (ceiling) via sigmoid
+  + regime adj: ±4%
+  + pattern adj: ±15% (tanh compressed)
+
+PROB_CAPS by confidence+quality:
+  High + A: 85%
+  High + B+: 80%
+  High + B: 76%
+  Medium: 72%
+  Low: 62%
+  C quality: 65% max
+  No-Trade: 55% max
+
+STOP: 2.0× ATR (clamped 1.2-3.0× ATR, structural snap ±0.5 ATR)
+TARGET: 2.0-3.0× ATR (inverse to prob, MQ boost)
+
+DEDUP WINDOWS: 5m→2h, 15m→4h, 30m→8h, 1h→16h, 4h→2d, 1d→5d
+EXPIRY: Short TFs→7 days, Long TFs→30 days
+RETENTION: Resolved→90 days, Abandoned→30 days
+</pre>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>📝 16. CHANGE LOG (Recent)</h2>
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="section">
+<table>
+  <tr><th>Date</th><th>Change</th><th>Impact</th></tr>
+  <tr><td>Mar 17</td><td>Scanner heartbeat status bar</td><td>UI visibility — no scoring change</td></tr>
+  <tr><td>Mar 17</td><td>Live BloFin positions in Active Positions panel</td><td>UI — no scoring change</td></tr>
+  <tr><td>Mar 17</td><td>Time-windowed dedup fix</td><td>More predictions logged per day (was blocking all inserts)</td></tr>
+  <tr><td>Mar 17</td><td>Bulletproof master try/catch on scanner</td><td>Scanner can never crash silently</td></tr>
+  <tr><td>Mar 16</td><td>patternResult temporal dead zone fix</td><td>Fixed scanner crash — predictions resumed</td></tr>
+  <tr><td>Mar 16</td><td>Market cycle v2.6 — bear phase detection</td><td>More accurate cycle positioning</td></tr>
+  <tr><td>Mar 15</td><td>Probability filter for scan history</td><td>UI filter — no scoring change</td></tr>
+</table>
+</div>
+
+<div style="text-align:center;padding:30px;color:#5a7a68;font-size:11px;border-top:1px solid rgba(255,255,255,0.05);margin-top:30px">
+  Generated March 17, 2026 · Ultimate Crypto Backtester Pro v2.7<br>
+  🤖 Please provide your analysis, recommendations, and assessment of whether we have sufficient data to make changes.
+</div>
+
+</body>
+</html>
