@@ -277,7 +277,7 @@ router.get('/history-all', async (req, res) => {
     const result = await pool.query(
       `SELECT id, asset, direction, probability, confidence, market_quality, rr_ratio, regime, timeframe,
               outcome, pnl, entry_price, stop_price, target_price, stop_pct, target_pct, executed,
-              created_at, resolved_at, last_seen_at, scan_count
+              created_at, resolved_at, last_seen_at, scan_count, signal_snapshot
        FROM best_trades_log ${where}
        ORDER BY COALESCE(last_seen_at, created_at) DESC LIMIT 5000`,
       params

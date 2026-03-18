@@ -3012,7 +3012,7 @@ function switchAuthView(view) {
           <div style="display:flex;align-items:center;justify-content:space-between">
             <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
               <input id="policyKillSwitch2" type="checkbox" checked
-                onchange="const e=$('policyKillSwitchEnabled'); if(e) e.checked=this.checked; const lbl=$('ksLabel2'); if(lbl) lbl.textContent=this.checked?'Kill switch ON':'Kill switch OFF'; lbl.style.color=this.checked?'#ff4d6d':'#5a7a68';"
+                onchange="if(!this.checked){if(!confirm('\u26a0\ufe0f WARNING: Disabling the kill switch removes automatic trading halt protection.\n\nAre you sure you want to disable it?')){this.checked=true;return;}} const e=$('policyKillSwitchEnabled'); if(e) e.checked=this.checked; const lbl=$('ksLabel2'); if(lbl) lbl.textContent=this.checked?'Kill switch ON':'Kill switch OFF'; lbl.style.color=this.checked?'#ff4d6d':'#5a7a68';"
                 style="width:12px;height:12px;accent-color:#ff4d6d;cursor:pointer">
               <span id="ksLabel2" style="font-size:8px;color:#ff4d6d;font-family:'Space Mono',monospace">Kill switch ON</span>
             </label>
@@ -13727,7 +13727,7 @@ function detectChartPatterns(d, tf, regime) {
       let stage = 'developing';
       if (c[last] < lSlice[lSlice.length-1] + lReg.slope) stage = 'breakout';
       else if (hReg.r2 > 0.5 && lReg.r2 > 0.5) stage = 'confirmed';
-      patterns.push({ name: 'Rising Wedge', type: 'reversal', direction: 'bearish', baseWinRate: 0.73, stage, score: scoreP(0.73, stage, 'reversal'), expiresInBars: DECAY[tf]||10, description: `${stage} rising wedge` });
+      patterns.push({ name: 'Rising Wedge', type: 'reversal', direction: 'bearish', baseWinRate: 0.58, stage, score: scoreP(0.58, stage, 'reversal'), expiresInBars: DECAY[tf]||10, description: `${stage} rising wedge` });
     }
     // Ascending triangle: flat highs, rising lows
     if (Math.abs(hSlope) < 0.0003 && lSlope > 0.0005) {
@@ -13758,7 +13758,7 @@ function detectChartPatterns(d, tf, regime) {
     if (Math.abs(hi1.v - hi2.v)/hi1.v < 0.02 && hi2.i - hi1.i >= 10 && hi2.i - hi1.i <= 50) {
       const neckline = Math.min(...d.slice(hi1.i, hi2.i+1).map(x => x.l));
       let stage = c[last] < neckline ? 'breakout' : c[last] < neckline * 1.01 ? 'confirmed' : 'forming';
-      patterns.push({ name: 'Double Top', type: 'reversal', direction: 'bearish', baseWinRate: 0.73, stage, score: scoreP(0.73, stage, 'reversal'), expiresInBars: DECAY[tf]||10, description: `${stage} double top at ${hi2.v.toFixed(2)}` });
+      patterns.push({ name: 'Double Top', type: 'reversal', direction: 'bearish', baseWinRate: 0.60, stage, score: scoreP(0.60, stage, 'reversal'), expiresInBars: DECAY[tf]||10, description: `${stage} double top at ${hi2.v.toFixed(2)}` });
     }
   }
 
