@@ -266,6 +266,11 @@ async function refreshCalibrationCache() {
   if (now - calibrationCache.lastRefresh < calibrationCache.refreshIntervalMs) return;
 
   try {
+    // Only learn from clean assets and post-fix trades (2026-03-18 calibration reset)
+    const CALIBRATION_RESET_DATE = '2026-03-18T00:00:00Z';
+    const CALIBRATION_EXCLUDED_ASSETS = ['AVAX','SUI','BNB','PEPE','APT','RENDER'];
+    const excludeClause = `AND asset NOT IN (${CALIBRATION_EXCLUDED_ASSETS.map(a => `'${a}'`).join(',')}) AND resolved_at > '${CALIBRATION_RESET_DATE}'`;
+
     // 1. Probability bucket accuracy (predicted vs actual)
     // #5 Recency weighting: use EWMA-style approach — weight recent trades more heavily
     // We use a time-decay window: trades from last 30 days get full weight, older trades decay
@@ -288,7 +293,7 @@ async function refreshCalibrationCache() {
         COUNT(*) FILTER (WHERE outcome IN ('win','loss') AND resolved_at > NOW() - INTERVAL '30 days') AS n_recent,
         COUNT(*) FILTER (WHERE outcome = 'win' AND resolved_at > NOW() - INTERVAL '30 days') AS wins_recent
       FROM best_trades_log
-      WHERE outcome IN ('win','loss')
+      WHERE outcome IN ('win','loss') ${excludeClause}
       GROUP BY bucket, bucket_mid ORDER BY bucket_mid
     `);
     calibrationCache.byProbBucket = {};
@@ -316,7 +321,7 @@ async function refreshCalibrationCache() {
         COUNT(*) FILTER (WHERE outcome IN ('win','loss')) AS n,
         COUNT(*) FILTER (WHERE outcome = 'win') AS wins
       FROM best_trades_log
-      WHERE outcome IN ('win','loss') AND regime IS NOT NULL
+      WHERE outcome IN ('win','loss') AND regime IS NOT NULL ${excludeClause}
       GROUP BY regime, timeframe
     `);
     calibrationCache.byRegimeTF = {};
@@ -335,7 +340,7 @@ async function refreshCalibrationCache() {
         COUNT(*) FILTER (WHERE outcome = 'win') AS wins,
         ROUND(AVG(pnl) FILTER (WHERE outcome IN ('win','loss')), 4) AS avg_pnl
       FROM best_trades_log
-      WHERE outcome IN ('win','loss') AND market_quality IS NOT NULL
+      WHERE outcome IN ('win','loss') AND market_quality IS NOT NULL ${excludeClause}
       GROUP BY market_quality
     `);
     calibrationCache.byQuality = {};
@@ -355,7 +360,7 @@ async function refreshCalibrationCache() {
         COUNT(*) FILTER (WHERE outcome IN ('win','loss')) AS n,
         COUNT(*) FILTER (WHERE outcome = 'win') AS wins
       FROM best_trades_log
-      WHERE outcome IN ('win','loss') AND confidence IS NOT NULL
+      WHERE outcome IN ('win','loss') AND confidence IS NOT NULL ${excludeClause}
       GROUP BY confidence
     `);
     calibrationCache.byConfidence = {};
@@ -366,12 +371,13 @@ async function refreshCalibrationCache() {
       }
     }
 
-    // 5. Overall stats for Kelly graduation
+    // 5. Overall stats for Kelly graduation (filtered to clean post-fix data)
     const overallRes = await pool.query(`
       SELECT
         COUNT(*) FILTER (WHERE outcome IN ('win','loss')) AS total_resolved,
         COUNT(*) FILTER (WHERE outcome = 'win') AS wins
       FROM best_trades_log
+      WHERE 1=1 ${excludeClause}
     `);
     const totalResolved = parseInt(overallRes.rows[0].total_resolved);
     const overallWR = totalResolved > 0 ? parseInt(overallRes.rows[0].wins) / totalResolved : 0.5;
@@ -421,7 +427,7 @@ function calibrateProb(rawProb, regime, tf, marketQuality) {
     const diff = actualWR - bucket.predicted;  // e.g. 83 - 67 = +16
     // Shrinkage: weight correction by min(1, n/100) — full correction at 100+ samples (#20 consensus: raised from 50)
     const shrinkage = Math.min(1, bucket.n / 100);
-    const correction = diff * shrinkage * 0.8; // apply 80% of the correction
+    const correction = diff * shrinkage * 0.4; // was 0.8, reduced to 0.4 until clean post-fix data builds up (2026-03-18)
     adjustedProb += correction;
   }
 
@@ -754,10 +760,12 @@ function scoreConfluence(signals, direction, regime, tf, marketQuality) {
   const isMedShortTF = medShortTFs.includes(tf);
   const isLongTF = longTFs.includes(tf);
 
-  const WEIGHTS = isShortTF ? { EMA: 8, Ichimoku: 5, MACD: 10, RSI: 22, StochRSI: 22, BB: 18, Volume: 15 }
-    : isMedShortTF ? { EMA: 14, Ichimoku: 10, MACD: 14, RSI: 18, StochRSI: 18, BB: 14, Volume: 12 }
-    : isLongTF ? { EMA: 25, Ichimoku: 22, MACD: 18, RSI: 10, StochRSI: 8, BB: 7, Volume: 10 }
-    : { EMA: 20, Ichimoku: 16, MACD: 16, RSI: 12, StochRSI: 10, BB: 12, Volume: 14 };
+  // Weights rebalanced 2026-03-18: EMA (+25pp edge) and Ichimoku (+22pp edge) highest,
+  // MACD (+14pp edge) elevated, mean-reversion (RSI/StochRSI/BB) drastically reduced (bear-only now)
+  const WEIGHTS = isShortTF ? { RSI: 7, StochRSI: 3, BB: 2, Volume: 15, MACD: 18, EMA: 30, Ichimoku: 25 }    // 5m, 15m — total 100
+    : isMedShortTF ? { RSI: 8, StochRSI: 5, BB: 3, Volume: 14, MACD: 18, EMA: 28, Ichimoku: 24 }              // 30m, 1h — total 100
+    : isLongTF ? { RSI: 6, StochRSI: 3, BB: 3, Volume: 12, MACD: 20, EMA: 30, Ichimoku: 26 }                   // 4h, 1d — total 100
+    : { RSI: 8, StochRSI: 5, BB: 3, Volume: 14, MACD: 18, EMA: 28, Ichimoku: 24 };                             // fallback — total 100
 
   // Family dampening
   const FAMILIES = { RSI: 'meanrev', StochRSI: 'meanrev', BB: 'meanrev', EMA: 'trend', MACD: 'trend', Ichimoku: 'trend', Volume: 'flow' };
@@ -780,10 +788,21 @@ function scoreConfluence(signals, direction, regime, tf, marketQuality) {
     if (!sig) continue;
     maxScore += w;
 
-    const aligned = sig[dir] === true;
+    let aligned = sig[dir] === true;
     const opposing = sig[opp] === true;
     const crossBonus = (dir === 'bull' && sig.crossBull) || (dir === 'bear' && sig.crossBear);
     const isMeanRev = meanRevInds.includes(ind);
+
+    // ── DISABLE MEAN-REVERSION BULL SIGNALS FOR LONGS ──
+    // Data analysis on 619+ trades shows these signals destroy long edge:
+    // RSI oversold bull signal DISABLED — data shows -18.1pp edge on 619 trades
+    // BB lower band bull signal DISABLED — data shows -13.8pp edge
+    // StochRSI oversold bull signal DISABLED — data shows -7.6pp edge
+    // Keep bear signals (overbought/upper band) for shorts — those work.
+    if (dir === 'bull' && aligned && (ind === 'RSI' || ind === 'BB' || ind === 'StochRSI')) {
+      aligned = false; // treat as neutral for longs
+    }
+
     const meanRevConflict = isMeanRev && (
       (aligned && dir === 'bull' && strongTrendBear) ||
       (aligned && dir === 'bear' && strongTrendBull)
@@ -1200,8 +1219,18 @@ class BestTradesScanner {
           console.log(`[BestTrades] ${asset.label} ${tf} PATTERNS: ${patternResult.patternSummary} → adj: ${patternAdj > 0 ? '+' : ''}${patternAdj.toFixed(1)}%`);
         }
 
+        // ── VOLUME AS MOMENTUM SIGNAL — data shows 1-2x is danger zone, >3x is real ──
+        const volumeRatio = signals.Volume?.ratio || 1;
+        let volAdjustedProb = best.prob;
+        if (volumeRatio > 5.0)       volAdjustedProb *= 1.20;
+        else if (volumeRatio > 3.0)  volAdjustedProb *= 1.12;
+        else if (volumeRatio > 2.0)  volAdjustedProb *= 1.05;
+        else if (volumeRatio >= 1.0 && volumeRatio < 2.0) volAdjustedProb *= 0.95; // danger zone
+        else if (volumeRatio < 0.5)  volAdjustedProb *= 0.85;
+        // else: no adjustment
+
         // ── CALIBRATION: Adjust probability using historical accuracy ──
-        const rawProb = best.prob;
+        const rawProb = Math.max(25, Math.min(85, Math.round(volAdjustedProb)));
         let calibratedProb = calibrateProb(rawProb, regime, tf, marketQuality);
         calibratedProb += mtfBonus; // Apply multi-TF confluence adjustment
         calibratedProb += patternAdj; // Apply chart pattern adjustment (±15% cap)
@@ -1393,6 +1422,13 @@ class BestTradesScanner {
       return;
     }
 
+    // 2026-03-18: Disable 1h auto-trade execution (keep scanning for data collection)
+    // Data shows 1h signals underperform — scan-only until quality improves
+    if (tf === '1h') {
+      console.log(`[BestTrades] Auto-trade: 1h DISABLED (scan-only) — 2026-03-18 quality floor`);
+      return;
+    }
+
     // Check per-TF rule: if this TF is explicitly disabled, skip
     const tfRule = this.settings.tfRules[tf];
     if (tfRule && tfRule.enabled === false) {
@@ -1402,7 +1438,8 @@ class BestTradesScanner {
 
     // Per-TF thresholds (fallback to global settings)
     const minProb = (tfRule && tfRule.minProb) || this.settings.minProb;
-    const minQuality = (tfRule && tfRule.minQuality) || null;
+    // 2026-03-18: Raise 15m quality floor from C to B
+    const minQuality = tf === '15m' ? 'B' : ((tfRule && tfRule.minQuality) || null);
     const minConfidence = (tfRule && tfRule.minConfidence) || null;
 
     // Clean stale trade dedup keys (expire after 30 min for short TFs, 4h for long TFs)

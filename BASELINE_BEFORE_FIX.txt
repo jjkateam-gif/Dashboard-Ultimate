@@ -1,0 +1,9 @@
+BASELINE BEFORE FIX — 2026-03-18 20:21:37 EAST
+
+Query: SELECT COUNT(*) as total_resolved, AVG(CASE WHEN outcome='win' THEN 1.0 ELSE 0.0 END) as current_wr, AVG(probability) as avg_prob, AVG(raw_probability) as avg_raw_prob FROM best_trades_log WHERE resolved_at IS NOT NULL AND asset NOT IN ('AVAX','SUI','BNB','PEPE','APT','RENDER');
+
+Results:
+  total_resolved: 388
+  current_wr:     0.5541 (55.41%)
+  avg_prob:       49.30
+  avg_raw_prob:   38.94

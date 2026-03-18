@@ -15529,14 +15529,16 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
   const isMedShortTF = medShortTFs.includes(tf);
   const isLongTF     = longTFs.includes(tf);
 
+  // Weights rebalanced 2026-03-18: EMA (+25pp edge) and Ichimoku (+22pp edge) highest,
+  // MACD (+14pp edge) elevated, mean-reversion (RSI/StochRSI/BB) drastically reduced (bear-only now)
   const WEIGHTS = isShortTF ? {
-    EMA: 8, Ichimoku: 5, MACD: 10, RSI: 22, StochRSI: 22, BB: 18, Volume: 15,
+    RSI: 7, StochRSI: 3, BB: 2, Volume: 15, MACD: 18, EMA: 30, Ichimoku: 25,    // 5m, 15m — total 100
   } : isMedShortTF ? {
-    EMA: 14, Ichimoku: 10, MACD: 14, RSI: 18, StochRSI: 18, BB: 14, Volume: 12,
+    RSI: 8, StochRSI: 5, BB: 3, Volume: 14, MACD: 18, EMA: 28, Ichimoku: 24,    // 30m, 1h — total 100
   } : isLongTF ? {
-    EMA: 25, Ichimoku: 22, MACD: 18, RSI: 10, StochRSI: 8, BB: 7, Volume: 10,
+    RSI: 6, StochRSI: 3, BB: 3, Volume: 12, MACD: 20, EMA: 30, Ichimoku: 26,    // 4h, 1d — total 100
   } : {
-    EMA: 20, Ichimoku: 16, MACD: 16, RSI: 12, StochRSI: 10, BB: 12, Volume: 14,
+    RSI: 8, StochRSI: 5, BB: 3, Volume: 14, MACD: 18, EMA: 28, Ichimoku: 24,    // fallback — total 100
   };
 
   // ══════════════════════════════════════════════════════════════
@@ -15576,10 +15578,20 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
     if (!sig) continue;
     maxScore += w;
 
-    const aligned  = sig[dir]  === true;
+    let aligned  = sig[dir]  === true;
     const opposing = sig[opp]  === true;
     const crossBonus = (dir === 'bull' && (sig.crossBull || sig.cross === true && sig.bull)) ||
                        (dir === 'bear' && (sig.crossBear || sig.cross === true && sig.bear));
+
+    // ── DISABLE MEAN-REVERSION BULL SIGNALS FOR LONGS ──
+    // Data analysis on 619+ trades shows these signals destroy long edge:
+    // RSI oversold bull signal DISABLED — data shows -18.1pp edge on 619 trades
+    // BB lower band bull signal DISABLED — data shows -13.8pp edge
+    // StochRSI oversold bull signal DISABLED — data shows -7.6pp edge
+    // Keep bear signals (overbought/upper band) for shorts — those work.
+    if (dir === 'bull' && aligned && (ind === 'RSI' || ind === 'BB' || ind === 'StochRSI')) {
+      aligned = false; // treat as neutral for longs
+    }
 
     // Mean-reversion vs trend conflict
     const isMeanRev = meanRevInds.includes(ind);
@@ -16086,6 +16098,17 @@ async function runProbEngine() {
       const shortScore = scoreConfluence(signals, 'short', regimeData.regime, fundingRate, tf, crossTFData, marketQuality, etfBias);
 
       const best = longScore.prob >= shortScore.prob ? { ...longScore, direction: 'long' } : { ...shortScore, direction: 'short' };
+
+      // ── VOLUME AS MOMENTUM SIGNAL — data shows 1-2x is danger zone, >3x is real ──
+      const _volRatio = signals.Volume?.ratio || 1;
+      if (_volRatio > 5.0)       { best.prob *= 1.20; longScore.prob *= 1.20; shortScore.prob *= 1.20; }
+      else if (_volRatio > 3.0)  { best.prob *= 1.12; longScore.prob *= 1.12; shortScore.prob *= 1.12; }
+      else if (_volRatio > 2.0)  { best.prob *= 1.05; longScore.prob *= 1.05; shortScore.prob *= 1.05; }
+      else if (_volRatio >= 1.0 && _volRatio < 2.0) { best.prob *= 0.95; longScore.prob *= 0.95; shortScore.prob *= 0.95; } // danger zone
+      else if (_volRatio < 0.5)  { best.prob *= 0.85; longScore.prob *= 0.85; shortScore.prob *= 0.85; }
+      best.prob = Math.max(25, Math.min(85, Math.round(best.prob)));
+      longScore.prob = Math.max(25, Math.min(85, Math.round(longScore.prob)));
+      shortScore.prob = Math.max(25, Math.min(85, Math.round(shortScore.prob)));
 
       // Apply chart pattern probability adjustment (±15% cap)
       const patternAdj = patternResult.probabilityAdj || 0;
