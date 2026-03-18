@@ -302,4 +302,106 @@ router.get('/stream', (req, res) => {
   req.on('close', () => { clearInterval(keepAlive); scanner.removeSseClient(res); });
 });
 
+// GET /best-trades/comparison — pre-fix vs post-fix stats
+router.get('/comparison', async (req, res) => {
+  try {
+    const FIX_DATE = '2026-03-18T00:00:00Z';
+
+    // Pre-fix stats (trades created before March 18)
+    const preRes = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE outcome IS NOT NULL) as resolved,
+        COUNT(*) FILTER (WHERE outcome='win') as wins,
+        COUNT(*) FILTER (WHERE outcome='loss') as losses,
+        COUNT(*) FILTER (WHERE outcome IS NULL) as pending,
+        ROUND(100.0 * COUNT(*) FILTER (WHERE outcome='win') / NULLIF(COUNT(*) FILTER (WHERE outcome IS NOT NULL), 0), 1) as wr,
+        ROUND(AVG(CASE WHEN pnl IS NOT NULL THEN pnl END)::numeric, 2) as avg_pnl,
+        ROUND(AVG(CASE WHEN outcome='win' THEN pnl END)::numeric, 2) as avg_win,
+        ROUND(AVG(CASE WHEN outcome='loss' THEN pnl END)::numeric, 2) as avg_loss
+      FROM best_trades_log WHERE created_at < $1
+    `, [FIX_DATE]);
+
+    // Post-fix stats (trades created after March 18)
+    const postRes = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE outcome IS NOT NULL) as resolved,
+        COUNT(*) FILTER (WHERE outcome='win') as wins,
+        COUNT(*) FILTER (WHERE outcome='loss') as losses,
+        COUNT(*) FILTER (WHERE outcome IS NULL) as pending,
+        ROUND(100.0 * COUNT(*) FILTER (WHERE outcome='win') / NULLIF(COUNT(*) FILTER (WHERE outcome IS NOT NULL), 0), 1) as wr,
+        ROUND(AVG(CASE WHEN pnl IS NOT NULL THEN pnl END)::numeric, 2) as avg_pnl,
+        ROUND(AVG(CASE WHEN outcome='win' THEN pnl END)::numeric, 2) as avg_win,
+        ROUND(AVG(CASE WHEN outcome='loss' THEN pnl END)::numeric, 2) as avg_loss
+      FROM best_trades_log WHERE created_at >= $1
+    `, [FIX_DATE]);
+
+    // Pre-fix per-asset (excluding banned)
+    const preAssetRes = await pool.query(`
+      SELECT asset,
+        COUNT(*) FILTER (WHERE outcome IS NOT NULL) as resolved,
+        COUNT(*) FILTER (WHERE outcome='win') as wins,
+        COUNT(*) FILTER (WHERE outcome='loss') as losses,
+        ROUND(100.0 * COUNT(*) FILTER (WHERE outcome='win') / NULLIF(COUNT(*) FILTER (WHERE outcome IS NOT NULL), 0), 1) as wr
+      FROM best_trades_log WHERE created_at < $1 AND outcome IS NOT NULL
+      GROUP BY asset ORDER BY wr DESC
+    `, [FIX_DATE]);
+
+    // Post-fix per-asset
+    const postAssetRes = await pool.query(`
+      SELECT asset,
+        COUNT(*) FILTER (WHERE outcome IS NOT NULL) as resolved,
+        COUNT(*) FILTER (WHERE outcome='win') as wins,
+        COUNT(*) FILTER (WHERE outcome='loss') as losses,
+        ROUND(100.0 * COUNT(*) FILTER (WHERE outcome='win') / NULLIF(COUNT(*) FILTER (WHERE outcome IS NOT NULL), 0), 1) as wr
+      FROM best_trades_log WHERE created_at >= $1 AND outcome IS NOT NULL
+      GROUP BY asset ORDER BY wr DESC
+    `, [FIX_DATE]);
+
+    // Pre-fix per-TF
+    const preTfRes = await pool.query(`
+      SELECT timeframe,
+        COUNT(*) FILTER (WHERE outcome IS NOT NULL) as resolved,
+        ROUND(100.0 * COUNT(*) FILTER (WHERE outcome='win') / NULLIF(COUNT(*) FILTER (WHERE outcome IS NOT NULL), 0), 1) as wr
+      FROM best_trades_log WHERE created_at < $1 AND outcome IS NOT NULL
+      GROUP BY timeframe ORDER BY timeframe
+    `, [FIX_DATE]);
+
+    // Post-fix per-TF
+    const postTfRes = await pool.query(`
+      SELECT timeframe,
+        COUNT(*) FILTER (WHERE outcome IS NOT NULL) as resolved,
+        ROUND(100.0 * COUNT(*) FILTER (WHERE outcome='win') / NULLIF(COUNT(*) FILTER (WHERE outcome IS NOT NULL), 0), 1) as wr
+      FROM best_trades_log WHERE created_at >= $1 AND outcome IS NOT NULL
+      GROUP BY timeframe ORDER BY timeframe
+    `, [FIX_DATE]);
+
+    // Pre-fix by quality grade
+    const preQualRes = await pool.query(`
+      SELECT market_quality,
+        COUNT(*) FILTER (WHERE outcome IS NOT NULL) as resolved,
+        ROUND(100.0 * COUNT(*) FILTER (WHERE outcome='win') / NULLIF(COUNT(*) FILTER (WHERE outcome IS NOT NULL), 0), 1) as wr
+      FROM best_trades_log WHERE created_at < $1 AND outcome IS NOT NULL
+      GROUP BY market_quality ORDER BY wr DESC
+    `, [FIX_DATE]);
+
+    // Post-fix by quality grade
+    const postQualRes = await pool.query(`
+      SELECT market_quality,
+        COUNT(*) FILTER (WHERE outcome IS NOT NULL) as resolved,
+        ROUND(100.0 * COUNT(*) FILTER (WHERE outcome='win') / NULLIF(COUNT(*) FILTER (WHERE outcome IS NOT NULL), 0), 1) as wr
+      FROM best_trades_log WHERE created_at >= $1 AND outcome IS NOT NULL
+      GROUP BY market_quality ORDER BY wr DESC
+    `, [FIX_DATE]);
+
+    res.json({
+      fixDate: FIX_DATE,
+      pre: { stats: preRes.rows[0], assets: preAssetRes.rows, timeframes: preTfRes.rows, quality: preQualRes.rows },
+      post: { stats: postRes.rows[0], assets: postAssetRes.rows, timeframes: postTfRes.rows, quality: postQualRes.rows },
+      baseline: { wr: 55.41, backtestTarget: 72.6 }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

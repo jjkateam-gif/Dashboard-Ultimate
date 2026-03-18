@@ -2798,6 +2798,8 @@ function switchAuthView(view) {
     <div id="scannerHeartbeat" style="padding:6px 12px;margin-bottom:8px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.06);border-radius:6px;font-family:'Space Mono',monospace;font-size:8px;color:#5a7a68"></div>
     <!-- Calibration Chart (Predicted vs Actual Win Rate) -->
     <div id="scanCalibrationChart" style="margin-bottom:12px"></div>
+    <!-- Before vs After Comparison Panel -->
+    <div id="comparisonPanel" style="margin-bottom:12px"></div>
     <!-- Per-Asset Performance & Ban Management -->
     <div id="assetStatsPanel" style="margin-bottom:12px"></div>
     <!-- Watchlist: Pre-Signal Tracking -->
@@ -14482,6 +14484,9 @@ function _renderUnifiedUI(stats, history) {
       </div>`;
   }
 
+  // Before vs After comparison panel
+  _renderComparisonPanel();
+
   // Per-asset stats panel
   _renderAssetStatsPanel();
 
@@ -14490,6 +14495,165 @@ function _renderUnifiedUI(stats, history) {
 
   // Scan history table
   _renderHistoryTable(history);
+}
+
+// ── Before vs After Comparison Panel ────────────────────
+let _comparisonInterval = null;
+
+async function _renderComparisonPanel() {
+  const panel = document.getElementById('comparisonPanel');
+  if (!panel) return;
+
+  const token = localStorage.getItem('dash_token');
+  const backend = window.CBP_BACKEND || 'http://localhost:3001';
+
+  try {
+    const r = await fetch(`${backend}/best-trades/comparison`, { headers: { 'Authorization': 'Bearer ' + token } });
+    const data = await r.json();
+    const pre = data.pre?.stats || {};
+    const post = data.post?.stats || {};
+    const baseline = data.baseline || {};
+
+    const preWR = Number(pre.wr || 0);
+    const postWR = Number(post.wr || 0);
+    const delta = (postWR - preWR).toFixed(1);
+    const deltaColor = delta > 0 ? '#00f5a0' : delta < 0 ? '#ff4d6d' : '#5a7a68';
+    const deltaIcon = delta > 0 ? '\u25B2' : delta < 0 ? '\u25BC' : '\u2500';
+    const targetDelta = (postWR - baseline.backtestTarget).toFixed(1);
+
+    // Build per-asset comparison rows
+    const preAssetMap = {};
+    (data.pre?.assets || []).forEach(a => { preAssetMap[a.asset] = a; });
+    const postAssets = data.post?.assets || [];
+
+    const assetRows = postAssets.map(a => {
+      const preA = preAssetMap[a.asset] || {};
+      const preWr = Number(preA.wr || 0);
+      const postWr = Number(a.wr || 0);
+      const d = (postWr - preWr).toFixed(1);
+      const dCol = d > 0 ? '#00f5a0' : d < 0 ? '#ff4d6d' : '#5a7a68';
+      return `<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+        <td style="padding:3px 6px;font-weight:700">${a.asset}</td>
+        <td style="padding:3px 6px;color:#5a7a68">${preWr || '\u2014'}%</td>
+        <td style="padding:3px 6px;color:${postWr >= 55 ? '#00f5a0' : postWr >= 45 ? '#f5c400' : '#ff4d6d'};font-weight:700">${postWr || '\u2014'}%</td>
+        <td style="padding:3px 6px;color:${dCol}">${d > 0 ? '+' : ''}${d}pp</td>
+        <td style="padding:3px 6px;color:#5a7a68">${a.resolved || 0}</td>
+      </tr>`;
+    }).join('');
+
+    // Build per-TF comparison rows
+    const preTfMap = {};
+    (data.pre?.timeframes || []).forEach(t => { preTfMap[t.timeframe] = t; });
+    const tfRows = (data.post?.timeframes || []).map(t => {
+      const preT = preTfMap[t.timeframe] || {};
+      const d = (Number(t.wr || 0) - Number(preT.wr || 0)).toFixed(1);
+      const dCol = d > 0 ? '#00f5a0' : d < 0 ? '#ff4d6d' : '#5a7a68';
+      return `<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+        <td style="padding:3px 6px;font-weight:700">${t.timeframe}</td>
+        <td style="padding:3px 6px;color:#5a7a68">${preT.wr || '\u2014'}%</td>
+        <td style="padding:3px 6px;color:${Number(t.wr||0) >= 55 ? '#00f5a0' : '#f5c400'};font-weight:700">${t.wr || '\u2014'}%</td>
+        <td style="padding:3px 6px;color:${dCol}">${d > 0 ? '+' : ''}${d}pp</td>
+        <td style="padding:3px 6px;color:#5a7a68">${t.resolved || 0}</td>
+      </tr>`;
+    }).join('');
+
+    const collapsed = window._comparisonCollapsed === true;
+    const toggleBtn = `<button onclick="window._comparisonCollapsed = !window._comparisonCollapsed; _renderComparisonPanel();" style="background:none;border:1px solid rgba(0,245,160,0.2);color:#00f5a0;padding:3px 10px;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-size:8px">${collapsed ? '\u25B6 SHOW' : '\u25BC HIDE'}</button>`;
+
+    if (collapsed) {
+      panel.innerHTML = `
+        <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(0,245,160,0.15);border-radius:8px;padding:10px 14px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-size:10px;font-weight:700;color:#00f5a0;font-family:'Space Mono',monospace">BEFORE vs AFTER \u2014 Signal Overhaul (March 18) <span style="color:${deltaColor};font-size:9px">${deltaIcon} ${delta > 0 ? '+' : ''}${delta}pp</span></div>
+            ${toggleBtn}
+          </div>
+        </div>`;
+      return;
+    }
+
+    panel.innerHTML = `
+      <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(0,245,160,0.15);border-radius:8px;padding:12px 14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div style="font-size:10px;font-weight:700;color:#00f5a0;font-family:'Space Mono',monospace">BEFORE vs AFTER \u2014 Signal Overhaul (March 18)</div>
+          ${toggleBtn}
+        </div>
+
+        <!-- Main comparison cards -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px;font-family:'Space Mono',monospace">
+          <!-- PRE-FIX -->
+          <div style="background:rgba(255,77,109,0.05);border:1px solid rgba(255,77,109,0.15);border-radius:6px;padding:10px;text-align:center">
+            <div style="font-size:7px;color:#ff4d6d;font-weight:700;margin-bottom:6px">BEFORE FIX</div>
+            <div style="font-size:22px;font-weight:700;color:#ff4d6d">${preWR}%</div>
+            <div style="font-size:7px;color:#5a7a68;margin-top:2px">${pre.wins || 0}W / ${pre.losses || 0}L \u00B7 ${pre.resolved || 0} trades</div>
+            <div style="font-size:7px;color:#5a7a68;margin-top:2px">Avg Win ${pre.avg_win || '?'}% \u00B7 Loss ${pre.avg_loss || '?'}%</div>
+          </div>
+
+          <!-- POST-FIX -->
+          <div style="background:rgba(0,245,160,0.05);border:1px solid rgba(0,245,160,0.15);border-radius:6px;padding:10px;text-align:center">
+            <div style="font-size:7px;color:#00f5a0;font-weight:700;margin-bottom:6px">AFTER FIX</div>
+            <div style="font-size:22px;font-weight:700;color:#00f5a0">${postWR || '\u2014'}%</div>
+            <div style="font-size:7px;color:#5a7a68;margin-top:2px">${post.wins || 0}W / ${post.losses || 0}L \u00B7 ${post.resolved || 0} trades</div>
+            <div style="font-size:7px;color:#5a7a68;margin-top:2px">Avg Win ${post.avg_win || '?'}% \u00B7 Loss ${post.avg_loss || '?'}%</div>
+          </div>
+
+          <!-- DELTA + TARGET -->
+          <div style="background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.15);border-radius:6px;padding:10px;text-align:center">
+            <div style="font-size:7px;color:#a78bfa;font-weight:700;margin-bottom:6px">IMPROVEMENT</div>
+            <div style="font-size:22px;font-weight:700;color:${deltaColor}">${delta > 0 ? '+' : ''}${delta}pp</div>
+            <div style="font-size:7px;color:#5a7a68;margin-top:2px">Target: ${baseline.backtestTarget}% WR</div>
+            <div style="font-size:7px;color:${targetDelta >= 0 ? '#00f5a0' : '#f5c400'};margin-top:2px">${targetDelta >= 0 ? 'ON TARGET' : Math.abs(targetDelta) + 'pp to go'}</div>
+            <div style="background:rgba(255,255,255,0.05);border-radius:3px;height:4px;margin-top:4px;overflow:hidden">
+              <div style="height:100%;width:${Math.min(100, Math.max(0, (postWR / baseline.backtestTarget) * 100))}%;background:${postWR >= baseline.backtestTarget ? '#00f5a0' : '#a78bfa'};border-radius:3px"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Per-Asset and Per-TF side by side -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-family:'Space Mono',monospace;font-size:8px">
+          <!-- Per-Asset -->
+          <div>
+            <div style="font-size:8px;font-weight:700;color:#a78bfa;margin-bottom:4px">PER-ASSET COMPARISON</div>
+            <table style="width:100%;border-collapse:collapse;color:#e0e0e0">
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+                <th style="text-align:left;padding:3px 6px;color:#5a7a68;font-size:7px">COIN</th>
+                <th style="text-align:left;padding:3px 6px;color:#ff4d6d;font-size:7px">BEFORE</th>
+                <th style="text-align:left;padding:3px 6px;color:#00f5a0;font-size:7px">AFTER</th>
+                <th style="text-align:left;padding:3px 6px;color:#a78bfa;font-size:7px">\u0394</th>
+                <th style="text-align:left;padding:3px 6px;color:#5a7a68;font-size:7px">n</th>
+              </tr>
+              ${assetRows || '<tr><td colspan="5" style="padding:8px;color:#5a7a68;text-align:center">Waiting for post-fix trades to resolve...</td></tr>'}
+            </table>
+          </div>
+
+          <!-- Per-TF -->
+          <div>
+            <div style="font-size:8px;font-weight:700;color:#a78bfa;margin-bottom:4px">PER-TIMEFRAME COMPARISON</div>
+            <table style="width:100%;border-collapse:collapse;color:#e0e0e0">
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+                <th style="text-align:left;padding:3px 6px;color:#5a7a68;font-size:7px">TF</th>
+                <th style="text-align:left;padding:3px 6px;color:#ff4d6d;font-size:7px">BEFORE</th>
+                <th style="text-align:left;padding:3px 6px;color:#00f5a0;font-size:7px">AFTER</th>
+                <th style="text-align:left;padding:3px 6px;color:#a78bfa;font-size:7px">\u0394</th>
+                <th style="text-align:left;padding:3px 6px;color:#5a7a68;font-size:7px">n</th>
+              </tr>
+              ${tfRows || '<tr><td colspan="5" style="padding:8px;color:#5a7a68;text-align:center">Waiting for post-fix trades...</td></tr>'}
+            </table>
+          </div>
+        </div>
+
+        <div style="margin-top:8px;font-size:7px;color:#3a5a48;font-family:'Space Mono',monospace;text-align:right">
+          Baseline: ${baseline.wr}% WR (pre-fix clean assets) \u00B7 Target: ${baseline.backtestTarget}% \u00B7 Auto-refreshes every 5min
+        </div>
+      </div>`;
+
+  } catch (e) {
+    panel.innerHTML = `<div style="color:#ff4d6d;font-size:8px;padding:8px">Comparison error: ${e.message}</div>`;
+  }
+
+  // Auto-refresh every 5 minutes
+  if (!_comparisonInterval) {
+    _comparisonInterval = setInterval(_renderComparisonPanel, 300000);
+  }
 }
 
 // ── Watchlist: Signals Building Up ────────────────────
