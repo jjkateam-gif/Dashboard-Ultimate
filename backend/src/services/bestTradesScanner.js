@@ -755,7 +755,7 @@ function scoreConfluence(signals, direction, regime, tf, marketQuality) {
   // TF-aware weights
   const shortTFs = ['1m', '3m', '5m', '15m'];
   const medShortTFs = ['30m', '1h'];
-  const longTFs = ['6h', '8h', '12h', '1d', '3d', '1w'];
+  const longTFs = ['4h', '6h', '8h', '12h', '1d', '3d', '1w'];
   const isShortTF = shortTFs.includes(tf);
   const isMedShortTF = medShortTFs.includes(tf);
   const isLongTF = longTFs.includes(tf);
