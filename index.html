@@ -14391,9 +14391,9 @@ function _renderUnifiedUI(stats, history) {
 
     summaryEl.innerHTML = `
       ${_sc(null, 'rgba(167,139,250,0.06)', 'rgba(167,139,250,0.15)', wrColor, wrValue + (wrValue !== 'N/A' ? '%' : ''), 'WIN RATE (ALL)')}
-      ${hasBanned ? `<div style="background:rgba(0,245,160,0.08);border:2px solid rgba(0,245,160,0.25);border-radius:8px;padding:10px;text-align:center;position:relative" title="Win rate excluding ${bannedCount} banned asset(s)">
+      ${hasBanned ? `<div onclick="_toggleBannedFilter()" style="background:${window._calFilterBanned ? 'rgba(0,245,160,0.15)' : 'rgba(0,245,160,0.08)'};border:${window._calFilterBanned ? '2px solid #00f5a0' : '2px solid rgba(0,245,160,0.25)'};border-radius:8px;padding:10px;text-align:center;position:relative;cursor:pointer;transition:all 0.2s" title="Click to filter — show only tradeable assets" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
         <div style="font-size:18px;font-weight:800;color:${tradeableColor};font-family:'Space Mono',monospace">${tradeableWR || '—'}%</div>
-        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">TRADEABLE WR</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">TRADEABLE WR${window._calFilterBanned ? ' ✕' : ''}</div>
         <div style="position:absolute;top:3px;right:5px;font-size:7px;color:#00f5a0">🚫 ${bannedCount} banned</div>
       </div>` : ''}
       ${_sc('win', 'rgba(0,245,160,0.06)', 'rgba(0,245,160,0.12)', '#00f5a0', o.wins || 0, 'WINS')}
@@ -14948,6 +14948,9 @@ function _renderCalibrationChart(stats, activeTF) {
     const dl = (window._calDateFrom || 'start') + ' → ' + (window._calDateTo || 'now');
     allPills.push(`<span onclick="window._calDateFrom='';window._calDateTo='';_refetchWithFilters()" style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.08);border:1px solid #f5c400;border-radius:12px;padding:2px 8px;cursor:pointer;color:#f5c400;font-size:9px;font-weight:600">📅 ${dl} ×</span>`);
   }
+  if (window._calFilterBanned) {
+    allPills.push(`<span onclick="_toggleBannedFilter()" style="display:inline-flex;align-items:center;gap:4px;background:rgba(0,245,160,0.1);border:1px solid #00f5a0;border-radius:12px;padding:2px 8px;cursor:pointer;color:#00f5a0;font-size:9px;font-weight:600">🚫 TRADEABLE ONLY ×</span>`);
+  }
 
   const hasAnyFilterFull = allPills.length > 0;
   const activePillsHtml = hasAnyFilterFull ? `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px;padding:8px 10px;background:rgba(255,107,53,0.05);border:1px solid rgba(255,107,53,0.15);border-radius:6px">
@@ -15071,9 +15074,15 @@ function _renderHistoryTable(history) {
     return;
   }
 
+  // Apply banned asset filter (TRADEABLE WR click)
+  let filteredEntries = history;
+  if (window._calFilterBanned) {
+    const bannedSet = new Set(((window._assetStats || {}).bannedAssets || []).map(a => a.toUpperCase()));
+    filteredEntries = filteredEntries.filter(e => !bannedSet.has((e.asset || '').toUpperCase()));
+  }
+
   // Apply outcome filter
   const outcomeFilter = window._calActiveOutcome || null;
-  let filteredEntries = history;
   if (outcomeFilter === 'win') filteredEntries = filteredEntries.filter(e => e.outcome === 'win');
   else if (outcomeFilter === 'loss') filteredEntries = filteredEntries.filter(e => e.outcome === 'loss');
   else if (outcomeFilter === 'pending') filteredEntries = filteredEntries.filter(e => !e.resolved);
@@ -15214,12 +15223,21 @@ function _clearAllFilters() {
   window._calMaxProb = 100;
   window._calDateFrom = '';
   window._calDateTo = '';
+  window._calFilterBanned = false;
   _refetchWithFilters();
 }
 async function _filterByOutcome(outcome) {
   window._calActiveOutcome = (outcome === window._calActiveOutcome) ? null : outcome;
   window._historyShowCount = 50;  // Reset pagination on filter change
   // All data already loaded — just re-render with client-side filter
+  if (window._serverStats && window._serverHistory) {
+    _renderUnifiedUI(window._serverStats, window._serverHistory);
+  }
+}
+
+function _toggleBannedFilter() {
+  window._calFilterBanned = !window._calFilterBanned;
+  window._historyShowCount = 50;
   if (window._serverStats && window._serverHistory) {
     _renderUnifiedUI(window._serverStats, window._serverHistory);
   }
