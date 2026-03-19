@@ -14372,7 +14372,27 @@ function _mapDbRow(row) {
     executed: row.executed,
     resolvedAt: row.resolved_at,
     scanCount: row.scan_count || 1,
+    signalSnapshot: typeof row.signal_snapshot === 'string' ? JSON.parse(row.signal_snapshot || '{}') : (row.signal_snapshot || {}),
   };
+}
+
+// ── Compute indicator alignment from signal_snapshot ──────────
+function _computeIndicatorAlignment(snapshot, direction) {
+  if (!snapshot || typeof snapshot !== 'object') return null;
+  const indicators = ['RSI', 'MACD', 'Stochastic', 'EMA', 'Volume', 'Supertrend', 'OBV', 'VWAP', 'Ichimoku', 'BollingerBands', 'ADX'];
+  let aligned = 0;
+  let total = 0;
+  let details = [];
+  const isBull = direction === 'long';
+  for (const ind of indicators) {
+    const sig = snapshot[ind];
+    if (!sig || typeof sig !== 'object') continue;
+    total++;
+    const isAligned = isBull ? !!sig.bull : !!sig.bear;
+    if (isAligned) aligned++;
+    details.push({ name: ind, aligned: isAligned, bull: !!sig.bull, bear: !!sig.bear, value: sig.value });
+  }
+  return { aligned, total, details, score: total > 0 ? Math.round((aligned / total) * 100) : 0 };
 }
 
 // ── Render the unified UI from server data ────────────────────
@@ -15288,7 +15308,7 @@ function _renderHistoryTable(history) {
   const visibleEntries = filteredEntries.slice(0, showCount);
   const hasMore = showCount < totalFiltered;
 
-  const rows = visibleEntries.map(e => {
+  const rows = visibleEntries.map((e, idx) => {
     const dirColor = e.direction === 'long' ? '#00f5a0' : '#ff4d6d';
     const dirArrow = e.direction === 'long' ? '▲' : '▼';
     const probColor = e.prob >= 70 ? '#00f5a0' : e.prob >= 60 ? '#f5c400' : e.prob >= 50 ? '#ff8c69' : '#5a7a68';
@@ -15305,7 +15325,47 @@ function _renderHistoryTable(history) {
     const isBanned = bannedAssetSet.has((e.asset || '').toUpperCase());
     const bannedBadge = isBanned ? '<span style="color:#ff4d6d;font-size:6px;margin-left:2px" title="BANNED from live trading — still logging for data">🚫</span>' : '';
 
-    return `<tr style="border-bottom:1px solid rgba(255,255,255,0.03)${isBanned ? ';opacity:0.6' : ''}">
+    // Indicator alignment badge from signal_snapshot
+    const alignment = _computeIndicatorAlignment(e.signalSnapshot, e.direction);
+    let alignBadge = '';
+    if (alignment && alignment.total > 0) {
+      const ratio = alignment.aligned / alignment.total;
+      const abgColor = ratio >= 0.8 ? '#00f5a0' : ratio >= 0.6 ? '#7ef5d0' : ratio >= 0.4 ? '#f5c400' : ratio >= 0.2 ? '#ff8c69' : '#ff4d6d';
+      const abgBg = ratio >= 0.8 ? 'rgba(0,245,160,0.15)' : ratio >= 0.6 ? 'rgba(0,245,160,0.08)' : ratio >= 0.4 ? 'rgba(245,196,0,0.1)' : ratio >= 0.2 ? 'rgba(255,140,105,0.1)' : 'rgba(255,77,109,0.1)';
+      const dirEmoji = e.direction === 'long' ? '\uD83D\uDFE2' : '\uD83D\uDD34';
+      alignBadge = `<span class="tf-alignment-badge" style="font-size:7px;padding:1px 5px;border-radius:3px;background:${abgBg};color:${abgColor};white-space:nowrap" title="${alignment.aligned}/${alignment.total} indicators aligned with ${e.direction}">${dirEmoji} ${alignment.aligned}/${alignment.total}</span>`;
+    }
+
+    // Expandable row ID
+    const rowId = 'hist-expand-' + idx;
+
+    // Build expanded detail (signal snapshot grid)
+    let expandedRow = '';
+    if (alignment && alignment.details.length > 0) {
+      const indGrid = alignment.details.map(d => {
+        const dot = d.aligned ? '\uD83D\uDFE2' : '\uD83D\uDD34';
+        const valStr = d.value != null ? ` (${d.value})` : '';
+        return `<span style="display:inline-block;margin:1px 3px;padding:1px 4px;border-radius:3px;font-size:7px;background:${d.aligned ? 'rgba(0,245,160,0.08)' : 'rgba(255,77,109,0.06)'};color:${d.aligned ? '#00f5a0' : '#ff4d6d'}" title="${d.name}: bull=${d.bull}, bear=${d.bear}${valStr}">${dot} ${d.name}</span>`;
+      }).join('');
+      // Chart patterns from snapshot
+      const patterns = (e.signalSnapshot || {}).chartPatterns || [];
+      const patternStr = patterns.length > 0
+        ? `<div style="margin-top:4px;font-size:7px;color:#a78bfa">Patterns: ${patterns.map(p => `<span style="color:${p.direction === 'bullish' ? '#00f5a0' : p.direction === 'bearish' ? '#ff4d6d' : '#f5c400'}">${p.name} (${(p.score * 100).toFixed(0)}%)</span>`).join(' · ')}</div>`
+        : '';
+      const fundingRate = (e.signalSnapshot || {}).fundingRate;
+      const fundingStr = fundingRate != null
+        ? `<span style="margin-left:8px;font-size:7px;color:${fundingRate > 0.01 ? '#ff4d6d' : fundingRate < -0.01 ? '#00f5a0' : '#5a7a68'}">FR: ${(fundingRate * 100).toFixed(4)}%</span>`
+        : '';
+      expandedRow = `<tr id="${rowId}" style="display:none;background:rgba(167,139,250,0.03)">
+        <td colspan="12" style="padding:6px 10px">
+          <div style="font-size:7px;color:#a78bfa;font-weight:700;margin-bottom:3px">INDICATOR ALIGNMENT (${alignment.aligned}/${alignment.total} = ${alignment.score}%)${fundingStr}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:2px">${indGrid}</div>
+          ${patternStr}
+        </td>
+      </tr>`;
+    }
+
+    return `<tr style="border-bottom:1px solid rgba(255,255,255,0.03)${isBanned ? ';opacity:0.6' : ''};cursor:pointer" onclick="var el=document.getElementById('${rowId}');if(el)el.style.display=el.style.display==='none'?'table-row':'none';" title="Click to expand indicator details">
       <td style="padding:4px 6px;color:#5a7a68;font-size:7px;white-space:nowrap">${timeAgo} ${scanBadge}</td>
       <td style="padding:4px 6px;font-weight:700">${execIcon}${e.asset}${bannedBadge}</td>
       <td style="padding:4px 6px;color:${dirColor}">${dirArrow} ${(e.direction || '').toUpperCase()}</td>
@@ -15317,7 +15377,8 @@ function _renderHistoryTable(history) {
       <td style="padding:4px 6px">${e.tf}</td>
       <td style="padding:4px 6px">${outcomeLabel}</td>
       <td style="padding:4px 6px">${pnlStr}</td>
-    </tr>`;
+      <td style="padding:4px 4px">${alignBadge}</td>
+    </tr>${expandedRow}`;
   }).join('');
 
   // Filter summary above table
@@ -15355,6 +15416,7 @@ function _renderHistoryTable(history) {
           <td style="padding:5px 6px;color:#5a7a68;font-weight:700">TF</td>
           <td style="padding:5px 6px;color:#5a7a68;font-weight:700">OUTCOME</td>
           <td style="padding:5px 6px;color:#5a7a68;font-weight:700">P&L</td>
+          <td style="padding:5px 6px;color:#5a7a68;font-weight:700">ALIGN</td>
         </tr>
         ${rows}
       </table>

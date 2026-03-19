@@ -1079,6 +1079,14 @@ class BestTradesScanner {
         // Check if new columns exist
         const colCheck = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name='best_trades_log' AND column_name='signal_snapshot'");
         console.log(`[BestTrades] Migration 012 columns: ${colCheck.rows.length > 0 ? 'PRESENT' : 'MISSING - will use basic inserts'}`);
+        // Auto-migrate: add cross-TF summary columns
+        await pool.query(`
+          ALTER TABLE best_trades_log ADD COLUMN IF NOT EXISTS tf_bear_count INTEGER;
+          ALTER TABLE best_trades_log ADD COLUMN IF NOT EXISTS tf_bull_count INTEGER;
+          ALTER TABLE best_trades_log ADD COLUMN IF NOT EXISTS tf_alignment_score INTEGER;
+          ALTER TABLE best_trades_log ADD COLUMN IF NOT EXISTS highest_tf_conflict VARCHAR(10);
+        `).catch(() => {});
+        console.log(`[BestTrades] Cross-TF columns migration applied`);
       } catch (e) {
         console.error(`[BestTrades] DB check error:`, e.message);
       }
@@ -1160,6 +1168,127 @@ class BestTradesScanner {
     const range = high - low;
     const rangeToATR = range / (atr * 20);
     return rangeToATR < 1.5;
+  }
+
+  // ── Cross-Timeframe Snapshot Collection ──
+
+  _getCrossTFSnapshot(asset, entryTF) {
+    const TFS = ['5m', '15m', '30m', '1h', '4h'];
+    const snapshot = {};
+
+    for (const tf of TFS) {
+      // Get the most recent scan results for this TF
+      const tfResults = this.lastResultsByTF[tf] || [];
+      const assetResult = tfResults.find(r => r.asset === asset);
+
+      if (!assetResult || !assetResult.signalSnapshot) {
+        snapshot[tf] = { available: false, stale: true };
+        continue;
+      }
+
+      // Check freshness — if data is too old, mark as stale
+      const scanTime = this.lastScanTimeByTF[tf];
+      const ageMs = scanTime ? Date.now() - new Date(scanTime).getTime() : Infinity;
+      const maxAgeMs = { '5m': 10*60000, '15m': 20*60000, '30m': 40*60000, '1h': 90*60000, '4h': 180*60000 };
+      const isStale = ageMs > (maxAgeMs[tf] || 90*60000);
+
+      const sig = assetResult.signalSnapshot || {};
+      snapshot[tf] = {
+        available: true,
+        stale: isStale,
+        ageMinutes: Math.round(ageMs / 60000),
+        // Per-indicator data (keys match computeSignals output: RSI, EMA, MACD, Ichimoku, StochRSI, BB, Volume)
+        macd_bull: sig.MACD?.bull || false,
+        macd_bear: sig.MACD?.bear || false,
+        ema_bull: sig.EMA?.bull || false,
+        ema_bear: sig.EMA?.bear || false,
+        ichimoku_bull: sig.Ichimoku?.bull || false,
+        ichimoku_bear: sig.Ichimoku?.bear || false,
+        rsi_value: sig.RSI?.value || 0,
+        rsi_bull: sig.RSI?.bull || false,
+        rsi_bear: sig.RSI?.bear || false,
+        stochrsi_bull: sig.StochRSI?.bull || false,
+        stochrsi_bear: sig.StochRSI?.bear || false,
+        bb_bull: sig.BB?.bull || false,
+        bb_bear: sig.BB?.bear || false,
+        volume_bull: sig.Volume?.bull || false,
+        volume_bear: sig.Volume?.bear || false,
+        volume_ratio: sig.Volume?.ratio || 0,
+      };
+    }
+
+    return snapshot;
+  }
+
+  // ── Cross-Timeframe Summary Calculator ──
+
+  _calculateCrossTFSummary(crossTF, direction) {
+    const TF_WEIGHTS = { '5m': 1, '15m': 2, '30m': 3, '1h': 4, '4h': 5 };
+    let bearCount = 0, bullCount = 0, alignmentScore = 0;
+    let macdBearCount = 0, macdBullCount = 0;
+    let volumeConfirming = 0;
+    let highestConflictTF = null;
+    const rsiValues = {};
+
+    for (const [tf, data] of Object.entries(crossTF)) {
+      if (!data.available || data.stale) continue;
+      const weight = TF_WEIGHTS[tf] || 1;
+
+      // Count bear/bull indicators on this TF
+      const bearSignals = [data.macd_bear, data.ema_bear, data.ichimoku_bear, data.rsi_bear, data.stochrsi_bear, data.bb_bear, data.volume_bear].filter(Boolean).length;
+      const bullSignals = [data.macd_bull, data.ema_bull, data.ichimoku_bull, data.rsi_bull, data.stochrsi_bull, data.bb_bull, data.volume_bull].filter(Boolean).length;
+
+      const tfDirection = bearSignals > bullSignals ? 'bear' : bullSignals > bearSignals ? 'bull' : 'neutral';
+
+      if (tfDirection === 'bear') bearCount++;
+      if (tfDirection === 'bull') bullCount++;
+
+      // Alignment with trade direction
+      if ((direction === 'short' && tfDirection === 'bear') || (direction === 'long' && tfDirection === 'bull')) {
+        alignmentScore += weight;
+      } else if (tfDirection !== 'neutral') {
+        // This TF conflicts with trade direction
+        if (!highestConflictTF || weight > (TF_WEIGHTS[highestConflictTF] || 0)) {
+          highestConflictTF = tf;
+        }
+      }
+
+      if (data.macd_bear) macdBearCount++;
+      if (data.macd_bull) macdBullCount++;
+      if ((direction === 'short' && data.volume_bear) || (direction === 'long' && data.volume_bull)) volumeConfirming++;
+
+      if (data.rsi_value) rsiValues[tf] = data.rsi_value;
+    }
+
+    // Detect RSI cascade
+    const orderedTFs = ['5m', '15m', '30m', '1h', '4h'];
+    const rsiOrdered = orderedTFs.map(tf => rsiValues[tf]).filter(v => v > 0);
+    let rsiCascade = 'mixed';
+    if (rsiOrdered.length >= 3) {
+      const ascending = rsiOrdered.every((v, i) => i === 0 || v >= rsiOrdered[i-1]);
+      const descending = rsiOrdered.every((v, i) => i === 0 || v <= rsiOrdered[i-1]);
+      if (ascending) rsiCascade = 'ascending';
+      if (descending) rsiCascade = 'descending';
+    }
+
+    // Ichimoku cascade
+    const ichiCounts = Object.values(crossTF).filter(d => d.available && !d.stale);
+    const ichiBearCount = ichiCounts.filter(d => d.ichimoku_bear).length;
+    const ichiBullCount = ichiCounts.filter(d => d.ichimoku_bull).length;
+    const ichiCascade = ichiBearCount === ichiCounts.length ? 'full_bear' : ichiBullCount === ichiCounts.length ? 'full_bull' : 'mixed';
+
+    return {
+      bear_alignment: bearCount,
+      bull_alignment: bullCount,
+      alignment_score: alignmentScore, // 0-15 (TF weighted)
+      max_score: 15,
+      highest_conflict_tf: highestConflictTF,
+      macd_bear_count: macdBearCount,
+      macd_bull_count: macdBullCount,
+      volume_confirming: volumeConfirming,
+      rsi_cascade: rsiCascade,
+      ichimoku_cascade: ichiCascade,
+    };
   }
 
   // ── Flip Confidence Gate ──
@@ -1319,6 +1448,23 @@ class BestTradesScanner {
           calibratedProb = Math.max(25, Math.min(85, calibratedProb));
         }
 
+        // ── CROSS-TIMEFRAME INDICATOR LOGGING ──
+        const crossTF = this._getCrossTFSnapshot(asset.label, tf);
+        const crossTFSummary = this._calculateCrossTFSummary(crossTF, direction);
+
+        // Cross-TF alignment adjustment
+        if (crossTFSummary && crossTFSummary.alignment_score !== undefined) {
+          const score = crossTFSummary.alignment_score;
+          let tfAdj = 0;
+          if (score >= 12) tfAdj = 6;        // Excellent alignment: +6pp
+          else if (score >= 9) tfAdj = 3;    // Good alignment: +3pp
+          else if (score >= 6) tfAdj = 0;    // Marginal: no change
+          else tfAdj = -6;                    // Weak alignment: -6pp
+
+          calibratedProb += tfAdj;
+          calibratedProb = Math.max(25, Math.min(85, calibratedProb));
+        }
+
         // Estimate R/R using calibrated probability
         const rrData = estimateRR(price, atrVal, direction, calibratedProb, this.settings.leverage,
           best.confidence, candles, marketQuality);
@@ -1379,6 +1525,8 @@ class BestTradesScanner {
           patternAdj,
           patternSummary: patternResult.patternSummary,
           signalSnapshot,
+          crossTF,
+          crossTFSummary,
           timestamp: new Date().toISOString(),
         };
         results.push(_scanResult);
@@ -1522,6 +1670,25 @@ class BestTradesScanner {
     const qualifying = results.filter(r => {
       // BANNED ASSET CHECK — asset is banned from live trading (still logged for data collection)
       if (bannedSet.has(r.asset.toUpperCase())) { rejectReasons[r.asset] = `BANNED from live trading`; return false; }
+
+      // 4h conflict: LOG as flag but do NOT block — collecting data to validate first
+      if (r.crossTFSummary) {
+        const h4Data = r.crossTF?.['4h'];
+        if (h4Data && h4Data.available && !h4Data.stale) {
+          const h4Bear = [h4Data.macd_bear, h4Data.ema_bear, h4Data.ichimoku_bear].filter(Boolean).length;
+          const h4Bull = [h4Data.macd_bull, h4Data.ema_bull, h4Data.ichimoku_bull].filter(Boolean).length;
+          const h4Direction = h4Bear > h4Bull ? 'bear' : h4Bull > h4Bear ? 'bull' : 'neutral';
+
+          if (r.direction === 'short' && h4Direction === 'bull') {
+            r.h4Conflict = true;
+            r.h4ConflictReason = '4h bullish — short against macro trend';
+          } else if (r.direction === 'long' && h4Direction === 'bear') {
+            r.h4Conflict = true;
+            r.h4ConflictReason = '4h bearish — long against macro trend';
+          }
+        }
+      }
+
       // Per-asset minimum probability override
       const assetOverride = (this.settings.assetOverrides || {})[r.asset.toUpperCase()] || {};
       const effectiveMinProb = assetOverride.minProb || minProb;
@@ -1903,7 +2070,7 @@ class BestTradesScanner {
                WHERE id = $1`,
               [row.id, r.prob, r.confidence, r.marketQuality,
                r.ev, r.rawProb, r.confluenceScore,
-               JSON.stringify(r.signalSnapshot || {})]
+               JSON.stringify({ ...(r.signalSnapshot || {}), cross_tf: r.crossTF, cross_tf_summary: r.crossTFSummary })]
             );
             debugInfo.errors.push({ asset: r.asset, stage: 'dedup_update_ok', id: row.id });
           } catch (updateErr) {
@@ -1924,14 +2091,18 @@ class BestTradesScanner {
           `INSERT INTO best_trades_log
            (asset, direction, probability, confidence, market_quality, rr_ratio,
             entry_price, stop_price, target_price, stop_pct, target_pct, regime, executed, timeframe,
-            signal_snapshot, raw_probability, ev, optimal_lev, atr_value, hits, misses, volume_ratio, confluence_score)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
+            signal_snapshot, raw_probability, ev, optimal_lev, atr_value, hits, misses, volume_ratio, confluence_score,
+            tf_bear_count, tf_bull_count, tf_alignment_score, highest_tf_conflict)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
           [r.asset, r.direction, r.prob, r.confidence,
            r.marketQuality, r.rr, r.price, r.stopPrice, r.targetPrice,
            r.stopPct, r.targetPct, r.regime, false, r.timeframe || '15m',
-           JSON.stringify(r.signalSnapshot || {}), r.rawProb, r.ev, r.optimalLev,
+           JSON.stringify({ ...(r.signalSnapshot || {}), cross_tf: r.crossTF, cross_tf_summary: r.crossTFSummary }),
+           r.rawProb, r.ev, r.optimalLev,
            r.atrValue, JSON.stringify(r.hits || []), JSON.stringify(r.misses || []),
-           r.volumeRatio, r.confluenceScore]
+           r.volumeRatio, r.confluenceScore,
+           r.crossTFSummary?.bear_alignment || 0, r.crossTFSummary?.bull_alignment || 0,
+           r.crossTFSummary?.alignment_score || 0, r.crossTFSummary?.highest_conflict_tf || null]
         );
         inserted++;
       } catch (e) {
