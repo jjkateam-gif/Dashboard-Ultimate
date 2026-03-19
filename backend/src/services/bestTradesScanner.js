@@ -762,10 +762,16 @@ function scoreConfluence(signals, direction, regime, tf, marketQuality) {
 
   // Weights rebalanced 2026-03-18: EMA (+25pp edge) and Ichimoku (+22pp edge) highest,
   // MACD (+14pp edge) elevated, mean-reversion (RSI/StochRSI/BB) drastically reduced (bear-only now)
-  const WEIGHTS = isShortTF ? { RSI: 7, StochRSI: 3, BB: 2, Volume: 15, MACD: 18, EMA: 30, Ichimoku: 25 }    // 5m, 15m — total 100
+  let WEIGHTS = isShortTF ? { RSI: 7, StochRSI: 3, BB: 2, Volume: 15, MACD: 18, EMA: 30, Ichimoku: 25 }    // 5m, 15m — total 100
     : isMedShortTF ? { RSI: 8, StochRSI: 5, BB: 3, Volume: 14, MACD: 18, EMA: 28, Ichimoku: 24 }              // 30m, 1h — total 100
     : isLongTF ? { RSI: 6, StochRSI: 3, BB: 3, Volume: 12, MACD: 20, EMA: 30, Ichimoku: 26 }                   // 4h, 1d — total 100
     : { RSI: 8, StochRSI: 5, BB: 3, Volume: 14, MACD: 18, EMA: 28, Ichimoku: 24 };                             // fallback — total 100
+
+  // Direction-aware weight override for shorts
+  // MACD has +30pp edge on shorts (highest), EMA has -7pp (lagging)
+  if (dir === 'bear') {
+    WEIGHTS = { RSI: 10, StochRSI: 3, BB: 2, Volume: 15, MACD: 28, EMA: 20, Ichimoku: 22 };
+  }
 
   // Family dampening
   const FAMILIES = { RSI: 'meanrev', StochRSI: 'meanrev', BB: 'meanrev', EMA: 'trend', MACD: 'trend', Ichimoku: 'trend', Volume: 'flow' };
@@ -801,6 +807,24 @@ function scoreConfluence(signals, direction, regime, tf, marketQuality) {
     // Keep bear signals (overbought/upper band) for shorts — those work.
     if (dir === 'bull' && aligned && (ind === 'RSI' || ind === 'BB' || ind === 'StochRSI')) {
       aligned = false; // treat as neutral for longs
+    }
+
+    // Weak asset confirmation: mean-reversion oversold signals CONFIRM shorts
+    // MACD bear + RSI oversold = 87.5% WR on 64 trades (golden combo)
+    if (dir === 'bear' && aligned && (ind === 'RSI' || ind === 'StochRSI' || ind === 'BB')) {
+      // RSI/StochRSI/BB showing oversold on a short = asset is WEAK, not bouncing
+      const boostFactor = ind === 'RSI' ? 1.5 : ind === 'StochRSI' ? 1.3 : 1.2;
+      const family = FAMILIES[ind] || 'other';
+      const famIdx = familyCount[family] || 0;
+      const dampening = FAMILY_DECAY[Math.min(famIdx, FAMILY_DECAY.length - 1)];
+      familyCount[family] = famIdx + 1;
+      score += w * boostFactor * dampening;
+      aligned = false; // Don't double-count in normal scoring below
+    }
+
+    // StochRSI overbought (bear) on shorts has -27pp edge — fires when short is overextended
+    if (dir === 'bear' && ind === 'StochRSI' && sig.bear) {
+      aligned = false; // Disable stochrsi_bear contribution to shorts
     }
 
     const meanRevConflict = isMeanRev && (
@@ -1000,6 +1024,7 @@ class BestTradesScanner {
     this.recentTrades = new Set(); // 'BTC_long' — prevent duplicate trades across TFs
     this.sseClients = [];
     this.watchlistCandidates = {};
+    this.signalDirectionHistory = {}; // { 'BTC_15m': { direction: 'short', count: 5 } }
   }
 
   _updateWatchlistCandidate(asset, tf, scanResult) {
@@ -1125,6 +1150,36 @@ class BestTradesScanner {
     this.scanTimers = {};
   }
 
+  // ── Ranging Market Detection ──
+
+  _isRangingMarket(candles, atr) {
+    if (!candles || candles.length < 20 || !atr) return false;
+    const last20 = candles.slice(-20);
+    const high = Math.max(...last20.map(c => parseFloat(c.h || c.high || c[2] || 0)));
+    const low = Math.min(...last20.map(c => parseFloat(c.l || c.low || c[3] || 0)));
+    const range = high - low;
+    const rangeToATR = range / (atr * 20);
+    return rangeToATR < 1.5;
+  }
+
+  // ── Flip Confidence Gate ──
+
+  _checkFlipConfidence(asset, tf, direction) {
+    const key = `${asset}_${tf}`;
+    const prev = this.signalDirectionHistory[key];
+
+    if (!prev || prev.direction !== direction) {
+      // Direction changed — first signal in new direction
+      this.signalDirectionHistory[key] = { direction, count: 1 };
+      return { skip: true, reason: `Trend flip on ${asset} ${tf} — waiting for confirmation (was ${prev?.direction || 'none'}, now ${direction})` };
+    }
+
+    prev.count++;
+    this.signalDirectionHistory[key] = prev;
+
+    return { skip: false, count: prev.count };
+  }
+
   // ── Scan a Single Timeframe ──
 
   async _scanTimeframe(tf) {
@@ -1168,6 +1223,14 @@ class BestTradesScanner {
         // #27 — 4h regime gate: Skip 4h unless confirmed trending (ADX>20 + price above/below EMA200)
         if (tf === '4h' && adxVal != null && adxVal < 20) {
           continue; // not trending — skip this asset on 4h
+        }
+
+        // Ranging market gate — block signals in choppy markets
+        if (this._isRangingMarket(candles, atrVal)) {
+          if (!this.lastLogAttempt) this.lastLogAttempt = {};
+          if (!this.lastLogAttempt[tf]) this.lastLogAttempt[tf] = {};
+          this.lastLogAttempt[tf].rangingBlocked = (this.lastLogAttempt[tf].rangingBlocked || 0) + 1;
+          continue; // Skip this asset — no clear trend
         }
 
         // All assets use BTC 1d regime for consistency
@@ -1472,6 +1535,24 @@ class BestTradesScanner {
       }
       if (r.entryEfficiency === 'Chasing') { rejectReasons[r.asset] = 'Chasing entry — extended move, poor entry location'; return false; }
       if (r.ev <= 0) { rejectReasons[r.asset] = `Negative EV (${r.ev.toFixed(3)}) — risk exceeds reward`; return false; }
+
+      // Volume bull on shorts = -20pp edge — buying pressure fights the short
+      if (r.direction === 'short' && r.signalSnapshot?.Volume?.bull && (r.volumeRatio || 0) > 2) {
+        rejectReasons[r.asset] = 'Volume conflict — buying volume (ratio ' + (r.volumeRatio||0).toFixed(1) + 'x) fighting short';
+        return false;
+      }
+
+      // Direction-aware minimum probability
+      const dirMinProb = r.direction === 'long' ? 65 : 60;
+      const effectiveDirMinProb = Math.max(assetOverride.minProb || minProb, dirMinProb);
+      if (r.prob < effectiveDirMinProb) { rejectReasons[r.asset] = `prob ${r.prob}% < dir-aware min ${effectiveDirMinProb}%`; return false; }
+
+      // Flip confidence gate — skip first trade after direction change (34.2% WR)
+      const flipCheck = this._checkFlipConfidence(r.asset, tf, r.direction);
+      if (flipCheck.skip) {
+        rejectReasons[r.asset] = flipCheck.reason;
+        return false;
+      }
 
       // #27 — Per-TF leverage limits: hardcode 4h to max 1x until fixed
       if (tf === '4h' && r.marketQuality !== 'A') { rejectReasons[r.asset] = '4h non-A quality'; return false; }
@@ -1779,6 +1860,10 @@ class BestTradesScanner {
       prob: r.prob, ev: r.ev, evType: typeof r.ev,
       probGte50: r.prob >= 50, evGt0: r.ev > 0
     }));
+    // Build flip confidence direction history for ALL results (not just top 3)
+    for (const r of results) {
+      this._checkFlipConfidence(r.asset, r.timeframe || 'unknown', r.direction);
+    }
     // Log top 3 results with EV > 0 for calibration data (#24: EV-first, fallback to prob >= 50%)
     const top = results.filter(r => (r.ev > 0) || r.prob >= 50).slice(0, 3);
     // CRITICAL: probability column is INTEGER in PostgreSQL — must round all decimal probs

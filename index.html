@@ -13800,6 +13800,18 @@ function detectChartPatterns(d, tf, regime) {
 }
 
 // ── Compute all signals on the last bar ──────────────────────
+// ── Ranging Market Detection ──
+// If price range over last 20 candles is tight relative to ATR, market is ranging
+// Used to warn user during manual scans — ranging markets have lower edge
+function _isRangingMarket(candles, atrVal) {
+  if (!candles || candles.length < 20 || !atrVal) return false;
+  const last20 = candles.slice(-20);
+  const high = Math.max(...last20.map(c => parseFloat(c.h || c.high || c[2] || 0)));
+  const low = Math.min(...last20.map(c => parseFloat(c.l || c.low || c[3] || 0)));
+  const range = high - low;
+  return (range / (atrVal * 20)) < 1.5;
+}
+
 function computeLiveSignals(d, tf) {
   const last = d.length - 1;
   const c    = d.map(x => x.c);
@@ -14136,7 +14148,8 @@ function computeLiveSignals(d, tf) {
 
   const marketQuality = mqScore >= 7 ? 'A' : mqScore >= 4 ? 'B' : mqScore >= 1 ? 'C' : 'No-Trade';
 
-  return { signals: results, atr: currentATR, price, macro_bull, marketQuality, mqScore, entryEfficiency, staleCandleUsed: _staleCandleGuard };
+  const isRanging = _isRangingMarket(d, currentATR);
+  return { signals: results, atr: currentATR, price, macro_bull, marketQuality, mqScore, entryEfficiency, staleCandleUsed: _staleCandleGuard, isRanging };
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -15695,7 +15708,7 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
 
   // Weights rebalanced 2026-03-18: EMA (+25pp edge) and Ichimoku (+22pp edge) highest,
   // MACD (+14pp edge) elevated, mean-reversion (RSI/StochRSI/BB) drastically reduced (bear-only now)
-  const WEIGHTS = isShortTF ? {
+  let WEIGHTS = isShortTF ? {
     RSI: 7, StochRSI: 3, BB: 2, Volume: 15, MACD: 18, EMA: 30, Ichimoku: 25,    // 5m, 15m — total 100
   } : isMedShortTF ? {
     RSI: 8, StochRSI: 5, BB: 3, Volume: 14, MACD: 18, EMA: 28, Ichimoku: 24,    // 30m, 1h — total 100
@@ -15704,6 +15717,11 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
   } : {
     RSI: 8, StochRSI: 5, BB: 3, Volume: 14, MACD: 18, EMA: 28, Ichimoku: 24,    // fallback — total 100
   };
+
+  // ── Direction-aware weight override for shorts (MACD +30pp edge, EMA -7pp) ──
+  if (dir === 'bear') {
+    WEIGHTS = { RSI: 10, StochRSI: 3, BB: 2, Volume: 15, MACD: 28, EMA: 20, Ichimoku: 22 };
+  }
 
   // ══════════════════════════════════════════════════════════════
   // INDICATOR FAMILY GROUPING — Correlation Dampening (#1)
@@ -15755,6 +15773,25 @@ function scoreConfluence(signals, direction, regime, fundingRate, tf, crossTFDat
     // Keep bear signals (overbought/upper band) for shorts — those work.
     if (dir === 'bull' && aligned && (ind === 'RSI' || ind === 'BB' || ind === 'StochRSI')) {
       aligned = false; // treat as neutral for longs
+    }
+
+    // ── WEAK ASSET CONFIRMATION: mean-reversion oversold signals CONFIRM shorts ──
+    // MACD bear + RSI oversold = 87.5% WR on 64 trades
+    if (dir === 'bear' && aligned && (ind === 'RSI' || ind === 'StochRSI' || ind === 'BB')) {
+      const boostFactor = ind === 'RSI' ? 1.5 : ind === 'StochRSI' ? 1.3 : 1.2;
+      const family = FAMILIES[ind] || 'other';
+      const famIdx = familyAlignedCount[family] || 0;
+      const boostDampening = FAMILY_DECAY[Math.min(famIdx, FAMILY_DECAY.length - 1)];
+      familyAlignedCount[family] = famIdx + 1;
+      score += w * boostFactor * boostDampening;
+      hits.push({ ind, label: sig.label + ' (weak asset boost)', pts: Math.round(w * boostFactor * boostDampening) });
+      aligned = false; // Don't double-count
+    }
+
+    // ── DISABLE StochRSI overbought (bear) for short direction ──
+    // StochRSI bear on shorts = -27pp edge — late entry signal, disable
+    if (dir === 'bear' && ind === 'StochRSI' && signals.StochRSI?.bear) {
+      aligned = false; // Treat as neutral
     }
 
     // Mean-reversion vs trend conflict
@@ -16209,7 +16246,7 @@ async function runProbEngine() {
         probeKlines(asset.sym, tf),
         fetchCrossTFBias(asset.sym, tf)
       ]);
-      const { signals, atr: atrVal, price, macro_bull, marketQuality, mqScore, entryEfficiency, staleCandleUsed } = computeLiveSignals(d, tf);
+      const { signals, atr: atrVal, price, macro_bull, marketQuality, mqScore, entryEfficiency, staleCandleUsed, isRanging } = computeLiveSignals(d, tf);
       const localRegime = detectCurrentRegime(d);
 
       // Blended regime: BTC = 100% for BTC itself, weighted blend for alts (gradient, not binary)
@@ -16329,6 +16366,7 @@ async function runProbEngine() {
         snappedStop:     rrData.snappedToStructure,
         stopATRMult:     rrData.stopATRMult,
         entryEfficiency,
+        isRanging,
         calibratedProb:  rrData.calibratedProb,
         mqSizeMult:      rrData.mqSizeMult,
         etfFlowBias:     etfBias,
@@ -16541,6 +16579,7 @@ function renderProbeResults(results, tf) {
         const reasons = [];
         const minProb = +($('autoTradeMinProb')?.value || 70);
         if (r.marketQuality === 'No-Trade') reasons.push('⛔ Market quality: No-Trade zone (choppy/dead market)');
+        if (r.isRanging) reasons.push('📊 Ranging market: 20-candle range < 1.5x ATR — signals unreliable');
         if (r.prob < minProb) reasons.push('📉 Probability ' + r.prob + '% below your minimum (' + minProb + '%)');
         if (r.entryEfficiency === 'Chasing') reasons.push('🏃 Chasing: 3+ candles extended, >2% from EMA21 — poor entry');
         if (parseFloat(r.ev) <= 0) reasons.push('📊 Negative EV (' + r.ev + '%) — risk exceeds expected reward after fees');
@@ -24181,6 +24220,7 @@ renderProbeResults = function(results, tf) {
         const reasons = [];
         const minProb = +($('autoTradeMinProb')?.value || 70);
         if (r.marketQuality === 'No-Trade') reasons.push('⛔ Market quality: No-Trade zone (choppy/dead market)');
+        if (r.isRanging) reasons.push('📊 Ranging market: 20-candle range < 1.5x ATR — signals unreliable');
         if (r.prob < minProb) reasons.push('📉 Probability ' + r.prob + '% below your minimum (' + minProb + '%)');
         if (r.entryEfficiency === 'Chasing') reasons.push('🏃 Chasing: 3+ candles extended, >2% from EMA21 — poor entry');
         if (parseFloat(r.ev||0) <= 0) reasons.push('📊 Negative EV (' + (r.ev||'0') + '%) — risk exceeds expected reward after fees');
