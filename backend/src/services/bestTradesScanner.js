@@ -1155,7 +1155,10 @@ class BestTradesScanner {
     let scannedCount = 0, skippedCount = 0, errorCount = 0;
     for (const asset of ASSETS) {
       try {
-        const candles = await fetchKlines(asset.sym, tf, 200);
+        // Fetch more candles for short TFs so EMA200 has enough history
+        // 5m: 500 candles = ~41.7h, 15m: 500 = ~5.2 days (was 200 = 16.7h/2.1d)
+        const candleCount = (tf === '5m' || tf === '15m') ? 500 : 200;
+        const candles = await fetchKlines(asset.sym, tf, candleCount);
         if (!candles || candles.length < 50) { skippedCount++; continue; }
 
         const analysis = computeSignals(candles, tf);
