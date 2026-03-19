@@ -1170,6 +1170,114 @@ class BestTradesScanner {
     return rangeToATR < 1.5;
   }
 
+  // ── Market Structure Detection (HH/HL) — logging only, does NOT affect scoring ──
+
+  _detectMarketStructure(candles) {
+    if (!candles || candles.length < 50) return { structure: 'unknown', swings: [] };
+
+    // Find swing highs and lows using a 5-bar lookback
+    const swingHighs = [];
+    const swingLows = [];
+
+    for (let i = 5; i < candles.length - 5; i++) {
+      const high = parseFloat(candles[i].h || candles[i].high || candles[i][2] || 0);
+      const low = parseFloat(candles[i].l || candles[i].low || candles[i][3] || 0);
+
+      let isSwingHigh = true;
+      let isSwingLow = true;
+
+      for (let j = 1; j <= 5; j++) {
+        const prevH = parseFloat(candles[i-j].h || candles[i-j].high || candles[i-j][2] || 0);
+        const nextH = parseFloat(candles[i+j].h || candles[i+j].high || candles[i+j][2] || 0);
+        const prevL = parseFloat(candles[i-j].l || candles[i-j].low || candles[i-j][3] || 0);
+        const nextL = parseFloat(candles[i+j].l || candles[i+j].low || candles[i+j][3] || 0);
+
+        if (high <= prevH || high <= nextH) isSwingHigh = false;
+        if (low >= prevL || low >= nextL) isSwingLow = false;
+      }
+
+      if (isSwingHigh) swingHighs.push({ index: i, price: high });
+      if (isSwingLow) swingLows.push({ index: i, price: low });
+    }
+
+    // Need at least 3 swing highs and 3 swing lows
+    const recentHighs = swingHighs.slice(-3);
+    const recentLows = swingLows.slice(-3);
+
+    if (recentHighs.length < 2 || recentLows.length < 2) {
+      return { structure: 'insufficient_data', swings: { highs: recentHighs.length, lows: recentLows.length } };
+    }
+
+    const higherHighs = recentHighs.length >= 2 && recentHighs[recentHighs.length-1].price > recentHighs[recentHighs.length-2].price;
+    const higherLows = recentLows.length >= 2 && recentLows[recentLows.length-1].price > recentLows[recentLows.length-2].price;
+    const lowerHighs = recentHighs.length >= 2 && recentHighs[recentHighs.length-1].price < recentHighs[recentHighs.length-2].price;
+    const lowerLows = recentLows.length >= 2 && recentLows[recentLows.length-1].price < recentLows[recentLows.length-2].price;
+
+    let structure = 'ranging';
+    if (higherHighs && higherLows) structure = 'uptrend';
+    else if (lowerHighs && lowerLows) structure = 'downtrend';
+    else if (higherHighs && lowerLows) structure = 'expanding';
+    else if (lowerHighs && higherLows) structure = 'contracting';
+
+    return {
+      structure,
+      higherHighs,
+      higherLows,
+      lowerHighs,
+      lowerLows,
+      lastSwingHigh: recentHighs[recentHighs.length-1]?.price || null,
+      lastSwingLow: recentLows[recentLows.length-1]?.price || null,
+      swingHighCount: swingHighs.length,
+      swingLowCount: swingLows.length,
+    };
+  }
+
+  // ── Funding Rate Scoring — logging only, does NOT affect scoring ──
+
+  _scoreFundingRate(fundingRate, direction) {
+    if (!fundingRate && fundingRate !== 0) return { score: 0, signal: 'unavailable', percentile: null };
+
+    // Thresholds based on typical crypto perpetual funding rates
+    // Positive = longs paying shorts (market overleveraged long)
+    // Negative = shorts paying longs (market overleveraged short)
+    const rate = parseFloat(fundingRate) || 0;
+
+    let signal = 'neutral';
+    let score = 0; // -1 to +1 scale
+    let strength = 'neutral';
+
+    if (rate > 0.0005) {
+      signal = 'extreme_long_crowding';
+      score = direction === 'short' ? 1.0 : -1.0; // Favors shorts
+      strength = 'strong';
+    } else if (rate > 0.0002) {
+      signal = 'elevated_long_bias';
+      score = direction === 'short' ? 0.5 : -0.5;
+      strength = 'moderate';
+    } else if (rate < -0.0005) {
+      signal = 'extreme_short_crowding';
+      score = direction === 'long' ? 1.0 : -1.0; // Favors longs (squeeze risk)
+      strength = 'strong';
+    } else if (rate < -0.0002) {
+      signal = 'elevated_short_bias';
+      score = direction === 'long' ? 0.5 : -0.5;
+      strength = 'moderate';
+    }
+
+    // What probability adjustment WOULD be at 8% weight
+    const hypotheticalProbAdj = Math.round(score * 8); // -8 to +8 pp
+
+    return {
+      rate,
+      signal,
+      score,
+      strength,
+      favors: score > 0 ? direction : (score < 0 ? (direction === 'long' ? 'short' : 'long') : 'neutral'),
+      hypothetical_prob_adj: hypotheticalProbAdj,
+      hypothetical_weight_pct: 8,
+    };
+  }
+
   // ── Cross-Timeframe Snapshot Collection ──
 
   _getCrossTFSnapshot(asset, entryTF) {
@@ -1465,6 +1573,12 @@ class BestTradesScanner {
           calibratedProb = Math.max(25, Math.min(85, calibratedProb));
         }
 
+        // Market structure detection (logging only — does NOT affect scoring)
+        const marketStructure = this._detectMarketStructure(candles);
+
+        // Funding rate scoring (logging only — does NOT affect scoring)
+        const fundingRateScore = this._scoreFundingRate(fundingRate, direction);
+
         // Estimate R/R using calibrated probability
         const rrData = estimateRR(price, atrVal, direction, calibratedProb, this.settings.leverage,
           best.confidence, candles, marketQuality);
@@ -1527,6 +1641,8 @@ class BestTradesScanner {
           signalSnapshot,
           crossTF,
           crossTFSummary,
+          marketStructure,
+          fundingRateScore,
           timestamp: new Date().toISOString(),
         };
         results.push(_scanResult);
@@ -2070,7 +2186,7 @@ class BestTradesScanner {
                WHERE id = $1`,
               [row.id, r.prob, r.confidence, r.marketQuality,
                r.ev, r.rawProb, r.confluenceScore,
-               JSON.stringify({ ...(r.signalSnapshot || {}), cross_tf: r.crossTF, cross_tf_summary: r.crossTFSummary })]
+               JSON.stringify({ ...(r.signalSnapshot || {}), cross_tf: r.crossTF, cross_tf_summary: r.crossTFSummary, market_structure: r.marketStructure, funding_rate_score: r.fundingRateScore })]
             );
             debugInfo.errors.push({ asset: r.asset, stage: 'dedup_update_ok', id: row.id });
           } catch (updateErr) {
@@ -2097,7 +2213,7 @@ class BestTradesScanner {
           [r.asset, r.direction, r.prob, r.confidence,
            r.marketQuality, r.rr, r.price, r.stopPrice, r.targetPrice,
            r.stopPct, r.targetPct, r.regime, false, r.timeframe || '15m',
-           JSON.stringify({ ...(r.signalSnapshot || {}), cross_tf: r.crossTF, cross_tf_summary: r.crossTFSummary }),
+           JSON.stringify({ ...(r.signalSnapshot || {}), cross_tf: r.crossTF, cross_tf_summary: r.crossTFSummary, market_structure: r.marketStructure, funding_rate_score: r.fundingRateScore }),
            r.rawProb, r.ev, r.optimalLev,
            r.atrValue, JSON.stringify(r.hits || []), JSON.stringify(r.misses || []),
            r.volumeRatio, r.confluenceScore,
