@@ -1532,8 +1532,8 @@ class BestTradesScanner {
         else if (volumeRatio > 3.0)  volAdjustedProb *= 1.12;
         else if (volumeRatio > 2.0)  volAdjustedProb *= 1.05;
         else if (volumeRatio >= 1.0 && volumeRatio < 2.0) volAdjustedProb *= 0.95; // danger zone
+        else if (volumeRatio >= 0.5 && volumeRatio < 1.0) volAdjustedProb *= 0.92; // below-average volume
         else if (volumeRatio < 0.5)  volAdjustedProb *= 0.85;
-        // else: no adjustment
 
         // ── CALIBRATION: Adjust probability using historical accuracy ──
         const rawProb = Math.max(25, Math.min(85, Math.round(volAdjustedProb)));
@@ -1944,7 +1944,9 @@ class BestTradesScanner {
         [userId]
       );
       openCount = parseInt(posResult.rows[0].total);
-    } catch {}
+    } catch (e) {
+      console.warn('[BestTrades] Open position count query failed:', e.message);
+    }
 
     if (openCount >= this.settings.maxOpen) {
       console.log(`[BestTrades] Auto-trade: max open positions reached (${openCount}/${this.settings.maxOpen})`);
@@ -1969,7 +1971,9 @@ class BestTradesScanner {
         [userId]
       );
       currentExposureUsd = parseFloat(expRes.rows[0].total_exposure) || 0;
-    } catch {}
+    } catch (e) {
+      console.warn('[BestTrades] Exposure query failed:', e.message);
+    }
     const totalAccountUsd = availableBalance + currentExposureUsd;
     const currentHeatPct = totalAccountUsd > 0 ? (currentExposureUsd / totalAccountUsd) * 100 : 0;
 

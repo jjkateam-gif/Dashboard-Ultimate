@@ -16130,7 +16130,7 @@ function estimateRR(price, atrVal, direction, prob, leverage = 1, confidence, ca
   // Target: INVERTED relationship — high prob = tighter reliable, low prob = wider
   // A-grade gets wider targets (research: let winners run in excellent conditions)
   const _baseTargetMult = prob >= 72 ? 2.0 : prob >= 62 ? 2.5 : 3.0;
-  const _mqTargetBoost = marketQuality === 'A' ? 1.25 : marketQuality === 'B' ? 1.0 : 0.85;
+  const _mqTargetBoost = marketQuality === 'A' ? 1.25 : marketQuality === 'B+' ? 1.10 : marketQuality === 'B' ? 1.0 : 0.85;
   const targetMult = _baseTargetMult * _mqTargetBoost; // A: 2.5-3.75×, B: 2.0-3.0×, C: 1.7-2.55×
   const target = atrVal * targetMult;
 
@@ -16166,6 +16166,7 @@ function estimateRR(price, atrVal, direction, prob, leverage = 1, confidence, ca
   if (marketQuality === 'A' && conf === 'High') kellyMult = 0.30;
   else if (marketQuality === 'A' && conf === 'Medium') kellyMult = 0.25;
   else if (marketQuality === 'A') kellyMult = 0.20;
+  else if (marketQuality === 'B+') kellyMult = 0.22;
   else if (marketQuality === 'B') kellyMult = 0.20;
   else if (marketQuality === 'C') kellyMult = 0.125;
   else kellyMult = 0.075; // No-Trade
@@ -16197,7 +16198,7 @@ function estimateRR(price, atrVal, direction, prob, leverage = 1, confidence, ca
   // Prevents recommending stupid leverage even when Kelly math allows it
   const baseLevCap = conf === 'High' ? 10 : conf === 'Medium' ? 5 : 2;
   // Market quality adjusts the cap (feedback: High confidence in C-grade market ≠ High in A-grade)
-  const mqMult = marketQuality === 'A' ? 1.0 : marketQuality === 'B' ? 0.8 : marketQuality === 'C' ? 0.5 : 0;
+  const mqMult = marketQuality === 'A' ? 1.0 : marketQuality === 'B+' ? 0.9 : marketQuality === 'B' ? 0.8 : marketQuality === 'C' ? 0.5 : 0;
   const levCap = Math.max(1, Math.round(baseLevCap * mqMult));
   optimalLev = Math.min(optimalLev, levCap);
 
@@ -16208,7 +16209,7 @@ function estimateRR(price, atrVal, direction, prob, leverage = 1, confidence, ca
 
   // Market quality → position sizing multiplier (feedback from all 3 AIs)
   // A=120% (reward best setups), B=80%, C=50%, No-Trade=0%
-  const mqSizeMult = marketQuality === 'A' ? 1.20 : marketQuality === 'B' ? 0.80 : marketQuality === 'C' ? 0.50 : 0;
+  const mqSizeMult = marketQuality === 'A' ? 1.20 : marketQuality === 'B+' ? 0.90 : marketQuality === 'B' ? 0.80 : marketQuality === 'C' ? 0.50 : 0;
 
   return {
     stop: stopPrice, target: targetPrice, rr,
@@ -16368,6 +16369,7 @@ async function runProbEngine() {
       else if (_volRatio > 3.0)  { best.prob *= 1.12; longScore.prob *= 1.12; shortScore.prob *= 1.12; }
       else if (_volRatio > 2.0)  { best.prob *= 1.05; longScore.prob *= 1.05; shortScore.prob *= 1.05; }
       else if (_volRatio >= 1.0 && _volRatio < 2.0) { best.prob *= 0.95; longScore.prob *= 0.95; shortScore.prob *= 0.95; } // danger zone
+      else if (_volRatio >= 0.5 && _volRatio < 1.0) { best.prob *= 0.92; longScore.prob *= 0.92; shortScore.prob *= 0.92; } // below-average volume
       else if (_volRatio < 0.5)  { best.prob *= 0.85; longScore.prob *= 0.85; shortScore.prob *= 0.85; }
       best.prob = Math.max(25, Math.min(85, Math.round(best.prob)));
       longScore.prob = Math.max(25, Math.min(85, Math.round(longScore.prob)));
