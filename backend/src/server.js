@@ -228,6 +228,100 @@ async function initDB() {
       console.error('Best Trades scanner init error (core routes still working):', btErr.message);
     }
 
+    // Load Stock Scanner (separate try/catch — completely independent from crypto scanner)
+    try {
+      const stockScanner = require('./services/stockScanner');
+      const stockTradesRoutes = require('./routes/stockTrades');
+      app.use('/stock-trades', stockTradesRoutes);
+      stockScanner.start();
+      console.log('Stock scanner started (scan-only mode).');
+
+      // Debug endpoint (no auth) — check stock scanner health + DB row count
+      app.get('/stock-trades-debug', async (req, res) => {
+        try {
+          const { pool: dbPool } = require('./db');
+          const countRes = await dbPool.query('SELECT COUNT(*) AS cnt FROM stock_trades_log');
+          const pendingRes = await dbPool.query("SELECT COUNT(*) AS cnt FROM stock_trades_log WHERE outcome IS NULL");
+          const lastRow = await dbPool.query('SELECT id, asset, direction, probability, timeframe, created_at FROM stock_trades_log ORDER BY created_at DESC LIMIT 3');
+          const perTfSummary = {};
+          for (const [tf, results] of Object.entries(stockScanner.lastResultsByTF || {})) {
+            perTfSummary[tf] = {
+              total: results.length,
+              top3: results.slice(0, 3).map(r => ({ asset: r.asset, dir: r.direction, prob: r.prob, mq: r.marketQuality, conf: r.confidence, session: r.sessionInfo })),
+            };
+          }
+          res.json({
+            scannerType: 'stock',
+            scannerRunning: Object.keys(stockScanner.scanTimers || {}).length > 0,
+            activeTimers: Object.keys(stockScanner.scanTimers || {}),
+            lastResults: (stockScanner.getLastResults() || []).length,
+            lastScanTimes: stockScanner.lastScanTimeByTF || {},
+            scanDebug: stockScanner.lastScanDebug || {},
+            perTfResults: perTfSummary,
+            heartbeat: stockScanner.heartbeat || {},
+            db: {
+              totalRows: parseInt(countRes.rows[0].cnt),
+              pendingRows: parseInt(pendingRes.rows[0].cnt),
+              lastEntries: lastRow.rows,
+            },
+            settings: stockScanner.settings,
+            lastLogAttempt: stockScanner.lastLogAttempt || 'none yet',
+          });
+        } catch (e) {
+          res.status(500).json({ error: e.message, stack: e.stack?.split('\n').slice(0, 3) });
+        }
+      });
+    } catch (stockErr) {
+      console.error('Stock scanner init error (core routes still working):', stockErr.message);
+    }
+
+    // Load Commodity scanner (separate try/catch — completely independent from crypto and stock scanners)
+    try {
+      const commodityScanner = require('./services/commodityScanner');
+      const commodityTradesRoutes = require('./routes/commodityTrades');
+      app.use('/commodity-trades', commodityTradesRoutes);
+      commodityScanner.start();
+      console.log('Commodity scanner started (scan-only mode).');
+
+      // Debug endpoint (no auth) — check commodity scanner health + DB row count
+      app.get('/commodity-trades-debug', async (req, res) => {
+        try {
+          const { pool: dbPool } = require('./db');
+          const countRes = await dbPool.query('SELECT COUNT(*) AS cnt FROM commodity_trades_log');
+          const pendingRes = await dbPool.query("SELECT COUNT(*) AS cnt FROM commodity_trades_log WHERE outcome IS NULL");
+          const lastRow = await dbPool.query('SELECT id, asset, direction, probability, timeframe, created_at FROM commodity_trades_log ORDER BY created_at DESC LIMIT 3');
+          const perTfSummary = {};
+          for (const [tf, results] of Object.entries(commodityScanner.lastResultsByTF || {})) {
+            perTfSummary[tf] = {
+              total: results.length,
+              top3: results.slice(0, 3).map(r => ({ asset: r.asset, dir: r.direction, prob: r.prob, mq: r.marketQuality, conf: r.confidence, session: r.sessionMult })),
+            };
+          }
+          res.json({
+            scannerType: 'commodity',
+            scannerRunning: Object.keys(commodityScanner.scanTimers || {}).length > 0,
+            activeTimers: Object.keys(commodityScanner.scanTimers || {}),
+            lastResults: (commodityScanner.getLastResults() || []).length,
+            lastScanTimes: commodityScanner.lastScanTimeByTF || {},
+            scanDebug: commodityScanner.lastScanDebug || {},
+            perTfResults: perTfSummary,
+            heartbeat: commodityScanner.heartbeat || {},
+            db: {
+              totalRows: parseInt(countRes.rows[0].cnt),
+              pendingRows: parseInt(pendingRes.rows[0].cnt),
+              lastEntries: lastRow.rows,
+            },
+            settings: commodityScanner.settings,
+            lastLogAttempt: commodityScanner.lastLogAttempt || 'none yet',
+          });
+        } catch (e) {
+          res.status(500).json({ error: e.message, stack: e.stack?.split('\n').slice(0, 3) });
+        }
+      });
+    } catch (commodityErr) {
+      console.error('Commodity scanner init error (core routes still working):', commodityErr.message);
+    }
+
     // OLD: Recommendation tracker removed — replaced by 24/7 bestTradesScanner
     // The old system only ran when browser was open and used a separate DB table.
     // All prediction logging and calibration now handled by bestTradesScanner.

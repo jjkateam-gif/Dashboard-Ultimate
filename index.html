@@ -2785,6 +2785,12 @@ function switchAuthView(view) {
       <div>
         <div style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#a78bfa">📜 SCAN HISTORY & CALIBRATION</div>
         <div style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;margin-top:2px">24/7 server predictions auto-resolve against live price. Click cards, timeframes, regimes or grades to filter.</div>
+        <!-- Market Sub-Tabs -->
+        <div id="marketSubTabs" style="display:flex;gap:4px;margin-top:6px">
+          <div onclick="_switchMarketTab('crypto')" id="mtab-crypto" style="padding:3px 10px;border-radius:4px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;cursor:pointer;transition:all 0.2s;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);color:#00f5a0">🪙 Crypto</div>
+          <div onclick="_switchMarketTab('stock')" id="mtab-stock" style="padding:3px 10px;border-radius:4px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;cursor:pointer;transition:all 0.2s;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);color:#5a7a68">📈 Stocks</div>
+          <div onclick="_switchMarketTab('commodity')" id="mtab-commodity" style="padding:3px 10px;border-radius:4px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;cursor:pointer;transition:all 0.2s;background:rgba(255,165,0,0.06);border:1px solid rgba(255,165,0,0.15);color:#5a7a68">🛢️ Commodities</div>
+        </div>
       </div>
       <div style="display:flex;gap:6px;align-items:center">
         <button onclick="renderScanHistory()" style="font-size:8px;padding:5px 12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">↻ Refresh</button>
@@ -2792,6 +2798,8 @@ function switchAuthView(view) {
         <button onclick="exportScanLog()" style="font-size:8px;padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:#5a7a68;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">📥 Export CSV</button>
       </div>
     </div>
+    <!-- Market Mode Banner (stocks/commodities) -->
+    <div id="marketModeBanner" style="display:none;padding:6px 12px;margin-bottom:8px;border-radius:6px;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;text-align:center"></div>
     <!-- Accuracy Summary -->
     <div id="scanAccuracySummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px"></div>
     <!-- Scanner Heartbeat -->
@@ -14315,6 +14323,106 @@ function resolveScanLogEntries() { /* Server handles this */ }
 window._serverStats = null;
 window._serverHistory = null;
 
+// ── Market Sub-Tab State & Helpers ────────────────────────────
+window._activeMarketTab = 'crypto';
+// Per-market data caches so switching is instant after first load
+window._marketCache = { crypto: null, stock: null, commodity: null };
+
+function _getMarketBasePath() {
+  if (window._activeMarketTab === 'stock') return '/stock-trades';
+  if (window._activeMarketTab === 'commodity') return '/commodity-trades';
+  return '/best-trades';
+}
+
+function _switchMarketTab(tab) {
+  if (tab === window._activeMarketTab) return;
+
+  // Save current data to cache before switching
+  if (window._serverStats || window._serverHistory) {
+    window._marketCache[window._activeMarketTab] = {
+      stats: window._serverStats,
+      history: window._serverHistory,
+      assetStats: window._assetStats
+    };
+  }
+
+  window._activeMarketTab = tab;
+
+  // Update tab visual state
+  const tabConfig = {
+    crypto:    { bg: 'rgba(0,245,160,0.15)', border: 'rgba(0,245,160,0.4)', color: '#00f5a0' },
+    stock:     { bg: 'rgba(167,139,250,0.15)', border: 'rgba(167,139,250,0.4)', color: '#a78bfa' },
+    commodity: { bg: 'rgba(255,165,0,0.15)', border: 'rgba(255,165,0,0.4)', color: '#ffa500' }
+  };
+  const inactiveConfig = {
+    crypto:    { bg: 'rgba(0,245,160,0.06)', border: 'rgba(0,245,160,0.15)' },
+    stock:     { bg: 'rgba(167,139,250,0.06)', border: 'rgba(167,139,250,0.15)' },
+    commodity: { bg: 'rgba(255,165,0,0.06)', border: 'rgba(255,165,0,0.15)' }
+  };
+  ['crypto', 'stock', 'commodity'].forEach(t => {
+    const el = document.getElementById('mtab-' + t);
+    if (!el) return;
+    if (t === tab) {
+      el.style.background = tabConfig[t].bg;
+      el.style.border = '1px solid ' + tabConfig[t].border;
+      el.style.color = tabConfig[t].color;
+    } else {
+      el.style.background = inactiveConfig[t].bg;
+      el.style.border = '1px solid ' + inactiveConfig[t].border;
+      el.style.color = '#5a7a68';
+    }
+  });
+
+  // Update banner
+  _updateMarketBanner();
+
+  // Reset filters on tab switch
+  window._calActiveTF = null;
+  window._calActiveRegime = null;
+  window._calActiveMQ = null;
+  window._calActiveConf = null;
+  window._calActiveOutcome = null;
+  window._calFilterBanned = false;
+  window._calFilterAfterFix = false;
+  window._historyShowCount = 50;
+
+  // Load from cache or fetch fresh
+  const cached = window._marketCache[tab];
+  if (cached && cached.stats && cached.history) {
+    window._serverStats = cached.stats;
+    window._serverHistory = cached.history;
+    window._assetStats = cached.assetStats || {};
+    _renderUnifiedUI(cached.stats, cached.history);
+  } else {
+    // Show loading state
+    const el = document.getElementById('scanHistoryTable');
+    if (el) el.innerHTML = '<div style="color:#5a7a68;text-align:center;padding:12px">Loading ' + tab + ' data...</div>';
+    const sumEl = document.getElementById('scanAccuracySummary');
+    if (sumEl) sumEl.innerHTML = '';
+    renderScanHistory();
+  }
+}
+
+function _updateMarketBanner() {
+  const banner = document.getElementById('marketModeBanner');
+  if (!banner) return;
+  if (window._activeMarketTab === 'stock') {
+    banner.style.display = 'block';
+    banner.style.background = 'rgba(167,139,250,0.1)';
+    banner.style.border = '1px solid rgba(167,139,250,0.3)';
+    banner.style.color = '#a78bfa';
+    banner.textContent = '📈 STOCKS — Logging Only (No Auto-Trading)';
+  } else if (window._activeMarketTab === 'commodity') {
+    banner.style.display = 'block';
+    banner.style.background = 'rgba(255,165,0,0.1)';
+    banner.style.border = '1px solid rgba(255,165,0,0.3)';
+    banner.style.color = '#ffa500';
+    banner.textContent = '🛢️ COMMODITIES — Logging Only (No Auto-Trading)';
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
 // ── Fetch stats + history from server and render ──────────────
 async function renderScanHistory() {
   const token = localStorage.getItem('dash_token');
@@ -14324,10 +14432,11 @@ async function renderScanHistory() {
 
   try {
     // Fetch stats, history, and per-asset stats in parallel
+    const basePath = _getMarketBasePath();
     const [statsR, historyR, assetStatsR] = await Promise.all([
-      fetch(`${backend}/best-trades/stats`, { headers }),
-      fetch(`${backend}/best-trades/history-all?outcome=all`, { headers }),
-      fetch(`${backend}/best-trades/asset-stats`, { headers }).catch(() => ({ json: () => ({}) })),
+      fetch(`${backend}${basePath}/stats`, { headers }),
+      fetch(`${backend}${basePath}/history-all?outcome=all`, { headers }),
+      fetch(`${backend}${basePath}/asset-stats`, { headers }).catch(() => ({ json: () => ({}) })),
     ]);
     const stats = await statsR.json();
     const history = await historyR.json();
@@ -14339,6 +14448,9 @@ async function renderScanHistory() {
     window._assetStats = assetStats; // { assets, bannedAssets, dualWinRate, banSuggestions }
     window._historyPageSize = 50;  // Show 50 initially, load more on demand
     window._historyShowCount = 50;
+
+    // Cache this market's data
+    window._marketCache[window._activeMarketTab] = { stats, history: window._serverHistory, assetStats };
 
     _renderUnifiedUI(stats, window._serverHistory);
   } catch (e) {
@@ -14555,7 +14667,7 @@ async function _renderComparisonPanel() {
   const backend = window.CBP_BACKEND || 'http://localhost:3001';
 
   try {
-    const r = await fetch(`${backend}/best-trades/comparison`, { headers: { 'Authorization': 'Bearer ' + token } });
+    const r = await fetch(`${backend}${_getMarketBasePath()}/comparison`, { headers: { 'Authorization': 'Bearer ' + token } });
     const data = await r.json();
     const pre = data.pre?.stats || {};
     const post = data.post?.stats || {};
@@ -14714,7 +14826,7 @@ async function _renderWatchlistPanel() {
   const backend = window.CBP_BACKEND || 'http://localhost:3001';
 
   try {
-    const r = await fetch(`${backend}/best-trades/watchlist`, { headers: { 'Authorization': 'Bearer ' + token } });
+    const r = await fetch(`${backend}${_getMarketBasePath()}/watchlist`, { headers: { 'Authorization': 'Bearer ' + token } });
     const data = await r.json();
     const candidates = data.candidates || [];
 
@@ -14801,8 +14913,8 @@ async function _renderBannedAssetsGrid() {
   try {
     // Fetch banned list and asset stats
     const [bannedRes, statsRes] = await Promise.all([
-      fetch(`${backend}/best-trades/banned`, { headers: { 'Authorization': 'Bearer ' + token } }),
-      fetch(`${backend}/best-trades/asset-stats`, { headers: { 'Authorization': 'Bearer ' + token } })
+      fetch(`${backend}${_getMarketBasePath()}/banned`, { headers: { 'Authorization': 'Bearer ' + token } }),
+      fetch(`${backend}${_getMarketBasePath()}/asset-stats`, { headers: { 'Authorization': 'Bearer ' + token } })
     ]);
     const bannedData = await bannedRes.json();
     const statsData = await statsRes.json();
@@ -14851,7 +14963,8 @@ async function _toggleBanAsset(asset) {
   const backend = window.CBP_BACKEND || 'http://localhost:3001';
 
   // Check current banned status
-  const bannedRes = await fetch(`${backend}/best-trades/banned`, { headers: { 'Authorization': 'Bearer ' + token } });
+  const basePath = _getMarketBasePath();
+  const bannedRes = await fetch(`${backend}${basePath}/banned`, { headers: { 'Authorization': 'Bearer ' + token } });
   const bannedData = await bannedRes.json();
   const bannedSet = new Set((bannedData.bannedAssets || []).map(a => a.toUpperCase()));
 
@@ -14864,7 +14977,7 @@ async function _toggleBanAsset(asset) {
   }
 
   try {
-    const r = await fetch(`${backend}/best-trades/${endpoint}/${asset}`, {
+    const r = await fetch(`${backend}${basePath}/${endpoint}/${asset}`, {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token }
     });
@@ -14982,7 +15095,7 @@ async function _banAsset(asset) {
   const token = localStorage.getItem('dash_token');
   const backend = window.CBP_BACKEND || 'http://localhost:3001';
   try {
-    const r = await fetch(`${backend}/best-trades/ban/${asset}`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } });
+    const r = await fetch(`${backend}${_getMarketBasePath()}/ban/${asset}`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } });
     const data = await r.json();
     if (data.success) {
       window._assetStats.bannedAssets = data.bannedAssets;
@@ -15005,7 +15118,7 @@ async function _unbanAsset(asset) {
   const token = localStorage.getItem('dash_token');
   const backend = window.CBP_BACKEND || 'http://localhost:3001';
   try {
-    const r = await fetch(`${backend}/best-trades/unban/${asset}`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } });
+    const r = await fetch(`${backend}${_getMarketBasePath()}/unban/${asset}`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } });
     const data = await r.json();
     if (data.success) {
       window._assetStats.bannedAssets = data.bannedAssets;
@@ -15025,7 +15138,7 @@ async function _refreshAssetStats() {
   const token = localStorage.getItem('dash_token');
   const backend = window.CBP_BACKEND || 'http://localhost:3001';
   try {
-    const r = await fetch(`${backend}/best-trades/asset-stats`, { headers: { 'Authorization': 'Bearer ' + token } });
+    const r = await fetch(`${backend}${_getMarketBasePath()}/asset-stats`, { headers: { 'Authorization': 'Bearer ' + token } });
     window._assetStats = await r.json();
   } catch (e) { console.warn('Asset stats refresh error:', e); }
 }
@@ -15529,9 +15642,10 @@ async function _refetchWithFilters() {
   const qs = params.toString();
 
   try {
+    const basePath = _getMarketBasePath();
     const [statsR, historyR] = await Promise.all([
-      fetch(`${backend}/best-trades/stats${qs ? '?' + qs : ''}`, { headers: { 'Authorization': 'Bearer ' + token } }),
-      fetch(`${backend}/best-trades/history-all?outcome=all${qs ? '&' + qs : ''}`, { headers: { 'Authorization': 'Bearer ' + token } }),
+      fetch(`${backend}${basePath}/stats${qs ? '?' + qs : ''}`, { headers: { 'Authorization': 'Bearer ' + token } }),
+      fetch(`${backend}${basePath}/history-all?outcome=all${qs ? '&' + qs : ''}`, { headers: { 'Authorization': 'Bearer ' + token } }),
     ]);
     const stats = await statsR.json();
     const history = await historyR.json();
@@ -15540,6 +15654,8 @@ async function _refetchWithFilters() {
     window._serverStats = stats;
     window._serverHistory = (history.history || []).map(_mapDbRow);
     window._historyShowCount = 50;  // Reset to first page
+    // Update cache for current market
+    window._marketCache[window._activeMarketTab] = { stats, history: window._serverHistory, assetStats: window._assetStats };
     _renderUnifiedUI(stats, window._serverHistory);
   } catch (e) {
     console.warn('[ScanHistory] Filter refetch error:', e.message);
@@ -15566,7 +15682,7 @@ async function exportScanLog() {
   try {
     const token = localStorage.getItem('dash_token');
     if (!token) { alert('Not logged in'); return; }
-    const resp = await fetch((window.CBP_BACKEND || 'http://localhost:3001') + '/best-trades/history?limit=500', {
+    const resp = await fetch((window.CBP_BACKEND || 'http://localhost:3001') + _getMarketBasePath() + '/history?limit=500', {
       headers: { 'Authorization': 'Bearer ' + token },
     });
     const data = await resp.json();
@@ -24472,7 +24588,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function triggerServerResolve() {
   const token = localStorage.getItem('dash_token');
   if (!token) return;
-  fetch((window.CBP_BACKEND || 'http://localhost:3001') + '/best-trades/resolve', {
+  fetch((window.CBP_BACKEND || 'http://localhost:3001') + _getMarketBasePath() + '/resolve', {
     method: 'POST',
     headers: { 'Authorization': 'Bearer ' + token },
   }).then(r => r.json()).then(() => {
@@ -24485,7 +24601,7 @@ function triggerServerResolve() {
 function checkServerScannerStatus() {
   const token = localStorage.getItem('dash_token');
   if (!token) return;
-  fetch((window.CBP_BACKEND || 'http://localhost:3001') + '/best-trades/status', {
+  fetch((window.CBP_BACKEND || 'http://localhost:3001') + _getMarketBasePath() + '/status', {
     headers: { 'Authorization': 'Bearer ' + token },
   }).then(r => r.json()).then(d => {
     const el = document.getElementById('serverScanStatus');
