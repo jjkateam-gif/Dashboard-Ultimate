@@ -14466,11 +14466,14 @@ function _updateMarketBanner() {
 }
 
 // ── Fetch stats + history from server and render ──────────────
+window._scanHistoryGeneration = 0; // Race condition guard for tab switching
 async function renderScanHistory() {
   const token = localStorage.getItem('dash_token');
   if (!token) return;
   const backend = window.CBP_BACKEND || 'http://localhost:3001';
   const headers = { 'Authorization': 'Bearer ' + token };
+  const fetchTab = window._activeMarketTab || 'crypto';
+  const generation = ++window._scanHistoryGeneration;
 
   try {
     // Fetch stats, history, and per-asset stats in parallel
@@ -14480,6 +14483,10 @@ async function renderScanHistory() {
       fetch(`${backend}${basePath}/history-all?outcome=all`, { headers }),
       fetch(`${backend}${basePath}/asset-stats`, { headers }).catch(() => ({ json: () => ({}) })),
     ]);
+
+    // If user switched tabs while fetch was in-flight, discard stale results
+    if (generation !== window._scanHistoryGeneration) return;
+
     const stats = await statsR.json();
     const history = await historyR.json();
     const assetStats = await assetStatsR.json();
@@ -14492,10 +14499,14 @@ async function renderScanHistory() {
     window._historyShowCount = 50;
 
     // Cache this market's data
-    window._marketCache[window._activeMarketTab] = { stats, history: window._serverHistory, assetStats };
+    window._marketCache[fetchTab] = { stats, history: window._serverHistory, assetStats };
 
-    _renderUnifiedUI(stats, window._serverHistory);
+    // Only render if still on the same tab
+    if (window._activeMarketTab === fetchTab) {
+      _renderUnifiedUI(stats, window._serverHistory);
+    }
   } catch (e) {
+    if (generation !== window._scanHistoryGeneration) return;
     console.warn('[ScanHistory] Fetch error:', e.message);
     const el = document.getElementById('scanHistoryTable');
     if (el) el.innerHTML = '<div style="color:#ff4d6d;text-align:center;padding:12px">Failed to load: ' + e.message + '</div>';
