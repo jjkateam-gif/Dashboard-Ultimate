@@ -563,6 +563,9 @@ function computeSignals(d, tf) {
     bear: !emaIsFlat && emaF[last] < emaS[last],
     crossBull: last > 0 && emaF[last - 1] <= emaS[last - 1] && emaF[last] > emaS[last],
     crossBear: last > 0 && emaF[last - 1] >= emaS[last - 1] && emaF[last] < emaS[last],
+    fastValue: emaF[last] != null ? Math.round(emaF[last] * 1e8) / 1e8 : null,
+    slowValue: emaS[last] != null ? Math.round(emaS[last] * 1e8) / 1e8 : null,
+    spreadPct: emaSpread ? Math.round(emaSpread * 1e4) / 1e4 : null,
   };
 
   // ── MACD (TF-adaptive) ──
@@ -587,6 +590,10 @@ function computeSignals(d, tf) {
     crossBull: macdCrossBull && macdCrossStrong,
     crossBear: macdCrossBear && macdCrossStrong,
     cross: (macdCrossBull || macdCrossBear) && macdCrossStrong,
+    line: macdVal != null ? Math.round(macdVal * 1e8) / 1e8 : null,
+    signal: macdSigVal != null ? Math.round(macdSigVal * 1e8) / 1e8 : null,
+    histogram: (macdVal != null && macdSigVal != null) ? Math.round((macdVal - macdSigVal) * 1e8) / 1e8 : null,
+    histogramPrev: (last > 0 && macdLine[last-1] != null && macdSig[last-1] != null) ? Math.round((macdLine[last-1] - macdSig[last-1]) * 1e8) / 1e8 : null,
   };
 
   // ── Bollinger Bands ──
@@ -607,6 +614,12 @@ function computeSignals(d, tf) {
     bull: bbPct != null && bbPct <= 0.15,
     bear: bbPct != null && bbPct >= 0.85,
     squeeze,
+    upper: bbUpper[last] != null ? Math.round(bbUpper[last] * 1e8) / 1e8 : null,
+    lower: bbLower[last] != null ? Math.round(bbLower[last] * 1e8) / 1e8 : null,
+    middle: bbMid[last] != null ? Math.round(bbMid[last] * 1e8) / 1e8 : null,
+    positionPct: bbPct != null ? Math.round(bbPct * 1e4) / 1e4 : null,
+    widthPct: (bbUpper[last] != null && bbLower[last] != null && bbMid[last] > 0) ? Math.round((bbUpper[last] - bbLower[last]) / bbMid[last] * 1e4) / 1e4 : null,
+    bbwp: bbwp != null ? Math.round(bbwp * 1e4) / 1e4 : null,
   };
 
   // ── StochRSI ──
@@ -622,6 +635,7 @@ function computeSignals(d, tf) {
   results.StochRSI = {
     bull: stK != null && stK < stochOversold,
     bear: stK != null && stK > stochOverbought,
+    kValue: stK != null ? Math.round(stK * 100) / 100 : null,
   };
 
   // ── Ichimoku (TF-adaptive) ──
@@ -642,6 +656,12 @@ function computeSignals(d, tf) {
   results.Ichimoku = {
     bull: cloudTop != null && price > cloudTop && tkBull,
     bear: cloudBot != null && price < cloudBot && tkBear,
+    tenkan: ichiTenkan[last] != null ? Math.round(ichiTenkan[last] * 1e8) / 1e8 : null,
+    kijun: ichiKijun[last] != null ? Math.round(ichiKijun[last] * 1e8) / 1e8 : null,
+    cloudTop: cloudTop != null ? Math.round(cloudTop * 1e8) / 1e8 : null,
+    cloudBottom: cloudBot != null ? Math.round(cloudBot * 1e8) / 1e8 : null,
+    cloudThicknessPct: (cloudTop && cloudBot && price > 0) ? Math.round(Math.abs(cloudTop - cloudBot) / price * 1e4) / 1e4 : null,
+    priceVsCloud: cloudTop && cloudBot ? (price > cloudTop ? 'above' : price < cloudBot ? 'below' : 'inside') : null,
   };
 
   // ── Volume (3-layer: doji + OBV + body-weighted) ──
@@ -688,7 +708,12 @@ function computeSignals(d, tf) {
     if (wickSaysBull && !obvSaysBear) volBull = true;
     else if (wickSaysBear && !obvSaysBull) volBear = true;
   }
-  results.Volume = { bull: volBull, bear: volBear, drying: volDrying, ratio: volRatio };
+  results.Volume = {
+    bull: volBull, bear: volBear, drying: volDrying, ratio: volRatio,
+    obvSlope: obvSlope ? Math.round(obvSlope * 1e4) / 1e4 : null,
+    bodyRatio: bodyRatio ? Math.round(bodyRatio * 1e4) / 1e4 : null,
+    isDoji,
+  };
 
   // ── ATR for R/R ──
   const currentATR = atrVals[last] || (price * 0.02);
@@ -1610,16 +1635,11 @@ class BestTradesScanner {
         const rrData = estimateRR(price, atrVal, direction, calibratedProb, this.settings.leverage,
           best.confidence, candles, marketQuality);
 
-        // Build signal snapshot for learning (indicator values at time of prediction)
+        // Build signal snapshot for learning — copies ALL fields including numeric values
         const signalSnapshot = {};
         for (const [ind, sig] of Object.entries(signals)) {
           if (sig && typeof sig === 'object') {
-            signalSnapshot[ind] = {
-              bull: !!sig.bull, bear: !!sig.bear,
-              ...(sig.value != null ? { value: Math.round(sig.value * 1000) / 1000 } : {}),
-              ...(sig.crossBull ? { crossBull: true } : {}),
-              ...(sig.crossBear ? { crossBear: true } : {}),
-            };
+            signalSnapshot[ind] = { ...sig };
           }
         }
         // Add funding rate to snapshot
