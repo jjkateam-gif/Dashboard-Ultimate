@@ -14425,6 +14425,12 @@ function _switchMarketTab(tab) {
   window._calFilterAfterFix = false;
   window._historyShowCount = 50;
 
+  // Clear all rendered data immediately so stale data from previous tab doesn't show
+  const sumEl = document.getElementById('scanAccuracySummary');
+  if (sumEl) sumEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:10px">Loading ' + (tab === 'stock' ? '📈 Stock' : tab === 'commodity' ? '🛢️ Commodity' : '🪙 Crypto') + ' data...</div>';
+  const histEl = document.getElementById('scanHistoryTable');
+  if (histEl) histEl.innerHTML = '';
+
   // Load from cache or fetch fresh
   const cached = window._marketCache[tab];
   if (cached && cached.stats && cached.history) {
@@ -14433,11 +14439,8 @@ function _switchMarketTab(tab) {
     window._assetStats = cached.assetStats || {};
     _renderUnifiedUI(cached.stats, cached.history);
   } else {
-    // Show loading state
     const el = document.getElementById('scanHistoryTable');
     if (el) el.innerHTML = '<div style="color:#5a7a68;text-align:center;padding:12px">Loading ' + tab + ' data...</div>';
-    const sumEl = document.getElementById('scanAccuracySummary');
-    if (sumEl) sumEl.innerHTML = '';
     renderScanHistory();
   }
 }
