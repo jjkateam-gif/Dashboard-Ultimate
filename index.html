@@ -14376,6 +14376,12 @@ function _switchMarketTab(tab) {
   // Update banner
   _updateMarketBanner();
 
+  // Show/hide auto-trade settings panel (crypto only)
+  const autoTradePanel = document.getElementById('autoTradePanel');
+  if (autoTradePanel) {
+    autoTradePanel.style.display = (tab === 'crypto' || !tab) ? '' : 'none';
+  }
+
   // Reset filters on tab switch
   window._calActiveTF = null;
   window._calActiveRegime = null;
@@ -14552,11 +14558,11 @@ function _renderUnifiedUI(stats, history) {
         <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">TRADEABLE WR${window._calFilterBanned ? ' ✕' : ''}</div>
         <div style="position:absolute;top:3px;right:5px;font-size:7px;color:#00f5a0">🚫 ${bannedCount} banned</div>
       </div>` : ''}
-      <div onclick="_toggleAfterFixFilter()" style="background:${afterFixActive ? 'rgba(167,139,250,0.2)' : 'rgba(167,139,250,0.06)'};border:${afterFixActive ? '2px solid #a78bfa' : '2px solid rgba(167,139,250,0.2)'};border-radius:8px;padding:10px;text-align:center;position:relative;cursor:pointer;transition:all 0.2s" title="Click to filter — show only post-fix trades (March 18+)" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+      ${(!window._activeMarketTab || window._activeMarketTab === 'crypto') ? `<div onclick="_toggleAfterFixFilter()" style="background:${afterFixActive ? 'rgba(167,139,250,0.2)' : 'rgba(167,139,250,0.06)'};border:${afterFixActive ? '2px solid #a78bfa' : '2px solid rgba(167,139,250,0.2)'};border-radius:8px;padding:10px;text-align:center;position:relative;cursor:pointer;transition:all 0.2s" title="Click to filter — show only post-fix trades (March 18+)" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
         <div style="font-size:18px;font-weight:800;color:${afterFixColor};font-family:'Space Mono',monospace">${afterFixWR || '—'}%</div>
         <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">AFTER FIX WR${afterFixActive ? ' ✕' : ''}</div>
         <div style="position:absolute;top:3px;right:5px;font-size:7px;color:#a78bfa">${afterFixWins}W/${afterFixTotal - afterFixWins}L</div>
-      </div>
+      </div>` : ''}
       ${_sc('win', 'rgba(0,245,160,0.06)', 'rgba(0,245,160,0.12)', '#00f5a0', o.wins || 0, 'WINS')}
       ${_sc('loss', 'rgba(255,77,109,0.06)', 'rgba(255,77,109,0.12)', '#ff4d6d', o.losses || 0, 'LOSSES')}
       ${_sc('pending', 'rgba(245,196,0,0.06)', 'rgba(245,196,0,0.12)', '#f5c400', o.pending || 0, 'PENDING')}
@@ -14662,6 +14668,7 @@ let _comparisonInterval = null;
 async function _renderComparisonPanel() {
   const panel = document.getElementById('comparisonPanel');
   if (!panel) return;
+  if (window._activeMarketTab && window._activeMarketTab !== 'crypto') { panel.innerHTML = ''; return; }
 
   const token = localStorage.getItem('dash_token');
   const backend = window.CBP_BACKEND || 'http://localhost:3001';
@@ -14821,6 +14828,7 @@ let _watchlistInterval = null;
 async function _renderWatchlistPanel() {
   const panel = document.getElementById('watchlistPanel');
   if (!panel) return;
+  if (window._activeMarketTab && window._activeMarketTab !== 'crypto') { const wp = document.getElementById('watchlistPanel'); if (wp) wp.innerHTML = ''; return; }
 
   const token = localStorage.getItem('dash_token');
   const backend = window.CBP_BACKEND || 'http://localhost:3001';
@@ -14923,8 +14931,12 @@ async function _renderBannedAssetsGrid() {
     const assetStats = {};
     (statsData.assets || []).forEach(a => { assetStats[a.asset.toUpperCase()] = a; });
 
-    // All known assets
-    const allAssets = ['BTC','ETH','SOL','SUI','BNB','XRP','DOGE','ADA','AVAX','LINK','DOT','NEAR','ARB','OP','APT','INJ','PEPE','WIF','RENDER'];
+    // All known assets (market-aware)
+    const allAssets = window._activeMarketTab === 'stock'
+      ? ['TSLA','CRCL','COIN','EWJ','MSTR','PLTR','SPY','INTC','HOOD','AMZN','QQQ']
+      : window._activeMarketTab === 'commodity'
+      ? ['GOLD','SILVER','CRUDE_OIL','NAT_GAS','COPPER']
+      : ['BTC','ETH','SOL','SUI','BNB','XRP','DOGE','ADA','AVAX','LINK','DOT','NEAR','ARB','OP','APT','INJ','PEPE','WIF','RENDER'];
 
     grid.innerHTML = allAssets.map(asset => {
       const isBanned = bannedSet.has(asset);

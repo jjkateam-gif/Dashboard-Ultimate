@@ -1461,7 +1461,9 @@ class StockScanner {
     let resolved = 0;
     for (const [asset, rows] of Object.entries(byAsset)) {
       try {
-        const sym = asset + 'USDT';
+        // Use the actual BloFin symbol from STOCK_ASSETS (e.g., CRCL -> CRCULUSDT, not CRCLUSDT)
+        const assetDef = STOCK_ASSETS.find(a => a.label === asset);
+        const sym = assetDef ? assetDef.sym : (asset + 'USDT');
         for (const row of rows) {
           const entryPrice = parseFloat(row.entry_price);
           const stopPrice = parseFloat(row.stop_price);
