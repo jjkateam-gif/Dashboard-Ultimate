@@ -2532,86 +2532,123 @@ class BestTradesScanner {
     const rawContracts = posSize / (markPrice * contractValue);
     const contractSize = Math.max(minSize, Math.round(rawContracts / lotSize) * lotSize);
 
-    const result = await blofinClient.openPosition({
+    // Parallel execution: fire BloFin order + DB INSERT simultaneously (zero added latency)
+    const dbParams = [setup.asset, setup.direction, setup.prob, setup.confidence,
+      setup.marketQuality, setup.rr, setup.price, setup.stopPrice, setup.targetPrice,
+      setup.stopPct, setup.targetPct, setup.regime, true, null /* order_id placeholder */, setup.timeframe || '15m',
+      JSON.stringify({ ...(setup.signalSnapshot || {}), cross_tf: setup.crossTF, cross_tf_summary: setup.crossTFSummary, market_structure: setup.marketStructure, funding_rate_score: setup.fundingRateScore }),
+      setup.rawProb, setup.ev, setup.optimalLev,
+      setup.atrValue, JSON.stringify(setup.hits || []), JSON.stringify(setup.misses || []),
+      setup.volumeRatio, setup.confluenceScore,
+      setup.crossTFSummary?.bear_alignment || 0, setup.crossTFSummary?.bull_alignment || 0,
+      setup.crossTFSummary?.alignment_score || 0, setup.crossTFSummary?.highest_conflict_tf || null,
+      setup.bbSqueeze, setup.volumeDrying, setup.macdHistExpanding, setup.bbPositionPct, setup.ichiCloudThicknessPct,
+      setup.candleBodyPct, setup.candleType, setup.emaSpreadPctVal,
+      setup.pctFromSwingHigh, setup.pctFromSwingLow, setup.barsSinceSwingHigh, setup.barsSinceSwingLow,
+      setup.nearestRoundPct, setup.atKeyLevel, setup.consecutiveBear, setup.consecutiveBull,
+      setup.volumeIncreasing3bar, setup.volumeSpike,
+      setup.derivData?.oiValue, setup.derivData?.oiChangePct1h, setup.derivData?.oiDirection,
+      setup.derivData?.takerBuyRatio, setup.derivData?.takerSellRatio, setup.derivData?.takerDominance,
+      setup.derivData?.topTraderLongRatio, setup.derivData?.topTraderShortRatio, setup.derivData?.crowdPositioning,
+      setup.derivData?.fundingRatePrev1, setup.derivData?.fundingRatePrev2, setup.derivData?.fundingRateTrend, setup.derivData?.fundingRate3pAvg,
+      setup.fearGreedValue, setup.fearGreedLabel, setup.btcPrice, setup.btcTrend, setup.btcRsi1h, setup.btcRsi4h,
+      setup.btcEmaTrend1h, setup.btcEmaTrend4h, setup.dvol, setup.dvolLevel, setup.btcDominance, setup.marketCapChange24h,
+      setup.sessionHourUtc, setup.tradingSession, setup.isWeekend,
+      setup.openPositionsCount || null, setup.dailyPnlPct || null, leverageRisk.consecutiveLosses,
+      setup.derivData?.globalLongShortRatio, setup.derivData?.markPricePremium, setup.derivData?.bookImbalance,
+      setup.liqRiskScore, setup.liqRiskLevel, setup.liqRiskComponents, 'best_trades_auto'];
+
+    const extendedInsertSQL = `INSERT INTO best_trades_log
+      (asset, direction, probability, confidence, market_quality, rr_ratio,
+       entry_price, stop_price, target_price, stop_pct, target_pct, regime, executed, order_id, timeframe,
+       signal_snapshot, raw_probability, ev, optimal_lev, atr_value, hits, misses, volume_ratio, confluence_score,
+       tf_bear_count, tf_bull_count, tf_alignment_score, highest_tf_conflict,
+       bb_squeeze, volume_drying, macd_histogram_expanding, bb_position_pct, ichi_cloud_thickness_pct,
+       candle_body_pct, candle_type, ema_spread_pct,
+       pct_from_swing_high, pct_from_swing_low, bars_since_swing_high, bars_since_swing_low,
+       nearest_round_pct, at_key_level, consecutive_bear_candles, consecutive_bull_candles,
+       volume_increasing_3bar, volume_spike,
+       oi_value, oi_change_pct_1h, oi_direction,
+       taker_buy_ratio, taker_sell_ratio, taker_dominance,
+       top_trader_long_ratio, top_trader_short_ratio, crowd_positioning,
+       funding_rate_prev1, funding_rate_prev2, funding_rate_trend, funding_rate_3p_avg,
+       fear_greed_value, fear_greed_label, btc_price, btc_trend, btc_rsi_1h, btc_rsi_4h,
+       btc_ema_trend_1h, btc_ema_trend_4h, dvol, dvol_level, btc_dominance, market_cap_change_24h,
+       session_hour_utc, trading_session, is_weekend,
+       open_positions_count, daily_pnl_pct, consecutive_losses_at_entry,
+       global_long_short_ratio, mark_price_premium, book_imbalance,
+       liq_risk_score, liq_risk_level, liq_risk_components, engine_source)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,
+              $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,
+              $47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,
+              $60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73,$74,$75,$76,$77,$78,$79,$80,
+              $81,$82,$83,$84)
+      RETURNING id`;
+
+    // Fire BloFin order and DB insert in parallel — zero added latency
+    const blofinPromise = blofinClient.openPosition({
       creds, instId, direction: setup.direction,
       size: String(contractSize), leverage: lev,
       orderType: 'market', slPrice, tpPrice,
       marginMode: 'cross', demo,
     });
 
-    // Log to DB
-    if (pool) {
+    const dbPromise = pool ? pool.query(extendedInsertSQL, dbParams).catch(extErr => {
+      console.warn(`[BestTrades] Extended INSERT failed for ${setup.asset}: ${extErr.message} — trying basic...`);
+      return pool.query(
+        `INSERT INTO best_trades_log
+         (asset, direction, probability, confidence, market_quality, rr_ratio,
+          entry_price, stop_price, target_price, stop_pct, target_pct, regime, executed, timeframe, engine_source)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
+        [setup.asset, setup.direction, setup.prob, setup.confidence,
+         setup.marketQuality, setup.rr, setup.price, setup.stopPrice, setup.targetPrice,
+         setup.stopPct, setup.targetPct, setup.regime, true, setup.timeframe || '15m', 'best_trades_auto']
+      ).catch(basicErr => {
+        console.error(`[BestTrades] BOTH INSERTs failed for ${setup.asset}: ${basicErr.message}`);
+        return null;
+      });
+    }) : Promise.resolve(null);
+
+    const [result, dbResult] = await Promise.all([blofinPromise, dbPromise]);
+    const dbId = dbResult?.rows?.[0]?.id || null;
+
+    // Reconcile: update DB record with real order_id
+    if (result.orderId && dbId && pool) {
+      try {
+        await pool.query(
+          `UPDATE best_trades_log SET order_id = $1 WHERE id = $2`,
+          [result.orderId, dbId]
+        );
+      } catch (e) { console.warn(`[BestTrades] Order ID update failed:`, e.message); }
+    }
+
+    // Emergency insert: BloFin succeeded but DB failed entirely
+    if (result.orderId && !dbId && pool) {
+      console.warn(`[BestTrades] ⚠️ EMERGENCY INSERT: ${setup.asset} BloFin order ${result.orderId} succeeded but DB insert failed`);
       try {
         await pool.query(
           `INSERT INTO best_trades_log
-           (asset, direction, probability, confidence, market_quality, rr_ratio,
-            entry_price, stop_price, target_price, stop_pct, target_pct, regime, executed, order_id, timeframe,
-            signal_snapshot, raw_probability, ev, optimal_lev, atr_value, hits, misses, volume_ratio, confluence_score,
-            tf_bear_count, tf_bull_count, tf_alignment_score, highest_tf_conflict,
-            bb_squeeze, volume_drying, macd_histogram_expanding, bb_position_pct, ichi_cloud_thickness_pct,
-            candle_body_pct, candle_type, ema_spread_pct,
-            pct_from_swing_high, pct_from_swing_low, bars_since_swing_high, bars_since_swing_low,
-            nearest_round_pct, at_key_level, consecutive_bear_candles, consecutive_bull_candles,
-            volume_increasing_3bar, volume_spike,
-            oi_value, oi_change_pct_1h, oi_direction,
-            taker_buy_ratio, taker_sell_ratio, taker_dominance,
-            top_trader_long_ratio, top_trader_short_ratio, crowd_positioning,
-            funding_rate_prev1, funding_rate_prev2, funding_rate_trend, funding_rate_3p_avg,
-            fear_greed_value, fear_greed_label, btc_price, btc_trend, btc_rsi_1h, btc_rsi_4h,
-            btc_ema_trend_1h, btc_ema_trend_4h, dvol, dvol_level, btc_dominance, market_cap_change_24h,
-            session_hour_utc, trading_session, is_weekend,
-            open_positions_count, daily_pnl_pct, consecutive_losses_at_entry,
-            global_long_short_ratio, mark_price_premium, book_imbalance,
-            liq_risk_score, liq_risk_level, liq_risk_components, engine_source)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,
-                   $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,
-                   $47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,
-                   $60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73,$74,$75,$76,$77,$78,$79,$80,
-                   $81,$82,$83,$84)`,
-          [setup.asset, setup.direction, setup.prob, setup.confidence,
-           setup.marketQuality, setup.rr, setup.price, setup.stopPrice, setup.targetPrice,
-           setup.stopPct, setup.targetPct, setup.regime, true, result.orderId || null, setup.timeframe || '15m',
-           JSON.stringify({ ...(setup.signalSnapshot || {}), cross_tf: setup.crossTF, cross_tf_summary: setup.crossTFSummary, market_structure: setup.marketStructure, funding_rate_score: setup.fundingRateScore }),
-           setup.rawProb, setup.ev, setup.optimalLev,
-           setup.atrValue, JSON.stringify(setup.hits || []), JSON.stringify(setup.misses || []),
-           setup.volumeRatio, setup.confluenceScore,
-           setup.crossTFSummary?.bear_alignment || 0, setup.crossTFSummary?.bull_alignment || 0,
-           setup.crossTFSummary?.alignment_score || 0, setup.crossTFSummary?.highest_conflict_tf || null,
-           setup.bbSqueeze, setup.volumeDrying, setup.macdHistExpanding, setup.bbPositionPct, setup.ichiCloudThicknessPct,
-           setup.candleBodyPct, setup.candleType, setup.emaSpreadPctVal,
-           setup.pctFromSwingHigh, setup.pctFromSwingLow, setup.barsSinceSwingHigh, setup.barsSinceSwingLow,
-           setup.nearestRoundPct, setup.atKeyLevel, setup.consecutiveBear, setup.consecutiveBull,
-           setup.volumeIncreasing3bar, setup.volumeSpike,
-           setup.derivData?.oiValue, setup.derivData?.oiChangePct1h, setup.derivData?.oiDirection,
-           setup.derivData?.takerBuyRatio, setup.derivData?.takerSellRatio, setup.derivData?.takerDominance,
-           setup.derivData?.topTraderLongRatio, setup.derivData?.topTraderShortRatio, setup.derivData?.crowdPositioning,
-           setup.derivData?.fundingRatePrev1, setup.derivData?.fundingRatePrev2, setup.derivData?.fundingRateTrend, setup.derivData?.fundingRate3pAvg,
-           setup.fearGreedValue, setup.fearGreedLabel, setup.btcPrice, setup.btcTrend, setup.btcRsi1h, setup.btcRsi4h,
-           setup.btcEmaTrend1h, setup.btcEmaTrend4h, setup.dvol, setup.dvolLevel, setup.btcDominance, setup.marketCapChange24h,
-           setup.sessionHourUtc, setup.tradingSession, setup.isWeekend,
-           setup.openPositionsCount || null, setup.dailyPnlPct || null, leverageRisk.consecutiveLosses,
-           setup.derivData?.globalLongShortRatio, setup.derivData?.markPricePremium, setup.derivData?.bookImbalance,
-           setup.liqRiskScore, setup.liqRiskLevel, setup.liqRiskComponents, 'best_trades_auto']
+           (asset, direction, probability, entry_price, stop_price, target_price,
+            executed, order_id, timeframe, engine_source, data_source)
+           VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, 'best_trades_auto', 'emergency_insert')`,
+          [setup.asset, setup.direction, setup.prob, setup.price, setup.stopPrice, setup.targetPrice,
+           result.orderId, setup.timeframe || '15m']
         );
-      } catch (execLogErr) {
-        console.warn(`[BestTrades] Auto-execute DB log failed for ${setup.asset}: ${execLogErr.message} — trying basic insert...`);
-        try {
-          await pool.query(
-            `INSERT INTO best_trades_log
-             (asset, direction, probability, confidence, market_quality, rr_ratio,
-              entry_price, stop_price, target_price, stop_pct, target_pct, regime, executed, order_id, timeframe)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-            [setup.asset, setup.direction, setup.prob, setup.confidence,
-             setup.marketQuality, setup.rr, setup.price, setup.stopPrice, setup.targetPrice,
-             setup.stopPct, setup.targetPct, setup.regime, true, result.orderId || null, setup.timeframe || '15m']
-          );
-        } catch (basicLogErr) {
-          console.error(`[BestTrades] Auto-execute BOTH DB logs failed for ${setup.asset}: ${basicLogErr.message}`);
-        }
+        console.log(`[BestTrades] ✅ Emergency insert succeeded for ${setup.asset}`);
+      } catch (emergErr) {
+        console.error(`[BestTrades] ❌ EMERGENCY INSERT ALSO FAILED for ${setup.asset}: ${emergErr.message} — order ${result.orderId} is ORPHANED on BloFin`);
       }
     }
 
-    console.log(`[BestTrades] ⚡ EXECUTED: ${setup.asset} ${setup.direction.toUpperCase()} @ $${markPrice} | Prob: ${setup.prob}% | Size: $${posSize} | Lev: ${lev}x | SL: ${slPrice} | TP: ${tpPrice}`);
+    // BloFin failed but DB succeeded — clean up the DB record
+    if (!result.orderId && dbId && pool) {
+      try {
+        await pool.query(`DELETE FROM best_trades_log WHERE id = $1`, [dbId]);
+        console.warn(`[BestTrades] BloFin order failed, cleaned up DB record #${dbId} for ${setup.asset}`);
+      } catch (e) { /* ignore cleanup failure */ }
+    }
+
+    console.log(`[BestTrades] ⚡ EXECUTED: ${setup.asset} ${setup.direction.toUpperCase()} @ $${markPrice} | Prob: ${setup.prob}% | Size: $${posSize} | Lev: ${lev}x | SL: ${slPrice} | TP: ${tpPrice} | OrderId: ${result.orderId} | DB: ${dbId ? '#' + dbId : 'FAILED'}`);
     this._broadcast('trade', { setup, orderId: result.orderId, posSize, leverage: lev });
   }
 
