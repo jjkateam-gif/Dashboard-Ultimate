@@ -1465,12 +1465,14 @@ class BestTradesScanner {
           continue; // not trending — skip this asset on 4h
         }
 
-        // Ranging market gate — block signals in choppy markets
-        if (this._isRangingMarket(candles, atrVal)) {
+        // Ranging market detection — soft flag (penalty, NOT hard block)
+        // User requirement: "make money in ANY market condition"
+        // Hard block was killing ALL signals in choppy markets — now logs + applies -4pp penalty
+        const isRanging = this._isRangingMarket(candles, atrVal);
+        if (isRanging) {
           if (!this.lastLogAttempt) this.lastLogAttempt = {};
           if (!this.lastLogAttempt[tf]) this.lastLogAttempt[tf] = {};
-          this.lastLogAttempt[tf].rangingBlocked = (this.lastLogAttempt[tf].rangingBlocked || 0) + 1;
-          continue; // Skip this asset — no clear trend
+          this.lastLogAttempt[tf].rangingDetected = (this.lastLogAttempt[tf].rangingDetected || 0) + 1;
         }
 
         // All assets use BTC 1d regime for consistency
@@ -1582,6 +1584,12 @@ class BestTradesScanner {
           calibratedProb = Math.max(25, Math.min(85, calibratedProb));
         }
 
+        // Ranging market penalty — soft adjustment, NOT a hard block
+        if (isRanging) {
+          calibratedProb -= 4;  // -4pp penalty for choppy market
+          calibratedProb = Math.max(25, Math.min(85, calibratedProb));
+        }
+
         // Market structure detection (logging only — does NOT affect scoring)
         let marketStructure = { structure: 'unknown', swings: [] };
         try {
@@ -1658,6 +1666,7 @@ class BestTradesScanner {
           patternAdj,
           patternSummary: patternResult.patternSummary,
           signalSnapshot,
+          isRanging,
           crossTF,
           crossTFSummary,
           marketStructure,
