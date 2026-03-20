@@ -2158,7 +2158,7 @@ class BestTradesScanner {
       // BANNED ASSET CHECK — asset is banned from live trading (still logged for data collection)
       if (bannedSet.has(r.asset.toUpperCase())) { rejectReasons[r.asset] = `BANNED from live trading`; return false; }
 
-      // P6 #21: Minimum scan_count gate (scan_count 1-2 = 40-48% WR, 3+ = 55%+)
+      // P6 #21: Minimum scan_count gate (scan_count 1-2 = 40-48% WR, 5+ = 60%+)
       // scan_count is tracked in _logResults dedup — check if this asset has a pending entry
       // For first-time signals, scan_count is effectively 1
       // This gate is checked later during execution against DB scan_count
@@ -2377,7 +2377,7 @@ class BestTradesScanner {
     const toTrade = qualifying.slice(0, slotsAvailable);
 
     for (const setup of toTrade) {
-      // P6 #21: Minimum scan_count gate (scan_count 3+ = 55%+ WR, 7+ = 68-90% WR)
+      // P6 #21: Minimum scan_count gate (scan_count 5+ = 60%+ WR, 7+ = 68-90% WR)
       if (pool) {
         try {
           const scResult = await pool.query(
@@ -2385,11 +2385,32 @@ class BestTradesScanner {
             [setup.asset, setup.direction, setup.timeframe || '15m']
           );
           const sc = scResult.rows[0]?.scan_count || 1;
-          if (sc < 3) {
-            console.log(`[BestTrades] ${setup.asset} scan_count=${sc} < 3 — signal too fresh for auto-execute`);
+          if (sc < 5) {
+            console.log(`[BestTrades] ${setup.asset} scan_count=${sc} < 5 — signal too fresh for auto-execute`);
             continue;
           }
         } catch {}
+      }
+
+      // P6 #25: BTC trend alignment gate — block alt trades fighting BTC macro direction
+      const isBtcAsset = setup.asset?.toUpperCase().startsWith('BTC');
+      if (!isBtcAsset && setup.btcTrend) {
+        if (setup.btcTrend === 'strong_bull' && setup.direction === 'short') {
+          console.log(`[BestTrades] ${setup.asset} SHORT blocked — BTC trend is strong_bull, don't short alts into BTC rally`);
+          continue;
+        }
+        if (setup.btcTrend === 'strong_bear' && setup.direction === 'long') {
+          console.log(`[BestTrades] ${setup.asset} LONG blocked — BTC trend is strong_bear, don't long alts into BTC dump`);
+          continue;
+        }
+        // Soft penalty for mild misalignment
+        if (setup.btcTrend === 'bull' && setup.direction === 'short') {
+          setup.prob = Math.max(30, setup.prob - 5);
+          console.log(`[BestTrades] ${setup.asset} SHORT -5pp penalty — BTC trend is bull`);
+        } else if (setup.btcTrend === 'bear' && setup.direction === 'long') {
+          setup.prob = Math.max(30, setup.prob - 5);
+          console.log(`[BestTrades] ${setup.asset} LONG -5pp penalty — BTC trend is bear`);
+        }
       }
 
       // P6 #24: Funding rate directional gate
