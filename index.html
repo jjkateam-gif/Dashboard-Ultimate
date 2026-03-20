@@ -2775,7 +2775,7 @@ function switchAuthView(view) {
   </div>
 
   <!-- How it works -->
-  <div style="margin-top:16px;padding:12px;background:rgba(255,107,53,0.04);border:1px solid rgba(255,107,53,0.12);border-radius:8px;font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace">
+  <div id="probeExplainer" style="margin-top:16px;padding:12px;background:rgba(255,107,53,0.04);border:1px solid rgba(255,107,53,0.12);border-radius:8px;font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace">
     <span style="color:#ff6b35;font-weight:700">How probability is calculated: </span>
     Fetches live OHLCV → runs all 7 indicators → counts bullish/bearish signals → weights by historical win rate from your backtests →
     applies regime multiplier (bull market = higher base rate) → applies funding rate bias (percentile-adaptive) →
@@ -14386,10 +14386,19 @@ function _switchMarketTab(tab) {
 
   // Show/hide crypto-only sections
   const isCrypto = (tab === 'crypto' || !tab);
-  const cryptoOnlyIds = ['autoTradePanel', 'probeSetups', 'probRegimeBanner', 'btBalanceBanner', 'btBalanceHint'];
+  const cryptoOnlyIds = ['autoTradePanel', 'probeSetups', 'probRegimeBanner', 'btBalanceBanner', 'btBalanceHint', 'probeSignalTable', 'probeExplainer'];
   cryptoOnlyIds.forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.style.display = isCrypto ? '' : 'none';
+    if (!el) return;
+    if (isCrypto) {
+      el.removeAttribute('data-market-hidden');
+      // Restore display — probeSignalTable has its own show/hide logic
+      if (id === 'probeSignalTable') { /* leave as-is, shown by renderProbeResults */ }
+      else el.style.display = '';
+    } else {
+      el.setAttribute('data-market-hidden', '1');
+      el.style.display = 'none';
+    }
   });
   // Hide scan controls (timeframe, leverage, scan button) for non-crypto
   const scanControls = document.querySelector('#probeTimeframe')?.closest('div[style*="display:flex"]');
