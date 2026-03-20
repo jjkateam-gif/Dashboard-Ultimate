@@ -1560,8 +1560,14 @@ class BestTradesScanner {
         }
 
         // ── CROSS-TIMEFRAME INDICATOR LOGGING ──
-        const crossTF = this._getCrossTFSnapshot(asset.label, tf);
-        const crossTFSummary = this._calculateCrossTFSummary(crossTF, direction);
+        let crossTF = {};
+        let crossTFSummary = null;
+        try {
+          crossTF = this._getCrossTFSnapshot(asset.label, tf);
+          crossTFSummary = this._calculateCrossTFSummary(crossTF, direction);
+        } catch (ctfErr) {
+          console.warn(`[BestTrades] Cross-TF snapshot/summary error for ${asset.label} ${tf}:`, ctfErr.message);
+        }
 
         // Cross-TF alignment adjustment
         if (crossTFSummary && crossTFSummary.alignment_score !== undefined) {
@@ -1577,10 +1583,20 @@ class BestTradesScanner {
         }
 
         // Market structure detection (logging only — does NOT affect scoring)
-        const marketStructure = this._detectMarketStructure(candles);
+        let marketStructure = { structure: 'unknown', swings: [] };
+        try {
+          marketStructure = this._detectMarketStructure(candles);
+        } catch (msErr) {
+          console.warn(`[BestTrades] Market structure error for ${asset.label} ${tf}:`, msErr.message);
+        }
 
         // Funding rate scoring (logging only — does NOT affect scoring)
-        const fundingRateScore = this._scoreFundingRate(fundingRate, direction);
+        let fundingRateScore = { score: 0, signal: 'unavailable', percentile: null };
+        try {
+          fundingRateScore = this._scoreFundingRate(fundingRate, direction);
+        } catch (frErr) {
+          console.warn(`[BestTrades] Funding rate score error for ${asset.label} ${tf}:`, frErr.message);
+        }
 
         // Estimate R/R using calibrated probability
         const rrData = estimateRR(price, atrVal, direction, calibratedProb, this.settings.leverage,
@@ -1651,7 +1667,11 @@ class BestTradesScanner {
         results.push(_scanResult);
 
         // Update watchlist candidate (before qualifying filter)
-        this._updateWatchlistCandidate(_scanResult.asset, tf, _scanResult);
+        try {
+          this._updateWatchlistCandidate(_scanResult.asset, tf, _scanResult);
+        } catch (wlErr) {
+          console.warn(`[BestTrades] Watchlist update error for ${_scanResult.asset} ${tf}:`, wlErr.message);
+        }
 
         // Small delay to avoid Binance rate limits
         await new Promise(r => setTimeout(r, 200));
@@ -1681,10 +1701,18 @@ class BestTradesScanner {
     this._mergeResults();
 
     // Log results to DB
-    await this._logResults(results);
+    try {
+      await this._logResults(results);
+    } catch (logErr) {
+      console.error(`[BestTrades] _logResults crashed for ${tf}: ${logErr.message}`);
+    }
 
     // Process auto-trades (with cross-TF dedup)
-    await this._processAutoTrades(results, tf);
+    try {
+      await this._processAutoTrades(results, tf);
+    } catch (autoTradeErr) {
+      console.error(`[BestTrades] _processAutoTrades crashed for ${tf}: ${autoTradeErr.message}`);
+    }
 
     // Broadcast to SSE clients
     this._broadcast('scan', {
@@ -1758,18 +1786,23 @@ class BestTradesScanner {
     // 2026-03-18: Disable 1h auto-trade execution until data proves quality
     // Auto re-enable when 1h post-fix WR >= 55% on 30+ resolved trades
     if (tf === '1h') {
-      const h1Check = await pool.query(`
-        SELECT COUNT(*) FILTER (WHERE outcome IS NOT NULL) as resolved,
-               ROUND(100.0 * COUNT(*) FILTER (WHERE outcome='win') / NULLIF(COUNT(*) FILTER (WHERE outcome IS NOT NULL), 0), 1) as wr
-        FROM best_trades_log WHERE timeframe = '1h' AND created_at > '2026-03-18'
-      `);
-      const h1Resolved = parseInt(h1Check.rows[0]?.resolved) || 0;
-      const h1WR = parseFloat(h1Check.rows[0]?.wr) || 0;
-      if (h1Resolved < 30 || h1WR < 55) {
-        console.log(`[BestTrades] Auto-trade: 1h DISABLED (scan-only) — post-fix WR ${h1WR}% on ${h1Resolved} trades (need 55%+ on 30+)`);
+      try {
+        const h1Check = await pool.query(`
+          SELECT COUNT(*) FILTER (WHERE outcome IS NOT NULL) as resolved,
+                 ROUND(100.0 * COUNT(*) FILTER (WHERE outcome='win') / NULLIF(COUNT(*) FILTER (WHERE outcome IS NOT NULL), 0), 1) as wr
+          FROM best_trades_log WHERE timeframe = '1h' AND created_at > '2026-03-18'
+        `);
+        const h1Resolved = parseInt(h1Check.rows[0]?.resolved) || 0;
+        const h1WR = parseFloat(h1Check.rows[0]?.wr) || 0;
+        if (h1Resolved < 30 || h1WR < 55) {
+          console.log(`[BestTrades] Auto-trade: 1h DISABLED (scan-only) — post-fix WR ${h1WR}% on ${h1Resolved} trades (need 55%+ on 30+)`);
+          return;
+        }
+        console.log(`[BestTrades] Auto-trade: 1h RE-ENABLED — post-fix WR ${h1WR}% on ${h1Resolved} trades`);
+      } catch (h1Err) {
+        console.warn(`[BestTrades] 1h WR gate query failed (skipping auto-trade for safety):`, h1Err.message);
         return;
       }
-      console.log(`[BestTrades] Auto-trade: 1h RE-ENABLED — post-fix WR ${h1WR}% on ${h1Resolved} trades ✅`);
     }
 
     // Check per-TF rule: if this TF is explicitly disabled, skip
@@ -2061,13 +2094,36 @@ class BestTradesScanner {
         await pool.query(
           `INSERT INTO best_trades_log
            (asset, direction, probability, confidence, market_quality, rr_ratio,
-            entry_price, stop_price, target_price, stop_pct, target_pct, regime, executed, order_id, timeframe)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+            entry_price, stop_price, target_price, stop_pct, target_pct, regime, executed, order_id, timeframe,
+            signal_snapshot, raw_probability, ev, optimal_lev, atr_value, hits, misses, volume_ratio, confluence_score,
+            tf_bear_count, tf_bull_count, tf_alignment_score, highest_tf_conflict)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)`,
           [setup.asset, setup.direction, setup.prob, setup.confidence,
            setup.marketQuality, setup.rr, setup.price, setup.stopPrice, setup.targetPrice,
-           setup.stopPct, setup.targetPct, setup.regime, true, result.orderId || null, setup.timeframe || '15m']
+           setup.stopPct, setup.targetPct, setup.regime, true, result.orderId || null, setup.timeframe || '15m',
+           JSON.stringify({ ...(setup.signalSnapshot || {}), cross_tf: setup.crossTF, cross_tf_summary: setup.crossTFSummary, market_structure: setup.marketStructure, funding_rate_score: setup.fundingRateScore }),
+           setup.rawProb, setup.ev, setup.optimalLev,
+           setup.atrValue, JSON.stringify(setup.hits || []), JSON.stringify(setup.misses || []),
+           setup.volumeRatio, setup.confluenceScore,
+           setup.crossTFSummary?.bear_alignment || 0, setup.crossTFSummary?.bull_alignment || 0,
+           setup.crossTFSummary?.alignment_score || 0, setup.crossTFSummary?.highest_conflict_tf || null]
         );
-      } catch {}
+      } catch (execLogErr) {
+        console.warn(`[BestTrades] Auto-execute DB log failed for ${setup.asset}: ${execLogErr.message} — trying basic insert...`);
+        try {
+          await pool.query(
+            `INSERT INTO best_trades_log
+             (asset, direction, probability, confidence, market_quality, rr_ratio,
+              entry_price, stop_price, target_price, stop_pct, target_pct, regime, executed, order_id, timeframe)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+            [setup.asset, setup.direction, setup.prob, setup.confidence,
+             setup.marketQuality, setup.rr, setup.price, setup.stopPrice, setup.targetPrice,
+             setup.stopPct, setup.targetPct, setup.regime, true, result.orderId || null, setup.timeframe || '15m']
+          );
+        } catch (basicLogErr) {
+          console.error(`[BestTrades] Auto-execute BOTH DB logs failed for ${setup.asset}: ${basicLogErr.message}`);
+        }
+      }
     }
 
     console.log(`[BestTrades] ⚡ EXECUTED: ${setup.asset} ${setup.direction.toUpperCase()} @ $${markPrice} | Prob: ${setup.prob}% | Size: $${posSize} | Lev: ${lev}x | SL: ${slPrice} | TP: ${tpPrice}`);

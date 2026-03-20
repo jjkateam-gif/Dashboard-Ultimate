@@ -1754,7 +1754,7 @@ function switchAuthView(view) {
     <div class="section-title">📊 Performance Metrics</div>
     <div class="metrics">
       <div class="metric-card"><div class="metric-label">Total Return</div><div class="metric-value neutral" id="metricReturn">—</div><div class="metric-sub" id="metricReturnSub">Run backtest</div></div>
-      <div class="metric-card"><div class="metric-label">Sharpe Ratio</div><div class="metric-value neutral" id="metricSharpe">—</div><div class="metric-sub" title="Per-trade Sharpe (mean/std of returns, not annualized)">Per-trade</div></div>
+      <div class="metric-card"><div class="metric-label">Sharpe Ratio</div><div class="metric-value neutral" id="metricSharpe">—</div><div class="metric-sub" title="Annualized Sharpe = per-trade Sharpe × √(trades/day × 365)">Annualized</div></div>
       <div class="metric-card"><div class="metric-label">Win Rate</div><div class="metric-value neutral" id="metricWinRate">—</div><div class="metric-sub" id="metricWinRateSub">—</div></div>
       <div class="metric-card"><div class="metric-label">Total Trades</div><div class="metric-value neutral" id="metricTrades">—</div><div class="metric-sub" id="metricTradesSub">—</div></div>
       <div class="metric-card"><div class="metric-label">Max Drawdown</div><div class="metric-value neutral" id="metricDD">—</div><div class="metric-sub">Peak to trough</div></div>
@@ -4745,7 +4745,7 @@ function backtest(d, sig, cap, opts={}, qualityArr=null, regimes=null){
   return{
     final, ret, trades, wr, equity,
     maxDD: calcMaxDD(equity, cap),
-    sharpe: calcSharpe(equity),
+    sharpe: calcSharpe(equity, trades),
     slCount, tpCount, avgWin, avgLoss, kelly,
     longCount: longTrades.length,
     shortCount: shortTrades.length,
@@ -4870,7 +4870,7 @@ function renderWalkForward(wf){
 }
 
 function calcMaxDD(eq,cap){let peak=cap,maxDD=0;for(const v of eq){if(v>peak)peak=v;const dd=(peak-v)/peak*100;if(dd>maxDD)maxDD=dd}return maxDD}
-function calcSharpe(eq){if(eq.length<3)return 0;const rets=[];for(let i=1;i<eq.length;i++){if(eq[i-1]>0&&eq[i]>0)rets.push(eq[i]/eq[i-1]-1)}if(rets.length<3)return 0;const mean=rets.reduce((a,b)=>a+b,0)/rets.length,varr=rets.reduce((a,b)=>a+(b-mean)**2,0)/(rets.length-1),sd=Math.sqrt(varr);return sd===0?0:(mean/sd)}
+function calcSharpe(eq,trades){if(eq.length<3)return 0;const rets=[];for(let i=1;i<eq.length;i++){if(eq[i-1]>0&&eq[i]>0)rets.push(eq[i]/eq[i-1]-1)}if(rets.length<3)return 0;const mean=rets.reduce((a,b)=>a+b,0)/rets.length,varr=rets.reduce((a,b)=>a+(b-mean)**2,0)/(rets.length-1),sd=Math.sqrt(varr);if(sd===0)return 0;const perTrade=mean/sd;if(!trades||trades.length<2)return perTrade;const dates=trades.map(t=>t.exitDate||t.entryDate).filter(Boolean);if(dates.length<2)return perTrade;const minD=Math.min(...dates),maxD=Math.max(...dates),spanDays=(maxD-minD)/(1000*60*60*24);if(spanDays<1)return perTrade;const tradesPerDay=trades.length/spanDays;return perTrade*Math.sqrt(tradesPerDay*365)}
 
 // ══════════════════════════════════════════════════════════════
 // EXTENDED RISK METRICS (#8) — Sortino, Profit Factor, Calmar, Recovery
