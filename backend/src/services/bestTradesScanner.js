@@ -2164,6 +2164,16 @@ class BestTradesScanner {
           return false;
         }
       }
+      // Ichimoku inside cloud + short = +6pp boost (68.3% WR on 63 trades vs 54.9% overall)
+      if (r.direction === 'short' && r.signalSnapshot?.Ichimoku?.priceVsCloud === 'inside') {
+        r.prob = Math.min(85, r.prob + 6);
+      }
+
+      // OBV positive slope on shorts = +4pp boost (66.4% WR — weak buying confirms short continuation)
+      if (r.direction === 'short' && r.signalSnapshot?.Volume?.obvSlope > 0) {
+        r.prob = Math.min(85, r.prob + 4);
+      }
+
       const effectiveDirMinProb = Math.max(assetOverride.minProb || minProb, dirMinProb);
       if (r.prob < effectiveDirMinProb) { rejectReasons[r.asset] = `prob ${r.prob}% < dir-aware min ${effectiveDirMinProb}%`; return false; }
 
