@@ -14384,10 +14384,26 @@ function _switchMarketTab(tab) {
   // Update banner
   _updateMarketBanner();
 
-  // Show/hide auto-trade settings panel (crypto only)
-  const autoTradePanel = document.getElementById('autoTradePanel');
-  if (autoTradePanel) {
-    autoTradePanel.style.display = (tab === 'crypto' || !tab) ? '' : 'none';
+  // Show/hide crypto-only sections
+  const isCrypto = (tab === 'crypto' || !tab);
+  const cryptoOnlyIds = ['autoTradePanel', 'probeSetups', 'probRegimeBanner', 'btBalanceBanner', 'btBalanceHint'];
+  cryptoOnlyIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isCrypto ? '' : 'none';
+  });
+  // Hide scan controls (timeframe, leverage, scan button) for non-crypto
+  const scanControls = document.querySelector('#probeTimeframe')?.closest('div[style*="display:flex"]');
+  if (scanControls && scanControls.parentElement) {
+    // The controls wrapper is the right side of the header flex
+    const headerRight = document.getElementById('probeTimeframe')?.parentElement;
+    if (headerRight) headerRight.style.display = isCrypto ? 'flex' : 'none';
+  }
+
+  // Update status text for non-crypto
+  const statusEl = document.getElementById('probeLastUpdated');
+  if (statusEl && !isCrypto) {
+    const label = tab === 'stock' ? '📈 Stocks' : '🛢️ Commodities';
+    statusEl.textContent = label + ' — Server scanning & logging data (not tradeable yet)';
   }
 
   // Reset filters on tab switch
