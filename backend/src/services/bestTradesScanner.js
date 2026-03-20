@@ -1842,6 +1842,23 @@ class BestTradesScanner {
       // BANNED ASSET CHECK — asset is banned from live trading (still logged for data collection)
       if (bannedSet.has(r.asset.toUpperCase())) { rejectReasons[r.asset] = `BANNED from live trading`; return false; }
 
+      // Market structure gate — validated March 20: contracting/uptrend shorts = 0-18% WR
+      if (r.marketStructure && r.marketStructure.structure) {
+        const ms = r.marketStructure.structure;
+        if (ms === 'contracting') {
+          rejectReasons[r.asset] = `Market structure CONTRACTING — all signals blocked (0% WR)`;
+          return false;
+        }
+        if (ms === 'uptrend' && r.direction === 'short') {
+          rejectReasons[r.asset] = `Market structure UPTREND — shorts blocked (18% WR)`;
+          return false;
+        }
+        if (ms === 'downtrend' && r.direction === 'long') {
+          rejectReasons[r.asset] = `Market structure DOWNTREND — longs blocked`;
+          return false;
+        }
+      }
+
       // 4h conflict: LOG as flag but do NOT block — collecting data to validate first
       if (r.crossTFSummary) {
         const h4Data = r.crossTF?.['4h'];
@@ -1880,8 +1897,22 @@ class BestTradesScanner {
         return false;
       }
 
-      // Direction-aware minimum probability
+      // Direction-aware minimum probability (raised March 20 — 60%+ trades = 78.7% WR post-fix)
       const dirMinProb = r.direction === 'long' ? 65 : 60;
+
+      // 3/4 bear signal minimum gate for shorts (validated: 4/4 = 83.1% WR, 3/4 = 59.5% WR, 2/4 = 44.4% WR)
+      if (r.direction === 'short') {
+        const coreBearCount = [
+          r.signalSnapshot?.EMA?.bear,
+          r.signalSnapshot?.MACD?.bear,
+          r.signalSnapshot?.Ichimoku?.bear,
+          r.signalSnapshot?.Volume?.bear,
+        ].filter(Boolean).length;
+        if (coreBearCount < 3) {
+          rejectReasons[r.asset] = `Only ${coreBearCount}/4 core bear signals — minimum 3 required for auto-trade`;
+          return false;
+        }
+      }
       const effectiveDirMinProb = Math.max(assetOverride.minProb || minProb, dirMinProb);
       if (r.prob < effectiveDirMinProb) { rejectReasons[r.asset] = `prob ${r.prob}% < dir-aware min ${effectiveDirMinProb}%`; return false; }
 
