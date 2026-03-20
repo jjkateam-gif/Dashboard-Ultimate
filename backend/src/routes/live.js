@@ -365,6 +365,30 @@ router.post('/order', async (req, res) => {
       demo,
     });
 
+    // Fix 1: Update best_trades_log to mark matching pending signal as executed
+    if (result.orderId && pool) {
+      try {
+        // Find the most recent unexecuted, unresolved signal for this asset+direction
+        const asset = instId.replace('-USDT', '').replace('USDT', '');
+        const updateResult = await pool.query(
+          `UPDATE best_trades_log
+           SET executed = true, order_id = $1, engine_source = 'manual_frontend'
+           WHERE asset = $2 AND direction = $3 AND executed = false AND outcome IS NULL
+           ORDER BY created_at DESC LIMIT 1
+           RETURNING id, asset, direction`,
+          [result.orderId, asset, direction]
+        );
+        if (updateResult.rows.length > 0) {
+          const r = updateResult.rows[0];
+          console.log(`[Order] ✅ Marked best_trades_log #${r.id} (${r.asset} ${r.direction}) as executed with orderId=${result.orderId}`);
+        } else {
+          console.log(`[Order] No matching pending signal found in best_trades_log for ${asset} ${direction}`);
+        }
+      } catch (e) {
+        console.warn('[Order] Could not update best_trades_log executed field:', e.message);
+      }
+    }
+
     res.json({ success: true, orderId: result.orderId });
   } catch (err) {
     console.error('Order execution error:', err.message);

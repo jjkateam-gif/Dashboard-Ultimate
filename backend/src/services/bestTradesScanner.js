@@ -2562,12 +2562,12 @@ class BestTradesScanner {
             session_hour_utc, trading_session, is_weekend,
             open_positions_count, daily_pnl_pct, consecutive_losses_at_entry,
             global_long_short_ratio, mark_price_premium, book_imbalance,
-            liq_risk_score, liq_risk_level, liq_risk_components)
+            liq_risk_score, liq_risk_level, liq_risk_components, engine_source)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,
                    $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,
                    $47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,
                    $60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73,$74,$75,$76,$77,$78,$79,$80,
-                   $81,$82,$83)`,
+                   $81,$82,$83,$84)`,
           [setup.asset, setup.direction, setup.prob, setup.confidence,
            setup.marketQuality, setup.rr, setup.price, setup.stopPrice, setup.targetPrice,
            setup.stopPct, setup.targetPct, setup.regime, true, result.orderId || null, setup.timeframe || '15m',
@@ -2591,7 +2591,7 @@ class BestTradesScanner {
            setup.sessionHourUtc, setup.tradingSession, setup.isWeekend,
            setup.openPositionsCount || null, setup.dailyPnlPct || null, leverageRisk.consecutiveLosses,
            setup.derivData?.globalLongShortRatio, setup.derivData?.markPricePremium, setup.derivData?.bookImbalance,
-           setup.liqRiskScore, setup.liqRiskLevel, setup.liqRiskComponents]
+           setup.liqRiskScore, setup.liqRiskLevel, setup.liqRiskComponents, 'best_trades_auto']
         );
       } catch (execLogErr) {
         console.warn(`[BestTrades] Auto-execute DB log failed for ${setup.asset}: ${execLogErr.message} — trying basic insert...`);
@@ -2819,12 +2819,12 @@ class BestTradesScanner {
             session_hour_utc, trading_session, is_weekend,
             open_positions_count, daily_pnl_pct, consecutive_losses_at_entry,
             global_long_short_ratio, mark_price_premium, book_imbalance,
-            liq_risk_score, liq_risk_level, liq_risk_components)
+            liq_risk_score, liq_risk_level, liq_risk_components, engine_source)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,
                    $28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,
                    $46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,
                    $59,$60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73,$74,$75,$76,$77,$78,$79,
-                   $80,$81,$82)`,
+                   $80,$81,$82,$83)`,
           [r.asset, r.direction, r.prob, r.confidence,
            r.marketQuality, r.rr, r.price, r.stopPrice, r.targetPrice,
            r.stopPct, r.targetPct, r.regime, false, r.timeframe || '15m',
@@ -2848,7 +2848,7 @@ class BestTradesScanner {
            r.sessionHourUtc, r.tradingSession, r.isWeekend,
            null, null, leverageRisk.consecutiveLosses,
            r.derivData?.globalLongShortRatio, r.derivData?.markPricePremium, r.derivData?.bookImbalance,
-           r.liqRiskScore, r.liqRiskLevel, r.liqRiskComponents]
+           r.liqRiskScore, r.liqRiskLevel, r.liqRiskComponents, 'best_trades_signal']
         );
         inserted++;
       } catch (e) {
@@ -2906,6 +2906,15 @@ class BestTradesScanner {
     // Run first check after 60s
     setTimeout(() => this._resolveOpenPredictions().catch(() => {}), 60_000);
     console.log('[BestTrades] Resolution tracker started (every 5 min)');
+
+    // BloFin reconciliation — match real fills to DB trades every 15 min
+    this.reconcileTimer = setInterval(() => {
+      this._reconcileBloFinTrades().catch(e =>
+        console.warn('[BestTrades] Reconciliation error:', e.message));
+    }, 15 * 60_000);
+    // First reconciliation after 2 min
+    setTimeout(() => this._reconcileBloFinTrades().catch(() => {}), 2 * 60_000);
+    console.log('[BestTrades] BloFin reconciliation started (every 15 min)');
 
     // 90-day retention cleanup — runs once daily (every 24h)
     this._runRetentionCleanup(); // Run on startup
@@ -3197,6 +3206,117 @@ class BestTradesScanner {
     if (resolved > 0) {
       console.log(`[BestTrades] Resolved ${resolved} predictions`);
       this._broadcast('resolution', { resolved });
+    }
+  }
+
+  // ── BloFin Reconciliation — Fix 2: Ground truth from real fills ──
+
+  async _reconcileBloFinTrades() {
+    if (!pool) return;
+    const liveEngine = require('./liveEngine');
+    let creds = null, demo = false;
+    try {
+      const userResult = await pool.query("SELECT id FROM users WHERE role='admin' LIMIT 1");
+      if (userResult.rows.length > 0) {
+        const adminId = userResult.rows[0].id;
+        if (liveEngine.isUnlocked(adminId)) {
+          creds = liveEngine.getCredentials(adminId);
+          demo = liveEngine.isDemo(adminId);
+        }
+      }
+    } catch (e) { return; }
+    if (!creds) return;
+
+    try {
+      // Pull closed order history from BloFin
+      const orders = await blofinClient.getOrderHistory(creds, null, demo);
+      if (!orders || !Array.isArray(orders) || orders.length === 0) {
+        console.log('[BestTrades] Reconciliation: no BloFin order history returned');
+        return;
+      }
+
+      let matched = 0, unmatched = 0, updated = 0;
+
+      for (const order of orders) {
+        // Parse BloFin order data
+        const instId = order.instId || '';
+        const asset = instId.replace('-USDT', '').replace('USDT', '');
+        const direction = order.side === 'buy' ? 'long' : 'short';
+        const orderId = order.orderId || order.orderid || null;
+        const avgPrice = parseFloat(order.avgPrice || order.averagePrice || order.px || 0);
+        const pnl = parseFloat(order.pnl || order.realizedPnl || order.closedPnl || 0);
+        const fee = parseFloat(order.fee || order.tradeFee || 0);
+        const filledTime = order.fillTime || order.updateTime || order.cTime || null;
+        const createTime = order.createTime || order.cTime || null;
+
+        if (!asset || !orderId) continue;
+
+        // Try to match by order_id first (most reliable)
+        let matchResult = await pool.query(
+          `SELECT id FROM best_trades_log WHERE order_id = $1 LIMIT 1`,
+          [orderId]
+        );
+
+        // If no match by order_id, try by asset + direction + time window
+        if (matchResult.rows.length === 0 && createTime) {
+          const orderTime = new Date(parseInt(createTime) || createTime);
+          matchResult = await pool.query(
+            `SELECT id FROM best_trades_log
+             WHERE asset = $1 AND direction = $2 AND executed = true
+             AND ABS(EXTRACT(EPOCH FROM (created_at - $3::timestamp))) < 600
+             ORDER BY ABS(EXTRACT(EPOCH FROM (created_at - $3::timestamp))) ASC
+             LIMIT 1`,
+            [asset, direction, orderTime]
+          );
+        }
+
+        // If still no match, try broader search (any pending signal for this asset+direction within ±30 min)
+        if (matchResult.rows.length === 0 && createTime) {
+          const orderTime = new Date(parseInt(createTime) || createTime);
+          matchResult = await pool.query(
+            `SELECT id FROM best_trades_log
+             WHERE asset = $1 AND direction = $2 AND outcome IS NULL
+             AND ABS(EXTRACT(EPOCH FROM (created_at - $3::timestamp))) < 1800
+             ORDER BY ABS(EXTRACT(EPOCH FROM (created_at - $3::timestamp))) ASC
+             LIMIT 1`,
+            [asset, direction, orderTime]
+          );
+        }
+
+        if (matchResult.rows.length > 0) {
+          const tradeId = matchResult.rows[0].id;
+          const realOutcome = pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'breakeven';
+          // Calculate real PnL % from fill prices if available
+          const entryPriceReal = avgPrice || null;
+
+          try {
+            await pool.query(
+              `UPDATE best_trades_log SET
+                executed = true,
+                order_id = COALESCE(order_id, $2),
+                entry_price_real = COALESCE(entry_price_real, $3),
+                trading_fee_real = COALESCE(trading_fee_real, $4),
+                blofin_pnl_usd = $5,
+                data_source = 'signal_matched',
+                engine_source = COALESCE(engine_source, 'best_trades_auto')
+               WHERE id = $1`,
+              [tradeId, orderId, entryPriceReal, Math.abs(fee), pnl]
+            );
+            updated++;
+          } catch (e) {
+            console.warn(`[BestTrades] Reconciliation update failed for trade #${tradeId}:`, e.message);
+          }
+          matched++;
+        } else {
+          unmatched++;
+        }
+      }
+
+      if (matched > 0 || unmatched > 0) {
+        console.log(`[BestTrades] Reconciliation: ${matched} matched (${updated} updated), ${unmatched} unmatched BloFin orders`);
+      }
+    } catch (e) {
+      console.warn('[BestTrades] Reconciliation error:', e.message);
     }
   }
 
