@@ -8,6 +8,7 @@ const { sma, ema, rsi, stdev, atr } = require('./indicators');
 const blofinClient = require('./blofinClient');
 const liveEngine = require('./liveEngine');
 const { detectPatterns } = require('./chartPatterns');
+const { fetchAllMarketContext } = require('./marketContext');
 // https no longer needed — switched from Binance to BloFin for funding rates
 let pool = null;
 try { pool = require('../db').pool; } catch {}
@@ -1207,6 +1208,10 @@ class BestTradesScanner {
       takerBuyRatio: null, takerSellRatio: null, takerDominance: null,
       topTraderLongRatio: null, topTraderShortRatio: null, crowdPositioning: null,
       fundingRatePrev1: null, fundingRatePrev2: null, fundingRateTrend: null, fundingRate3pAvg: null,
+      // Expanded derivatives
+      globalLongShortRatio: null, globalLongAccount: null, globalShortAccount: null,
+      markPricePremium: null, markPrice: null, indexPrice: null,
+      bookImbalance: null, bidDepth: null, askDepth: null,
     };
 
     try {
@@ -1281,6 +1286,48 @@ class BestTradesScanner {
           // Trend: compare latest vs 2 periods ago
           result.fundingRateTrend = rates[2] > rates[0] + 0.0001 ? 'rising'
             : rates[2] < rates[0] - 0.0001 ? 'falling' : 'flat';
+        }
+      }
+    } catch {}
+
+    try {
+      // Global Long/Short Account Ratio
+      const glsResp = await fetch(`https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=${symbol}&period=5m&limit=1`);
+      if (glsResp.ok) {
+        const gls = await glsResp.json();
+        if (gls.length > 0) {
+          result.globalLongShortRatio = Math.round(parseFloat(gls[0].longShortRatio) * 1e4) / 1e4;
+          result.globalLongAccount = Math.round(parseFloat(gls[0].longAccount) * 1e4) / 1e4;
+          result.globalShortAccount = Math.round(parseFloat(gls[0].shortAccount) * 1e4) / 1e4;
+        }
+      }
+    } catch {}
+
+    try {
+      // Mark Price + Index Price → Premium/Discount
+      const mpResp = await fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`);
+      if (mpResp.ok) {
+        const mp = await mpResp.json();
+        result.markPrice = parseFloat(mp.markPrice) || null;
+        result.indexPrice = parseFloat(mp.indexPrice) || null;
+        if (result.markPrice && result.indexPrice && result.indexPrice > 0) {
+          result.markPricePremium = Math.round((result.markPrice - result.indexPrice) / result.indexPrice * 100 * 1e4) / 1e4;
+        }
+      }
+    } catch {}
+
+    try {
+      // Orderbook top-of-book imbalance (bid vs ask depth at top 5 levels)
+      const obResp = await fetch(`https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}&limit=5`);
+      if (obResp.ok) {
+        const ob = await obResp.json();
+        const bidTotal = (ob.bids || []).reduce((s, b) => s + parseFloat(b[1]), 0);
+        const askTotal = (ob.asks || []).reduce((s, a) => s + parseFloat(a[1]), 0);
+        result.bidDepth = Math.round(bidTotal * 100) / 100;
+        result.askDepth = Math.round(askTotal * 100) / 100;
+        const total = bidTotal + askTotal;
+        if (total > 0) {
+          result.bookImbalance = Math.round((bidTotal - askTotal) / total * 1e4) / 1e4; // +1 = all bids, -1 = all asks
         }
       }
     } catch {}
@@ -1547,6 +1594,15 @@ class BestTradesScanner {
     await refreshFundingRates();
     await refreshLeverageRisk();
     this._derivativesCache = {}; // Clear per scan cycle
+
+    // Fetch macro market context (cached, parallel fetch — Fear&Greed, CoinGecko, DVOL, BTC)
+    let marketCtx = {};
+    try {
+      marketCtx = await fetchAllMarketContext() || {};
+    } catch (mctxErr) {
+      console.warn(`[BestTrades] Market context fetch failed: ${mctxErr.message}`);
+    }
+
     console.log(`[BestTrades] Scanning ${ASSETS.length} assets on ${tf}...`);
 
     const results = [];
@@ -1897,6 +1953,29 @@ class BestTradesScanner {
           pctFromSwingHigh, pctFromSwingLow, barsSinceSwingHigh, barsSinceSwingLow,
           nearestRoundPct, atKeyLevel, consecutiveBear, consecutiveBull,
           volumeIncreasing3bar, volumeSpike,
+          // Market context (macro)
+          fearGreedValue: marketCtx.fearGreed?.value || null,
+          fearGreedLabel: marketCtx.fearGreed?.label || null,
+          btcPrice: marketCtx.btcContext?.btc_price || null,
+          btcTrend: marketCtx.btcContext?.btc_trend || null,
+          btcRsi1h: marketCtx.btcContext?.btc_rsi_1h || null,
+          btcRsi4h: marketCtx.btcContext?.btc_rsi_4h || null,
+          btcEmaTrend1h: marketCtx.btcContext?.btc_ema_trend_1h || null,
+          btcEmaTrend4h: marketCtx.btcContext?.btc_ema_trend_4h || null,
+          dvol: marketCtx.deribitDvol?.dvol || null,
+          dvolLevel: marketCtx.deribitDvol?.dvolLevel || null,
+          btcDominance: marketCtx.globalStats?.btcDominance || null,
+          marketCapChange24h: marketCtx.globalStats?.marketCapChangePct24h || null,
+          // Session timing (computed)
+          sessionHourUtc: new Date().getUTCHours(),
+          tradingSession: (() => {
+            const h = new Date().getUTCHours();
+            if (h >= 0 && h <= 7) return 'asia';
+            if (h >= 8 && h <= 12) return 'europe';
+            if (h >= 13 && h <= 20) return 'us';
+            return 'late_us';
+          })(),
+          isWeekend: [0, 6].includes(new Date().getUTCDay()),
           timestamp: new Date().toISOString(),
         };
         results.push(_scanResult);
@@ -2337,6 +2416,17 @@ class BestTradesScanner {
         break;
       }
 
+      // Enrich setup with portfolio state at entry
+      setup.openPositionsCount = openCount;
+      setup.dailyPnlPct = null; // computed below if available
+      try {
+        const dailyPnlRes = await pool.query(`
+          SELECT COALESCE(SUM(pnl), 0) as daily_pnl FROM best_trades_log
+          WHERE outcome IN ('win','loss') AND resolved_at > NOW() - INTERVAL '24 hours'
+        `);
+        setup.dailyPnlPct = parseFloat(dailyPnlRes.rows[0]?.daily_pnl) || null;
+      } catch {}
+
       try {
         await this._executeTradeOnBloFin(setup, posSize, userId, creds, demo);
         currentExposureUsd += posSize; // track cumulative for heat
@@ -2434,10 +2524,16 @@ class BestTradesScanner {
             oi_value, oi_change_pct_1h, oi_direction,
             taker_buy_ratio, taker_sell_ratio, taker_dominance,
             top_trader_long_ratio, top_trader_short_ratio, crowd_positioning,
-            funding_rate_prev1, funding_rate_prev2, funding_rate_trend, funding_rate_3p_avg)
+            funding_rate_prev1, funding_rate_prev2, funding_rate_trend, funding_rate_3p_avg,
+            fear_greed_value, fear_greed_label, btc_price, btc_trend, btc_rsi_1h, btc_rsi_4h,
+            btc_ema_trend_1h, btc_ema_trend_4h, dvol, dvol_level, btc_dominance, market_cap_change_24h,
+            session_hour_utc, trading_session, is_weekend,
+            open_positions_count, daily_pnl_pct, consecutive_losses_at_entry,
+            global_long_short_ratio, mark_price_premium, book_imbalance)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,
                    $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,
-                   $47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59)`,
+                   $47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,
+                   $60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73,$74,$75,$76,$77,$78,$79,$80)`,
           [setup.asset, setup.direction, setup.prob, setup.confidence,
            setup.marketQuality, setup.rr, setup.price, setup.stopPrice, setup.targetPrice,
            setup.stopPct, setup.targetPct, setup.regime, true, result.orderId || null, setup.timeframe || '15m',
@@ -2455,7 +2551,12 @@ class BestTradesScanner {
            setup.derivData?.oiValue, setup.derivData?.oiChangePct1h, setup.derivData?.oiDirection,
            setup.derivData?.takerBuyRatio, setup.derivData?.takerSellRatio, setup.derivData?.takerDominance,
            setup.derivData?.topTraderLongRatio, setup.derivData?.topTraderShortRatio, setup.derivData?.crowdPositioning,
-           setup.derivData?.fundingRatePrev1, setup.derivData?.fundingRatePrev2, setup.derivData?.fundingRateTrend, setup.derivData?.fundingRate3pAvg]
+           setup.derivData?.fundingRatePrev1, setup.derivData?.fundingRatePrev2, setup.derivData?.fundingRateTrend, setup.derivData?.fundingRate3pAvg,
+           setup.fearGreedValue, setup.fearGreedLabel, setup.btcPrice, setup.btcTrend, setup.btcRsi1h, setup.btcRsi4h,
+           setup.btcEmaTrend1h, setup.btcEmaTrend4h, setup.dvol, setup.dvolLevel, setup.btcDominance, setup.marketCapChange24h,
+           setup.sessionHourUtc, setup.tradingSession, setup.isWeekend,
+           setup.openPositionsCount || null, setup.dailyPnlPct || null, leverageRisk.consecutiveLosses,
+           setup.derivData?.globalLongShortRatio, setup.derivData?.markPricePremium, setup.derivData?.bookImbalance]
         );
       } catch (execLogErr) {
         console.warn(`[BestTrades] Auto-execute DB log failed for ${setup.asset}: ${execLogErr.message} — trying basic insert...`);
@@ -2614,7 +2715,13 @@ class BestTradesScanner {
                 oi_value = $31, oi_change_pct_1h = $32, oi_direction = $33,
                 taker_buy_ratio = $34, taker_sell_ratio = $35, taker_dominance = $36,
                 top_trader_long_ratio = $37, top_trader_short_ratio = $38, crowd_positioning = $39,
-                funding_rate_prev1 = $40, funding_rate_prev2 = $41, funding_rate_trend = $42, funding_rate_3p_avg = $43
+                funding_rate_prev1 = $40, funding_rate_prev2 = $41, funding_rate_trend = $42, funding_rate_3p_avg = $43,
+                fear_greed_value = $44, fear_greed_label = $45, btc_price = $46, btc_trend = $47,
+                btc_rsi_1h = $48, btc_rsi_4h = $49, btc_ema_trend_1h = $50, btc_ema_trend_4h = $51,
+                dvol = $52, dvol_level = $53, btc_dominance = $54, market_cap_change_24h = $55,
+                session_hour_utc = $56, trading_session = $57, is_weekend = $58,
+                consecutive_losses_at_entry = $59,
+                global_long_short_ratio = $60, mark_price_premium = $61, book_imbalance = $62
                WHERE id = $1`,
               [row.id, r.prob, r.confidence, r.marketQuality,
                r.ev, r.rawProb, r.confluenceScore,
@@ -2632,7 +2739,13 @@ class BestTradesScanner {
                r.derivData?.oiValue, r.derivData?.oiChangePct1h, r.derivData?.oiDirection,
                r.derivData?.takerBuyRatio, r.derivData?.takerSellRatio, r.derivData?.takerDominance,
                r.derivData?.topTraderLongRatio, r.derivData?.topTraderShortRatio, r.derivData?.crowdPositioning,
-               r.derivData?.fundingRatePrev1, r.derivData?.fundingRatePrev2, r.derivData?.fundingRateTrend, r.derivData?.fundingRate3pAvg]
+               r.derivData?.fundingRatePrev1, r.derivData?.fundingRatePrev2, r.derivData?.fundingRateTrend, r.derivData?.fundingRate3pAvg,
+               r.fearGreedValue, r.fearGreedLabel, r.btcPrice, r.btcTrend,
+               r.btcRsi1h, r.btcRsi4h, r.btcEmaTrend1h, r.btcEmaTrend4h,
+               r.dvol, r.dvolLevel, r.btcDominance, r.marketCapChange24h,
+               r.sessionHourUtc, r.tradingSession, r.isWeekend,
+               leverageRisk.consecutiveLosses,
+               r.derivData?.globalLongShortRatio, r.derivData?.markPricePremium, r.derivData?.bookImbalance]
             );
             debugInfo.errors.push({ asset: r.asset, stage: 'dedup_update_ok', id: row.id });
           } catch (updateErr) {
@@ -2663,10 +2776,16 @@ class BestTradesScanner {
             oi_value, oi_change_pct_1h, oi_direction,
             taker_buy_ratio, taker_sell_ratio, taker_dominance,
             top_trader_long_ratio, top_trader_short_ratio, crowd_positioning,
-            funding_rate_prev1, funding_rate_prev2, funding_rate_trend, funding_rate_3p_avg)
+            funding_rate_prev1, funding_rate_prev2, funding_rate_trend, funding_rate_3p_avg,
+            fear_greed_value, fear_greed_label, btc_price, btc_trend, btc_rsi_1h, btc_rsi_4h,
+            btc_ema_trend_1h, btc_ema_trend_4h, dvol, dvol_level, btc_dominance, market_cap_change_24h,
+            session_hour_utc, trading_session, is_weekend,
+            open_positions_count, daily_pnl_pct, consecutive_losses_at_entry,
+            global_long_short_ratio, mark_price_premium, book_imbalance)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,
                    $28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,
-                   $46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58)`,
+                   $46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,
+                   $59,$60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73,$74,$75,$76,$77,$78,$79)`,
           [r.asset, r.direction, r.prob, r.confidence,
            r.marketQuality, r.rr, r.price, r.stopPrice, r.targetPrice,
            r.stopPct, r.targetPct, r.regime, false, r.timeframe || '15m',
@@ -2684,7 +2803,12 @@ class BestTradesScanner {
            r.derivData?.oiValue, r.derivData?.oiChangePct1h, r.derivData?.oiDirection,
            r.derivData?.takerBuyRatio, r.derivData?.takerSellRatio, r.derivData?.takerDominance,
            r.derivData?.topTraderLongRatio, r.derivData?.topTraderShortRatio, r.derivData?.crowdPositioning,
-           r.derivData?.fundingRatePrev1, r.derivData?.fundingRatePrev2, r.derivData?.fundingRateTrend, r.derivData?.fundingRate3pAvg]
+           r.derivData?.fundingRatePrev1, r.derivData?.fundingRatePrev2, r.derivData?.fundingRateTrend, r.derivData?.fundingRate3pAvg,
+           r.fearGreedValue, r.fearGreedLabel, r.btcPrice, r.btcTrend, r.btcRsi1h, r.btcRsi4h,
+           r.btcEmaTrend1h, r.btcEmaTrend4h, r.dvol, r.dvolLevel, r.btcDominance, r.marketCapChange24h,
+           r.sessionHourUtc, r.tradingSession, r.isWeekend,
+           null, null, leverageRisk.consecutiveLosses,
+           r.derivData?.globalLongShortRatio, r.derivData?.markPricePremium, r.derivData?.bookImbalance]
         );
         inserted++;
       } catch (e) {
@@ -2746,6 +2870,55 @@ class BestTradesScanner {
     // 90-day retention cleanup — runs once daily (every 24h)
     this._runRetentionCleanup(); // Run on startup
     this.retentionTimer = setInterval(() => this._runRetentionCleanup(), 24 * 60 * 60_000);
+
+    // Nightly market cache — snapshot at 18:00 UTC daily
+    this._scheduleNightlyCache();
+  }
+
+  _scheduleNightlyCache() {
+    const now = new Date();
+    const next18UTC = new Date(now);
+    next18UTC.setUTCHours(18, 0, 0, 0);
+    if (now >= next18UTC) next18UTC.setUTCDate(next18UTC.getUTCDate() + 1);
+    const msUntil = next18UTC - now;
+    setTimeout(() => {
+      this._saveNightlyCache().catch(e => console.warn('[BestTrades] Nightly cache error:', e.message));
+      // Re-schedule for next day
+      setInterval(() => {
+        this._saveNightlyCache().catch(e => console.warn('[BestTrades] Nightly cache error:', e.message));
+      }, 24 * 60 * 60_000);
+    }, msUntil);
+    console.log(`[BestTrades] Nightly cache scheduled in ${Math.round(msUntil / 60000)} min (18:00 UTC)`);
+  }
+
+  async _saveNightlyCache() {
+    if (!pool) return;
+    try {
+      const ctx = await fetchAllMarketContext();
+      const today = new Date().toISOString().slice(0, 10);
+      await pool.query(
+        `INSERT INTO nightly_market_cache
+         (cache_date, fear_greed_value, fear_greed_label, btc_price, btc_dominance, btc_trend,
+          btc_rsi_1h, btc_rsi_4h, dvol, dvol_level, total_market_cap, total_volume_24h,
+          market_cap_change_24h, eth_dominance, extra_data)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+         ON CONFLICT (cache_date) DO UPDATE SET
+           fear_greed_value=$2, fear_greed_label=$3, btc_price=$4, btc_dominance=$5, btc_trend=$6,
+           btc_rsi_1h=$7, btc_rsi_4h=$8, dvol=$9, dvol_level=$10, total_market_cap=$11, total_volume_24h=$12,
+           market_cap_change_24h=$13, eth_dominance=$14, extra_data=$15`,
+        [today,
+         ctx.fearGreed?.value, ctx.fearGreed?.label,
+         ctx.btcContext?.btc_price, ctx.globalStats?.btcDominance, ctx.btcContext?.btc_trend,
+         ctx.btcContext?.btc_rsi_1h, ctx.btcContext?.btc_rsi_4h,
+         ctx.deribitDvol?.dvol, ctx.deribitDvol?.dvolLevel,
+         ctx.globalStats?.totalMarketCap, ctx.globalStats?.totalVolume24h,
+         ctx.globalStats?.marketCapChangePct24h, ctx.globalStats?.ethDominance,
+         JSON.stringify({ btcContext: ctx.btcContext, deribitDvol: ctx.deribitDvol, fearGreed: ctx.fearGreed, globalStats: ctx.globalStats })]
+      );
+      console.log(`[BestTrades] Nightly market cache saved for ${today}`);
+    } catch (e) {
+      console.warn(`[BestTrades] Nightly cache save error: ${e.message}`);
+    }
   }
 
   async _runRetentionCleanup() {

@@ -41,7 +41,12 @@ async function exportTrades() {
       taker_buy_ratio, taker_sell_ratio, taker_dominance,
       top_trader_long_ratio, top_trader_short_ratio, crowd_positioning,
       funding_rate_prev1, funding_rate_prev2, funding_rate_trend, funding_rate_3p_avg,
-      hours_to_resolution, exit_reason
+      hours_to_resolution, exit_reason,
+      fear_greed_value, fear_greed_label, btc_price, btc_trend, btc_rsi_1h, btc_rsi_4h,
+      btc_ema_trend_1h, btc_ema_trend_4h, dvol, dvol_level, btc_dominance, market_cap_change_24h,
+      session_hour_utc, trading_session, is_weekend,
+      open_positions_count, daily_pnl_pct, consecutive_losses_at_entry,
+      global_long_short_ratio, mark_price_premium, book_imbalance
     FROM best_trades_log
     ORDER BY created_at DESC
   `);
@@ -103,6 +108,15 @@ async function exportTrades() {
     'funding_rate_prev1', 'funding_rate_prev2', 'funding_rate_trend', 'funding_rate_3p_avg',
     // P5 execution intelligence
     'hours_to_resolution', 'exit_reason',
+    // Market context
+    'fear_greed_value', 'fear_greed_label', 'btc_price', 'btc_trend', 'btc_rsi_1h', 'btc_rsi_4h',
+    'btc_ema_trend_1h', 'btc_ema_trend_4h', 'dvol', 'dvol_level', 'btc_dominance', 'market_cap_change_24h',
+    // Session timing
+    'session_hour_utc', 'trading_session', 'is_weekend',
+    // Portfolio state
+    'open_positions_count', 'daily_pnl_pct', 'consecutive_losses_at_entry',
+    // Expanded derivatives
+    'global_long_short_ratio', 'mark_price_premium', 'book_imbalance',
   ];
 
   function escapeCSV(val) {
@@ -250,6 +264,31 @@ async function exportTrades() {
       // P5 execution intelligence
       row.hours_to_resolution ?? '',
       row.exit_reason ?? '',
+      // Market context
+      row.fear_greed_value ?? '',
+      row.fear_greed_label ?? '',
+      row.btc_price ?? '',
+      row.btc_trend ?? '',
+      row.btc_rsi_1h ?? '',
+      row.btc_rsi_4h ?? '',
+      row.btc_ema_trend_1h ?? '',
+      row.btc_ema_trend_4h ?? '',
+      row.dvol ?? '',
+      row.dvol_level ?? '',
+      row.btc_dominance ?? '',
+      row.market_cap_change_24h ?? '',
+      // Session timing
+      row.session_hour_utc ?? '',
+      row.trading_session ?? '',
+      row.is_weekend ?? '',
+      // Portfolio state
+      row.open_positions_count ?? '',
+      row.daily_pnl_pct ?? '',
+      row.consecutive_losses_at_entry ?? '',
+      // Expanded derivatives
+      row.global_long_short_ratio ?? '',
+      row.mark_price_premium ?? '',
+      row.book_imbalance ?? '',
     ];
 
     csvRows.push(values.map(escapeCSV).join(','));
