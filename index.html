@@ -14386,7 +14386,7 @@ function _switchMarketTab(tab) {
 
   // Show/hide crypto-only sections
   const isCrypto = (tab === 'crypto' || !tab);
-  const cryptoOnlyIds = ['autoTradePanel', 'probeSetups', 'probRegimeBanner', 'btBalanceBanner', 'btBalanceHint', 'probeSignalTable', 'probeExplainer'];
+  const cryptoOnlyIds = ['autoTradePanel', 'probeSetups', 'probRegimeBanner', 'btBalanceBanner', 'btBalanceHint', 'probeSignalTable', 'probeExplainer', 'autoScanStatus', 'serverScanStatus', 'atLivePositions', 'taxExportSection'];
   cryptoOnlyIds.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -14487,6 +14487,14 @@ async function renderScanHistory() {
 
     // If user switched tabs while fetch was in-flight, discard stale results
     if (generation !== window._scanHistoryGeneration) return;
+
+    // Check responses are valid JSON (not HTML error pages)
+    if (!statsR.ok || !historyR.ok) {
+      const label = fetchTab === 'stock' ? 'Stock' : fetchTab === 'commodity' ? 'Commodity' : 'Crypto';
+      const el = document.getElementById('scanHistoryTable');
+      if (el) el.innerHTML = `<div style="color:#5a7a68;text-align:center;padding:20px;font-size:10px">No ${label} data available yet. Scanner is collecting data.</div>`;
+      return;
+    }
 
     const stats = await statsR.json();
     const history = await historyR.json();
