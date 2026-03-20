@@ -9,6 +9,7 @@ const blofinClient = require('./blofinClient');
 const liveEngine = require('./liveEngine');
 const { detectPatterns } = require('./chartPatterns');
 const { fetchAllMarketContext } = require('./marketContext');
+const { calculateLiquidationRisk } = require('./liquidationRisk');
 // https no longer needed — switched from Binance to BloFin for funding rates
 let pool = null;
 try { pool = require('../db').pool; } catch {}
@@ -1595,10 +1596,16 @@ class BestTradesScanner {
     await refreshLeverageRisk();
     this._derivativesCache = {}; // Clear per scan cycle
 
-    // Fetch macro market context (cached, parallel fetch — Fear&Greed, CoinGecko, DVOL, BTC)
+    // Fetch macro market context + liquidation risk (cached, parallel fetch)
     let marketCtx = {};
+    let liqRisk = {};
     try {
-      marketCtx = await fetchAllMarketContext() || {};
+      const [mctx, lrisk] = await Promise.all([
+        fetchAllMarketContext().catch(e => { console.warn(`[BestTrades] Market context: ${e.message}`); return {}; }),
+        calculateLiquidationRisk().catch(e => { console.warn(`[BestTrades] Liq risk: ${e.message}`); return {}; }),
+      ]);
+      marketCtx = mctx || {};
+      liqRisk = lrisk || {};
     } catch (mctxErr) {
       console.warn(`[BestTrades] Market context fetch failed: ${mctxErr.message}`);
     }
@@ -1966,6 +1973,10 @@ class BestTradesScanner {
           dvolLevel: marketCtx.deribitDvol?.dvolLevel || null,
           btcDominance: marketCtx.globalStats?.btcDominance || null,
           marketCapChange24h: marketCtx.globalStats?.marketCapChangePct24h || null,
+          // Liquidation risk at entry
+          liqRiskScore: liqRisk.score || null,
+          liqRiskLevel: liqRisk.riskLevel || null,
+          liqRiskComponents: liqRisk.components ? JSON.stringify(liqRisk.components) : null,
           // Session timing (computed)
           sessionHourUtc: new Date().getUTCHours(),
           tradingSession: (() => {
@@ -2529,11 +2540,13 @@ class BestTradesScanner {
             btc_ema_trend_1h, btc_ema_trend_4h, dvol, dvol_level, btc_dominance, market_cap_change_24h,
             session_hour_utc, trading_session, is_weekend,
             open_positions_count, daily_pnl_pct, consecutive_losses_at_entry,
-            global_long_short_ratio, mark_price_premium, book_imbalance)
+            global_long_short_ratio, mark_price_premium, book_imbalance,
+            liq_risk_score, liq_risk_level, liq_risk_components)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,
                    $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,
                    $47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,
-                   $60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73,$74,$75,$76,$77,$78,$79,$80)`,
+                   $60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73,$74,$75,$76,$77,$78,$79,$80,
+                   $81,$82,$83)`,
           [setup.asset, setup.direction, setup.prob, setup.confidence,
            setup.marketQuality, setup.rr, setup.price, setup.stopPrice, setup.targetPrice,
            setup.stopPct, setup.targetPct, setup.regime, true, result.orderId || null, setup.timeframe || '15m',
@@ -2556,7 +2569,8 @@ class BestTradesScanner {
            setup.btcEmaTrend1h, setup.btcEmaTrend4h, setup.dvol, setup.dvolLevel, setup.btcDominance, setup.marketCapChange24h,
            setup.sessionHourUtc, setup.tradingSession, setup.isWeekend,
            setup.openPositionsCount || null, setup.dailyPnlPct || null, leverageRisk.consecutiveLosses,
-           setup.derivData?.globalLongShortRatio, setup.derivData?.markPricePremium, setup.derivData?.bookImbalance]
+           setup.derivData?.globalLongShortRatio, setup.derivData?.markPricePremium, setup.derivData?.bookImbalance,
+           setup.liqRiskScore, setup.liqRiskLevel, setup.liqRiskComponents]
         );
       } catch (execLogErr) {
         console.warn(`[BestTrades] Auto-execute DB log failed for ${setup.asset}: ${execLogErr.message} — trying basic insert...`);
@@ -2721,7 +2735,8 @@ class BestTradesScanner {
                 dvol = $52, dvol_level = $53, btc_dominance = $54, market_cap_change_24h = $55,
                 session_hour_utc = $56, trading_session = $57, is_weekend = $58,
                 consecutive_losses_at_entry = $59,
-                global_long_short_ratio = $60, mark_price_premium = $61, book_imbalance = $62
+                global_long_short_ratio = $60, mark_price_premium = $61, book_imbalance = $62,
+                liq_risk_score = $63, liq_risk_level = $64, liq_risk_components = $65
                WHERE id = $1`,
               [row.id, r.prob, r.confidence, r.marketQuality,
                r.ev, r.rawProb, r.confluenceScore,
@@ -2745,7 +2760,8 @@ class BestTradesScanner {
                r.dvol, r.dvolLevel, r.btcDominance, r.marketCapChange24h,
                r.sessionHourUtc, r.tradingSession, r.isWeekend,
                leverageRisk.consecutiveLosses,
-               r.derivData?.globalLongShortRatio, r.derivData?.markPricePremium, r.derivData?.bookImbalance]
+               r.derivData?.globalLongShortRatio, r.derivData?.markPricePremium, r.derivData?.bookImbalance,
+               r.liqRiskScore, r.liqRiskLevel, r.liqRiskComponents]
             );
             debugInfo.errors.push({ asset: r.asset, stage: 'dedup_update_ok', id: row.id });
           } catch (updateErr) {
@@ -2781,11 +2797,13 @@ class BestTradesScanner {
             btc_ema_trend_1h, btc_ema_trend_4h, dvol, dvol_level, btc_dominance, market_cap_change_24h,
             session_hour_utc, trading_session, is_weekend,
             open_positions_count, daily_pnl_pct, consecutive_losses_at_entry,
-            global_long_short_ratio, mark_price_premium, book_imbalance)
+            global_long_short_ratio, mark_price_premium, book_imbalance,
+            liq_risk_score, liq_risk_level, liq_risk_components)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,
                    $28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,
                    $46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,
-                   $59,$60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73,$74,$75,$76,$77,$78,$79)`,
+                   $59,$60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73,$74,$75,$76,$77,$78,$79,
+                   $80,$81,$82)`,
           [r.asset, r.direction, r.prob, r.confidence,
            r.marketQuality, r.rr, r.price, r.stopPrice, r.targetPrice,
            r.stopPct, r.targetPct, r.regime, false, r.timeframe || '15m',
@@ -2808,7 +2826,8 @@ class BestTradesScanner {
            r.btcEmaTrend1h, r.btcEmaTrend4h, r.dvol, r.dvolLevel, r.btcDominance, r.marketCapChange24h,
            r.sessionHourUtc, r.tradingSession, r.isWeekend,
            null, null, leverageRisk.consecutiveLosses,
-           r.derivData?.globalLongShortRatio, r.derivData?.markPricePremium, r.derivData?.bookImbalance]
+           r.derivData?.globalLongShortRatio, r.derivData?.markPricePremium, r.derivData?.bookImbalance,
+           r.liqRiskScore, r.liqRiskLevel, r.liqRiskComponents]
         );
         inserted++;
       } catch (e) {
@@ -2873,6 +2892,11 @@ class BestTradesScanner {
 
     // Nightly market cache — snapshot at 18:00 UTC daily
     this._scheduleNightlyCache();
+
+    // Calibration persistence — save snapshot every 6 hours
+    setInterval(() => this._saveCalibrationSnapshot().catch(e => console.warn('[BestTrades] Cal snapshot error:', e.message)), 6 * 60 * 60_000);
+    // First snapshot after 10 min (let calibration cache populate first)
+    setTimeout(() => this._saveCalibrationSnapshot().catch(() => {}), 10 * 60_000);
   }
 
   _scheduleNightlyCache() {
@@ -2918,6 +2942,39 @@ class BestTradesScanner {
       console.log(`[BestTrades] Nightly market cache saved for ${today}`);
     } catch (e) {
       console.warn(`[BestTrades] Nightly cache save error: ${e.message}`);
+    }
+  }
+
+  async _saveCalibrationSnapshot() {
+    if (!pool) return;
+    // Only save if calibration cache has data
+    const cc = calibrationCache;
+    if (!cc.overall || cc.overall.totalResolved < 10) return;
+
+    try {
+      await pool.query(
+        `INSERT INTO calibration_history
+         (total_resolved, overall_win_rate, avg_calibration_error, kelly_graduation,
+          sharpe_ratio, per_trade_sharpe, drawdown_pct, consecutive_losses, phase,
+          prob_buckets, regime_tf, quality_grades, confidence_levels)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        [cc.overall.totalResolved,
+         cc.overall.winRate,
+         cc.overall.avgCalError || null,
+         cc.overall.kellyGraduation || null,
+         leverageRisk.sharpeRatio,
+         leverageRisk.perTradeSharpe || null,
+         leverageRisk.drawdownPct,
+         leverageRisk.consecutiveLosses,
+         leverageRisk.phase,
+         JSON.stringify(cc.byProbBucket),
+         JSON.stringify(cc.byRegimeTF),
+         JSON.stringify(cc.byQuality),
+         JSON.stringify(cc.byConfidence)]
+      );
+      console.log(`[BestTrades] Calibration snapshot saved: WR=${(cc.overall.winRate * 100).toFixed(1)}%, Sharpe=${leverageRisk.sharpeRatio}, DD=${leverageRisk.drawdownPct}%`);
+    } catch (e) {
+      console.warn(`[BestTrades] Calibration snapshot error: ${e.message}`);
     }
   }
 
@@ -3033,18 +3090,23 @@ class BestTradesScanner {
           const postEntryCandles = candles.filter(c => c.t > predTime);
           if (postEntryCandles.length === 0) continue;
 
+          // Track MAE/MFE across all post-entry candles
+          let worstPrice = entryPrice; // worst adverse price
+          let bestPrice = entryPrice;  // best favorable price
+
           // Check if any candle hit SL or TP
           let outcome = null;
           let pnl = 0;
 
           for (const c of postEntryCandles) {
+            // Track extreme prices for MAE/MFE calculation
             if (row.direction === 'long') {
+              if (c.l < worstPrice) worstPrice = c.l;
+              if (c.h > bestPrice) bestPrice = c.h;
               // Long: SL hit if low <= stopPrice, TP hit if high >= targetPrice
               const hitSL = c.l <= stopPrice;
               const hitTP = c.h >= targetPrice;
               if (hitSL && hitTP) {
-                // Both hit in same candle — use open to determine which came first
-                // If open is closer to stop, likely SL first
                 outcome = (c.o - stopPrice) < (targetPrice - c.o) ? 'loss' : 'win';
               } else if (hitSL) {
                 outcome = 'loss';
@@ -3052,6 +3114,9 @@ class BestTradesScanner {
                 outcome = 'win';
               }
             } else {
+              // Short: adverse = price going UP, favorable = price going DOWN
+              if (c.h > worstPrice) worstPrice = c.h;
+              if (c.l < bestPrice) bestPrice = c.l;
               // Short: SL hit if high >= stopPrice, TP hit if low <= targetPrice
               const hitSL = c.h >= stopPrice;
               const hitTP = c.l <= targetPrice;
@@ -3065,6 +3130,18 @@ class BestTradesScanner {
             }
 
             if (outcome) break;
+          }
+
+          // Compute MAE/MFE percentages
+          let maePct = null, mfePct = null;
+          if (entryPrice > 0) {
+            if (row.direction === 'long') {
+              maePct = Math.round((entryPrice - worstPrice) / entryPrice * 100 * 1e4) / 1e4; // positive = adverse
+              mfePct = Math.round((bestPrice - entryPrice) / entryPrice * 100 * 1e4) / 1e4;  // positive = favorable
+            } else {
+              maePct = Math.round((worstPrice - entryPrice) / entryPrice * 100 * 1e4) / 1e4; // positive = adverse (price went up)
+              mfePct = Math.round((entryPrice - bestPrice) / entryPrice * 100 * 1e4) / 1e4;  // positive = favorable (price went down)
+            }
           }
 
           if (outcome) {
@@ -3082,8 +3159,8 @@ class BestTradesScanner {
             const resolutionHours = Math.round((Date.now() - new Date(row.created_at).getTime()) / 3600000 * 100) / 100;
             const exitReason = outcome === 'win' ? 'tp_hit' : 'sl_hit';
             await pool.query(
-              `UPDATE best_trades_log SET outcome=$1, pnl=$2, resolved_at=NOW(), hours_to_resolution=$4, exit_reason=$5 WHERE id=$3`,
-              [outcome, parseFloat(pnl.toFixed(4)), row.id, resolutionHours, exitReason]
+              `UPDATE best_trades_log SET outcome=$1, pnl=$2, resolved_at=NOW(), hours_to_resolution=$4, exit_reason=$5, mae_pct=$6, mfe_pct=$7 WHERE id=$3`,
+              [outcome, parseFloat(pnl.toFixed(4)), row.id, resolutionHours, exitReason, maePct, mfePct]
             );
             resolved++;
           }

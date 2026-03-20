@@ -46,7 +46,9 @@ async function exportTrades() {
       btc_ema_trend_1h, btc_ema_trend_4h, dvol, dvol_level, btc_dominance, market_cap_change_24h,
       session_hour_utc, trading_session, is_weekend,
       open_positions_count, daily_pnl_pct, consecutive_losses_at_entry,
-      global_long_short_ratio, mark_price_premium, book_imbalance
+      global_long_short_ratio, mark_price_premium, book_imbalance,
+      mae_pct, mfe_pct,
+      liq_risk_score, liq_risk_level
     FROM best_trades_log
     ORDER BY created_at DESC
   `);
@@ -117,6 +119,15 @@ async function exportTrades() {
     'open_positions_count', 'daily_pnl_pct', 'consecutive_losses_at_entry',
     // Expanded derivatives
     'global_long_short_ratio', 'mark_price_premium', 'book_imbalance',
+    // MAE/MFE
+    'mae_pct', 'mfe_pct',
+    // Liquidation risk at entry
+    'liq_risk_score', 'liq_risk_level',
+    // Extracted from JSONB (previously trapped)
+    'cross_tf_macd_bear_count', 'cross_tf_macd_bull_count',
+    'cross_tf_volume_confirming', 'cross_tf_rsi_cascade', 'cross_tf_ichimoku_cascade',
+    'market_structure', 'funding_rate_score_signal', 'funding_rate_score_percentile',
+    'ema_cross_bull', 'ema_cross_bear', 'macd_cross_bull', 'macd_cross_bear',
   ];
 
   function escapeCSV(val) {
@@ -289,6 +300,25 @@ async function exportTrades() {
       row.global_long_short_ratio ?? '',
       row.mark_price_premium ?? '',
       row.book_imbalance ?? '',
+      // MAE/MFE
+      row.mae_pct ?? '',
+      row.mfe_pct ?? '',
+      // Liquidation risk at entry
+      row.liq_risk_score ?? '',
+      row.liq_risk_level ?? '',
+      // Extracted from JSONB (previously trapped)
+      snap?.cross_tf_summary?.macd_bear_count ?? '',
+      snap?.cross_tf_summary?.macd_bull_count ?? '',
+      snap?.cross_tf_summary?.volume_confirming ?? '',
+      snap?.cross_tf_summary?.rsi_cascade ?? '',
+      snap?.cross_tf_summary?.ichimoku_cascade ?? '',
+      snap?.market_structure?.structure ?? snap?.market_structure ?? '',
+      snap?.funding_rate_score?.signal ?? '',
+      snap?.funding_rate_score?.percentile ?? '',
+      snap?.EMA?.crossBull ?? '',
+      snap?.EMA?.crossBear ?? '',
+      snap?.MACD?.crossBull ?? '',
+      snap?.MACD?.crossBear ?? '',
     ];
 
     csvRows.push(values.map(escapeCSV).join(','));
