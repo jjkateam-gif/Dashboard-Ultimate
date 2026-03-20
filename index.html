@@ -2551,6 +2551,12 @@ function switchAuthView(view) {
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div>
       <div style="font-size:20px;font-weight:800;color:#ff6b35;letter-spacing:-0.5px">🎯 Best Trades Right Now <span style="font-size:11px;color:#aaa;font-weight:400">— AI Probability Engine</span></div>
+      <!-- Market Sub-Tabs (top of page) -->
+      <div id="marketSubTabsTop" style="display:flex;gap:4px;margin-top:4px">
+        <div onclick="_switchMarketTab('crypto')" id="mtab-top-crypto" style="padding:3px 10px;border-radius:4px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;cursor:pointer;transition:all 0.2s;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);color:#00f5a0">🪙 Crypto</div>
+        <div onclick="_switchMarketTab('stock')" id="mtab-top-stock" style="padding:3px 10px;border-radius:4px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;cursor:pointer;transition:all 0.2s;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);color:#5a7a68">📈 Stocks</div>
+        <div onclick="_switchMarketTab('commodity')" id="mtab-top-commodity" style="padding:3px 10px;border-radius:4px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;cursor:pointer;transition:all 0.2s;background:rgba(255,165,0,0.06);border:1px solid rgba(255,165,0,0.15);color:#5a7a68">🛢️ Commodities</div>
+      </div>
       <div id="probeLastUpdated" style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px">Scanning markets for high-probability setups...</div>
       <div id="autoScanStatus" style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:1px;display:none"></div>
       <div id="serverScanStatus" style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:1px;display:none"></div>
@@ -14360,17 +14366,19 @@ function _switchMarketTab(tab) {
     commodity: { bg: 'rgba(255,165,0,0.06)', border: 'rgba(255,165,0,0.15)' }
   };
   ['crypto', 'stock', 'commodity'].forEach(t => {
-    const el = document.getElementById('mtab-' + t);
-    if (!el) return;
-    if (t === tab) {
-      el.style.background = tabConfig[t].bg;
-      el.style.border = '1px solid ' + tabConfig[t].border;
-      el.style.color = tabConfig[t].color;
-    } else {
-      el.style.background = inactiveConfig[t].bg;
-      el.style.border = '1px solid ' + inactiveConfig[t].border;
-      el.style.color = '#5a7a68';
-    }
+    ['mtab-', 'mtab-top-'].forEach(prefix => {
+      const el = document.getElementById(prefix + t);
+      if (!el) return;
+      if (t === tab) {
+        el.style.background = tabConfig[t].bg;
+        el.style.border = '1px solid ' + tabConfig[t].border;
+        el.style.color = tabConfig[t].color;
+      } else {
+        el.style.background = inactiveConfig[t].bg;
+        el.style.border = '1px solid ' + inactiveConfig[t].border;
+        el.style.color = '#5a7a68';
+      }
+    });
   });
 
   // Update banner
