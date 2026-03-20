@@ -14425,8 +14425,8 @@ function _renderUnifiedUI(stats, history) {
     const hasBanned = bannedCount > 0;
 
     // After-fix WR (post March 18 only)
-    const afterFixDate = '2026-03-18T00:00:00Z';
-    const afterFixTrades = (window._serverHistory || []).filter(e => e.created_at && new Date(e.created_at) >= new Date(afterFixDate) && e.outcome);
+    const afterFixTs = new Date('2026-03-18T00:00:00Z').getTime();
+    const afterFixTrades = (window._serverHistory || []).filter(e => e.createdTs && e.createdTs >= afterFixTs && e.outcome);
     const afterFixWins = afterFixTrades.filter(e => e.outcome === 'win').length;
     const afterFixTotal = afterFixTrades.length;
     const afterFixWR = afterFixTotal > 0 ? (100 * afterFixWins / afterFixTotal).toFixed(1) : null;
@@ -15297,8 +15297,8 @@ function _renderHistoryTable(history) {
 
   // Apply after-fix filter (AFTER FIX WR click — March 18+)
   if (window._calFilterAfterFix) {
-    const afterFixDate = new Date('2026-03-18T00:00:00Z');
-    filteredEntries = filteredEntries.filter(e => e.created_at && new Date(e.created_at) >= afterFixDate);
+    const afterFixTs = new Date('2026-03-18T00:00:00Z').getTime();
+    filteredEntries = filteredEntries.filter(e => e.createdTs && e.createdTs >= afterFixTs);
   }
 
   // Apply outcome filter
