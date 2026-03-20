@@ -1198,6 +1198,96 @@ class BestTradesScanner {
     return rangeToATR < 1.5;
   }
 
+  // ── P3: On-chain / Derivatives data from Binance Futures ──
+
+  async _fetchDerivativesData(asset) {
+    const symbol = asset.replace(/-/g, '') + (asset.includes('USDT') ? '' : 'USDT');
+    const result = {
+      oiValue: null, oiChangePct1h: null, oiDirection: null,
+      takerBuyRatio: null, takerSellRatio: null, takerDominance: null,
+      topTraderLongRatio: null, topTraderShortRatio: null, crowdPositioning: null,
+      fundingRatePrev1: null, fundingRatePrev2: null, fundingRateTrend: null, fundingRate3pAvg: null,
+    };
+
+    try {
+      // Open Interest
+      const oiResp = await fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${symbol}`);
+      if (oiResp.ok) {
+        const oi = await oiResp.json();
+        result.oiValue = parseFloat(oi.openInterest) || null;
+      }
+    } catch {}
+
+    try {
+      // OI history for 1h change (5m periods x12 = 1h)
+      const oiHistResp = await fetch(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=5m&limit=13`);
+      if (oiHistResp.ok) {
+        const oiHist = await oiHistResp.json();
+        if (oiHist.length >= 2) {
+          const latest = parseFloat(oiHist[oiHist.length - 1].sumOpenInterestValue);
+          const oldest = parseFloat(oiHist[0].sumOpenInterestValue);
+          if (oldest > 0) {
+            result.oiChangePct1h = Math.round((latest - oldest) / oldest * 100 * 100) / 100;
+            result.oiDirection = result.oiChangePct1h > 1 ? 'rising' : result.oiChangePct1h < -1 ? 'falling' : 'flat';
+          }
+        }
+      }
+    } catch {}
+
+    try {
+      // Taker Buy/Sell Ratio
+      const takerResp = await fetch(`https://fapi.binance.com/futures/data/takerlongshortRatio?symbol=${symbol}&period=5m&limit=3`);
+      if (takerResp.ok) {
+        const taker = await takerResp.json();
+        if (taker.length > 0) {
+          const latest = taker[taker.length - 1];
+          result.takerBuyRatio = parseFloat(latest.buyVol) / (parseFloat(latest.buyVol) + parseFloat(latest.sellVol)) || null;
+          result.takerSellRatio = parseFloat(latest.sellVol) / (parseFloat(latest.buyVol) + parseFloat(latest.sellVol)) || null;
+          if (result.takerBuyRatio != null) {
+            result.takerBuyRatio = Math.round(result.takerBuyRatio * 1e4) / 1e4;
+            result.takerSellRatio = Math.round(result.takerSellRatio * 1e4) / 1e4;
+            result.takerDominance = result.takerBuyRatio > 0.55 ? 'buyers' : result.takerSellRatio > 0.55 ? 'sellers' : 'neutral';
+          }
+        }
+      }
+    } catch {}
+
+    try {
+      // Top Trader Long/Short Position Ratio
+      const topResp = await fetch(`https://fapi.binance.com/futures/data/topLongShortPositionRatio?symbol=${symbol}&period=5m&limit=3`);
+      if (topResp.ok) {
+        const top = await topResp.json();
+        if (top.length > 0) {
+          const latest = top[top.length - 1];
+          result.topTraderLongRatio = Math.round(parseFloat(latest.longAccount) * 1e4) / 1e4;
+          result.topTraderShortRatio = Math.round(parseFloat(latest.shortAccount) * 1e4) / 1e4;
+          const lr = result.topTraderLongRatio;
+          result.crowdPositioning = lr > 0.65 ? 'extreme_long' : lr > 0.55 ? 'long_bias'
+            : lr < 0.35 ? 'extreme_short' : lr < 0.45 ? 'short_bias' : 'neutral';
+        }
+      }
+    } catch {}
+
+    try {
+      // Funding Rate History (3 periods)
+      const frResp = await fetch(`https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&limit=3`);
+      if (frResp.ok) {
+        const fr = await frResp.json();
+        if (fr.length >= 3) {
+          const rates = fr.map(f => parseFloat(f.fundingRate));
+          result.fundingRatePrev1 = rates[1];
+          result.fundingRatePrev2 = rates[0];
+          result.fundingRate3pAvg = Math.round((rates[0] + rates[1] + rates[2]) / 3 * 1e8) / 1e8;
+          // Trend: compare latest vs 2 periods ago
+          result.fundingRateTrend = rates[2] > rates[0] + 0.0001 ? 'rising'
+            : rates[2] < rates[0] - 0.0001 ? 'falling' : 'flat';
+        }
+      }
+    } catch {}
+
+    return result;
+  }
+
   // ── Market Structure Detection (HH/HL) — logging only, does NOT affect scoring ──
 
   _detectMarketStructure(candles) {
@@ -1456,6 +1546,7 @@ class BestTradesScanner {
     await refreshCalibrationCache();
     await refreshFundingRates();
     await refreshLeverageRisk();
+    this._derivativesCache = {}; // Clear per scan cycle
     console.log(`[BestTrades] Scanning ${ASSETS.length} assets on ${tf}...`);
 
     const results = [];
@@ -1631,9 +1722,117 @@ class BestTradesScanner {
           console.warn(`[BestTrades] Funding rate score error for ${asset.label} ${tf}:`, frErr.message);
         }
 
+        // P3: Derivatives data (OI, taker ratio, top trader ratio, funding history)
+        // Cached per asset per scan cycle to avoid hammering Binance
+        if (!this._derivativesCache) this._derivativesCache = {};
+        let derivData = this._derivativesCache[asset.label];
+        if (!derivData) {
+          try {
+            derivData = await this._fetchDerivativesData(asset.label);
+            this._derivativesCache[asset.label] = derivData;
+          } catch (dErr) {
+            derivData = {};
+          }
+        }
+
         // Estimate R/R using calibrated probability
         const rrData = estimateRR(price, atrVal, direction, calibratedProb, this.settings.leverage,
           best.confidence, candles, marketQuality);
+
+        // ── P1+P2+P4: Compute all enrichment fields from existing candle data ──
+        const _last = candles.length - 1;
+
+        // P1: bb_squeeze, volume_drying (already in signals)
+        const bbSqueeze = !!signals.BB?.squeeze;
+        const volumeDrying = !!signals.Volume?.drying;
+
+        // P2: macd_histogram_expanding
+        const macdHistExpanding = signals.MACD?.histogram != null && signals.MACD?.histogramPrev != null
+          ? Math.abs(signals.MACD.histogram) > Math.abs(signals.MACD.histogramPrev) : null;
+
+        // P2: bb_position_pct (0-100 scale)
+        const bbPositionPct = signals.BB?.positionPct != null ? Math.round(signals.BB.positionPct * 100 * 100) / 100 : null;
+
+        // P2: ichi_cloud_thickness_pct (percentage)
+        const ichiCloudThicknessPct = signals.Ichimoku?.cloudThicknessPct != null
+          ? Math.round(signals.Ichimoku.cloudThicknessPct * 100 * 100) / 100 : null;
+
+        // P2: candle_body_pct and candle_type
+        const cRange = candles[_last].h - candles[_last].l;
+        const cBody = Math.abs(candles[_last].c - candles[_last].o);
+        const candleBodyPct = cRange > 0 ? Math.round(cBody / cRange * 100 * 100) / 100 : 0;
+        const upperWick = candles[_last].h - Math.max(candles[_last].o, candles[_last].c);
+        const lowerWick = Math.min(candles[_last].o, candles[_last].c) - candles[_last].l;
+        const isBullCandle = candles[_last].c > candles[_last].o;
+        let candleType = 'weak';
+        if (candleBodyPct < 15) candleType = 'doji';
+        else if (candleBodyPct < 35 && lowerWick > cBody * 2 && isBullCandle) candleType = 'hammer';
+        else if (candleBodyPct < 35 && upperWick > cBody * 2 && !isBullCandle) candleType = 'shooting_star';
+        else if (_last > 0 && isBullCandle && candles[_last-1].c < candles[_last-1].o
+          && candles[_last].c > candles[_last-1].o && candles[_last].o < candles[_last-1].c) candleType = 'engulfing_bull';
+        else if (_last > 0 && !isBullCandle && candles[_last-1].c > candles[_last-1].o
+          && candles[_last].c < candles[_last-1].o && candles[_last].o > candles[_last-1].c) candleType = 'engulfing_bear';
+        else if (isBullCandle && candleBodyPct > 60) candleType = 'strong_bull';
+        else if (!isBullCandle && candleBodyPct > 60) candleType = 'strong_bear';
+
+        // P2: ema_spread_pct (already in signals.EMA.spreadPct as decimal, store as %)
+        const emaSpreadPctVal = signals.EMA?.spreadPct != null ? Math.round(signals.EMA.spreadPct * 100 * 100) / 100 : null;
+
+        // P4: Swing high/low context (from last 50 candles)
+        let pctFromSwingHigh = null, pctFromSwingLow = null, barsSinceSwingHigh = null, barsSinceSwingLow = null;
+        {
+          const lookback = Math.min(50, candles.length);
+          const start = candles.length - lookback;
+          let swingHi = null, swingLo = null, swingHiBar = null, swingLoBar = null;
+          for (let i = start + 3; i < candles.length - 3; i++) {
+            const isSwingHigh = candles[i].h >= candles[i-1].h && candles[i].h >= candles[i-2].h && candles[i].h >= candles[i-3].h
+              && candles[i].h >= candles[i+1].h && candles[i].h >= candles[i+2].h && candles[i].h >= candles[i+3].h;
+            const isSwingLow = candles[i].l <= candles[i-1].l && candles[i].l <= candles[i-2].l && candles[i].l <= candles[i-3].l
+              && candles[i].l <= candles[i+1].l && candles[i].l <= candles[i+2].l && candles[i].l <= candles[i+3].l;
+            if (isSwingHigh) { swingHi = candles[i].h; swingHiBar = i; }
+            if (isSwingLow) { swingLo = candles[i].l; swingLoBar = i; }
+          }
+          if (swingHi != null && price > 0) {
+            pctFromSwingHigh = Math.round((price - swingHi) / swingHi * 100 * 100) / 100;
+            barsSinceSwingHigh = _last - swingHiBar;
+          }
+          if (swingLo != null && price > 0) {
+            pctFromSwingLow = Math.round((price - swingLo) / swingLo * 100 * 100) / 100;
+            barsSinceSwingLow = _last - swingLoBar;
+          }
+        }
+
+        // P4: Nearest round number
+        let nearestRoundPct = null, atKeyLevel = false;
+        {
+          const levels = [1, 5, 10, 50, 100, 500, 1000, 5000, 10000];
+          let minDist = Infinity;
+          for (const lv of levels) {
+            if (lv > price * 2) break;
+            const nearest = Math.round(price / lv) * lv;
+            const dist = Math.abs(price - nearest) / price * 100;
+            if (dist < minDist) minDist = dist;
+          }
+          nearestRoundPct = Math.round(minDist * 100) / 100;
+          atKeyLevel = nearestRoundPct <= 0.3;
+        }
+
+        // P4: Consecutive candle direction
+        let consecutiveBear = 0, consecutiveBull = 0;
+        for (let i = _last; i >= 1; i--) {
+          if (candles[i].c < candles[i].o) { if (consecutiveBull === 0) consecutiveBear++; else break; }
+          else if (candles[i].c > candles[i].o) { if (consecutiveBear === 0) consecutiveBull++; else break; }
+          else break;
+        }
+
+        // P4: Volume trend
+        let volumeIncreasing3bar = false, volumeSpike = false;
+        if (_last >= 2) {
+          volumeIncreasing3bar = candles[_last].v > candles[_last-1].v && candles[_last-1].v > candles[_last-2].v;
+        }
+        if (signals.Volume?.ratio != null) {
+          volumeSpike = signals.Volume.ratio > 3;
+        }
 
         // Build signal snapshot for learning — copies ALL fields including numeric values
         const signalSnapshot = {};
@@ -1691,6 +1890,13 @@ class BestTradesScanner {
           crossTFSummary,
           marketStructure,
           fundingRateScore,
+          // P1+P2+P3+P4 enrichment fields
+          derivData,
+          bbSqueeze, volumeDrying, macdHistExpanding,
+          bbPositionPct, ichiCloudThicknessPct, candleBodyPct, candleType, emaSpreadPctVal,
+          pctFromSwingHigh, pctFromSwingLow, barsSinceSwingHigh, barsSinceSwingLow,
+          nearestRoundPct, atKeyLevel, consecutiveBear, consecutiveBull,
+          volumeIncreasing3bar, volumeSpike,
           timestamp: new Date().toISOString(),
         };
         results.push(_scanResult);
@@ -1861,6 +2067,31 @@ class BestTradesScanner {
     const qualifying = results.filter(r => {
       // BANNED ASSET CHECK — asset is banned from live trading (still logged for data collection)
       if (bannedSet.has(r.asset.toUpperCase())) { rejectReasons[r.asset] = `BANNED from live trading`; return false; }
+
+      // P6 #21: Minimum scan_count gate (scan_count 1-2 = 40-48% WR, 3+ = 55%+)
+      // scan_count is tracked in _logResults dedup — check if this asset has a pending entry
+      // For first-time signals, scan_count is effectively 1
+      // This gate is checked later during execution against DB scan_count
+
+      // P6 #22: Session-aware UTC hour gate (13-15 UTC = 0-18% WR — block auto-execute)
+      const utcHour = new Date().getUTCHours();
+      if (utcHour >= 13 && utcHour <= 15) {
+        rejectReasons[r.asset] = `UTC hour ${utcHour} (13-15 UTC dead zone = 0-18% WR) — auto-execute blocked`;
+        return false;
+      }
+      // Session-aware probability penalty for weak hours
+      if (utcHour >= 21 && utcHour <= 23) {
+        r.prob = Math.round(r.prob * 0.4); // Suppressed hours
+      } else if ((utcHour >= 4 && utcHour <= 10) || (utcHour >= 16 && utcHour <= 19)) {
+        r.prob = Math.round(r.prob * 0.7); // Reduced hours
+      }
+      // Full weight: 00-03 UTC, 11 UTC, 20 UTC — no adjustment needed
+
+      // P6 #23: Minimum R:R filter (RR < 1.5 = 46-47% WR, RR > 2.0 = 66.7% WR)
+      if (r.rr < 1.5) {
+        rejectReasons[r.asset] = `RR ${r.rr?.toFixed(1)} < 1.5 minimum — weak risk/reward`;
+        return false;
+      }
 
       // Market structure gate — validated March 20: contracting/uptrend shorts = 0-18% WR
       if (r.marketStructure && r.marketStructure.structure) {
@@ -2046,6 +2277,30 @@ class BestTradesScanner {
     const toTrade = qualifying.slice(0, slotsAvailable);
 
     for (const setup of toTrade) {
+      // P6 #21: Minimum scan_count gate (scan_count 3+ = 55%+ WR, 7+ = 68-90% WR)
+      if (pool) {
+        try {
+          const scResult = await pool.query(
+            `SELECT scan_count FROM best_trades_log WHERE asset=$1 AND direction=$2 AND timeframe=$3 AND outcome IS NULL ORDER BY created_at DESC LIMIT 1`,
+            [setup.asset, setup.direction, setup.timeframe || '15m']
+          );
+          const sc = scResult.rows[0]?.scan_count || 1;
+          if (sc < 3) {
+            console.log(`[BestTrades] ${setup.asset} scan_count=${sc} < 3 — signal too fresh for auto-execute`);
+            continue;
+          }
+        } catch {}
+      }
+
+      // P6 #24: Funding rate directional gate
+      if (setup.derivData?.fundingRateTrend === 'rising' && setup.direction === 'short') {
+        // Rising funding = crowd is long = contrarian short edge → +5pp bonus
+        setup.prob = Math.min(85, setup.prob + 5);
+      } else if (setup.derivData?.fundingRateTrend === 'falling' && setup.direction === 'long') {
+        // Falling funding = crowd is short = contrarian long edge → +5pp bonus
+        setup.prob = Math.min(85, setup.prob + 5);
+      }
+
       // Position sizing: fixed $ or % of total wallet balance
       let basePosSize = this.settings.tradeSizeUsd;
       if (this.settings.tradeSizeMode === 'percent') {
@@ -2160,8 +2415,19 @@ class BestTradesScanner {
            (asset, direction, probability, confidence, market_quality, rr_ratio,
             entry_price, stop_price, target_price, stop_pct, target_pct, regime, executed, order_id, timeframe,
             signal_snapshot, raw_probability, ev, optimal_lev, atr_value, hits, misses, volume_ratio, confluence_score,
-            tf_bear_count, tf_bull_count, tf_alignment_score, highest_tf_conflict)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)`,
+            tf_bear_count, tf_bull_count, tf_alignment_score, highest_tf_conflict,
+            bb_squeeze, volume_drying, macd_histogram_expanding, bb_position_pct, ichi_cloud_thickness_pct,
+            candle_body_pct, candle_type, ema_spread_pct,
+            pct_from_swing_high, pct_from_swing_low, bars_since_swing_high, bars_since_swing_low,
+            nearest_round_pct, at_key_level, consecutive_bear_candles, consecutive_bull_candles,
+            volume_increasing_3bar, volume_spike,
+            oi_value, oi_change_pct_1h, oi_direction,
+            taker_buy_ratio, taker_sell_ratio, taker_dominance,
+            top_trader_long_ratio, top_trader_short_ratio, crowd_positioning,
+            funding_rate_prev1, funding_rate_prev2, funding_rate_trend, funding_rate_3p_avg)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,
+                   $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,
+                   $47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59)`,
           [setup.asset, setup.direction, setup.prob, setup.confidence,
            setup.marketQuality, setup.rr, setup.price, setup.stopPrice, setup.targetPrice,
            setup.stopPct, setup.targetPct, setup.regime, true, result.orderId || null, setup.timeframe || '15m',
@@ -2170,7 +2436,16 @@ class BestTradesScanner {
            setup.atrValue, JSON.stringify(setup.hits || []), JSON.stringify(setup.misses || []),
            setup.volumeRatio, setup.confluenceScore,
            setup.crossTFSummary?.bear_alignment || 0, setup.crossTFSummary?.bull_alignment || 0,
-           setup.crossTFSummary?.alignment_score || 0, setup.crossTFSummary?.highest_conflict_tf || null]
+           setup.crossTFSummary?.alignment_score || 0, setup.crossTFSummary?.highest_conflict_tf || null,
+           setup.bbSqueeze, setup.volumeDrying, setup.macdHistExpanding, setup.bbPositionPct, setup.ichiCloudThicknessPct,
+           setup.candleBodyPct, setup.candleType, setup.emaSpreadPctVal,
+           setup.pctFromSwingHigh, setup.pctFromSwingLow, setup.barsSinceSwingHigh, setup.barsSinceSwingLow,
+           setup.nearestRoundPct, setup.atKeyLevel, setup.consecutiveBear, setup.consecutiveBull,
+           setup.volumeIncreasing3bar, setup.volumeSpike,
+           setup.derivData?.oiValue, setup.derivData?.oiChangePct1h, setup.derivData?.oiDirection,
+           setup.derivData?.takerBuyRatio, setup.derivData?.takerSellRatio, setup.derivData?.takerDominance,
+           setup.derivData?.topTraderLongRatio, setup.derivData?.topTraderShortRatio, setup.derivData?.crowdPositioning,
+           setup.derivData?.fundingRatePrev1, setup.derivData?.fundingRatePrev2, setup.derivData?.fundingRateTrend, setup.derivData?.fundingRate3pAvg]
         );
       } catch (execLogErr) {
         console.warn(`[BestTrades] Auto-execute DB log failed for ${setup.asset}: ${execLogErr.message} — trying basic insert...`);
@@ -2317,13 +2592,37 @@ class BestTradesScanner {
                 ev = $5, raw_probability = $6, confluence_score = $7,
                 signal_snapshot = $8,
                 tf_bear_count = $9, tf_bull_count = $10,
-                tf_alignment_score = $11, highest_tf_conflict = $12
+                tf_alignment_score = $11, highest_tf_conflict = $12,
+                bb_squeeze = $13, volume_drying = $14, macd_histogram_expanding = $15,
+                bb_position_pct = $16, ichi_cloud_thickness_pct = $17,
+                candle_body_pct = $18, candle_type = $19, ema_spread_pct = $20,
+                pct_from_swing_high = $21, pct_from_swing_low = $22,
+                bars_since_swing_high = $23, bars_since_swing_low = $24,
+                nearest_round_pct = $25, at_key_level = $26,
+                consecutive_bear_candles = $27, consecutive_bull_candles = $28,
+                volume_increasing_3bar = $29, volume_spike = $30,
+                oi_value = $31, oi_change_pct_1h = $32, oi_direction = $33,
+                taker_buy_ratio = $34, taker_sell_ratio = $35, taker_dominance = $36,
+                top_trader_long_ratio = $37, top_trader_short_ratio = $38, crowd_positioning = $39,
+                funding_rate_prev1 = $40, funding_rate_prev2 = $41, funding_rate_trend = $42, funding_rate_3p_avg = $43
                WHERE id = $1`,
               [row.id, r.prob, r.confidence, r.marketQuality,
                r.ev, r.rawProb, r.confluenceScore,
                JSON.stringify({ ...(r.signalSnapshot || {}), cross_tf: r.crossTF, cross_tf_summary: r.crossTFSummary, market_structure: r.marketStructure, funding_rate_score: r.fundingRateScore }),
                r.crossTFSummary?.bear_alignment || 0, r.crossTFSummary?.bull_alignment || 0,
-               r.crossTFSummary?.alignment_score || 0, r.crossTFSummary?.highest_conflict_tf || null]
+               r.crossTFSummary?.alignment_score || 0, r.crossTFSummary?.highest_conflict_tf || null,
+               r.bbSqueeze, r.volumeDrying, r.macdHistExpanding,
+               r.bbPositionPct, r.ichiCloudThicknessPct,
+               r.candleBodyPct, r.candleType, r.emaSpreadPctVal,
+               r.pctFromSwingHigh, r.pctFromSwingLow,
+               r.barsSinceSwingHigh, r.barsSinceSwingLow,
+               r.nearestRoundPct, r.atKeyLevel,
+               r.consecutiveBear, r.consecutiveBull,
+               r.volumeIncreasing3bar, r.volumeSpike,
+               r.derivData?.oiValue, r.derivData?.oiChangePct1h, r.derivData?.oiDirection,
+               r.derivData?.takerBuyRatio, r.derivData?.takerSellRatio, r.derivData?.takerDominance,
+               r.derivData?.topTraderLongRatio, r.derivData?.topTraderShortRatio, r.derivData?.crowdPositioning,
+               r.derivData?.fundingRatePrev1, r.derivData?.fundingRatePrev2, r.derivData?.fundingRateTrend, r.derivData?.fundingRate3pAvg]
             );
             debugInfo.errors.push({ asset: r.asset, stage: 'dedup_update_ok', id: row.id });
           } catch (updateErr) {
@@ -2345,8 +2644,19 @@ class BestTradesScanner {
            (asset, direction, probability, confidence, market_quality, rr_ratio,
             entry_price, stop_price, target_price, stop_pct, target_pct, regime, executed, timeframe,
             signal_snapshot, raw_probability, ev, optimal_lev, atr_value, hits, misses, volume_ratio, confluence_score,
-            tf_bear_count, tf_bull_count, tf_alignment_score, highest_tf_conflict)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
+            tf_bear_count, tf_bull_count, tf_alignment_score, highest_tf_conflict,
+            bb_squeeze, volume_drying, macd_histogram_expanding, bb_position_pct, ichi_cloud_thickness_pct,
+            candle_body_pct, candle_type, ema_spread_pct,
+            pct_from_swing_high, pct_from_swing_low, bars_since_swing_high, bars_since_swing_low,
+            nearest_round_pct, at_key_level, consecutive_bear_candles, consecutive_bull_candles,
+            volume_increasing_3bar, volume_spike,
+            oi_value, oi_change_pct_1h, oi_direction,
+            taker_buy_ratio, taker_sell_ratio, taker_dominance,
+            top_trader_long_ratio, top_trader_short_ratio, crowd_positioning,
+            funding_rate_prev1, funding_rate_prev2, funding_rate_trend, funding_rate_3p_avg)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,
+                   $28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,
+                   $46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58)`,
           [r.asset, r.direction, r.prob, r.confidence,
            r.marketQuality, r.rr, r.price, r.stopPrice, r.targetPrice,
            r.stopPct, r.targetPct, r.regime, false, r.timeframe || '15m',
@@ -2355,7 +2665,16 @@ class BestTradesScanner {
            r.atrValue, JSON.stringify(r.hits || []), JSON.stringify(r.misses || []),
            r.volumeRatio, r.confluenceScore,
            r.crossTFSummary?.bear_alignment || 0, r.crossTFSummary?.bull_alignment || 0,
-           r.crossTFSummary?.alignment_score || 0, r.crossTFSummary?.highest_conflict_tf || null]
+           r.crossTFSummary?.alignment_score || 0, r.crossTFSummary?.highest_conflict_tf || null,
+           r.bbSqueeze, r.volumeDrying, r.macdHistExpanding, r.bbPositionPct, r.ichiCloudThicknessPct,
+           r.candleBodyPct, r.candleType, r.emaSpreadPctVal,
+           r.pctFromSwingHigh, r.pctFromSwingLow, r.barsSinceSwingHigh, r.barsSinceSwingLow,
+           r.nearestRoundPct, r.atKeyLevel, r.consecutiveBear, r.consecutiveBull,
+           r.volumeIncreasing3bar, r.volumeSpike,
+           r.derivData?.oiValue, r.derivData?.oiChangePct1h, r.derivData?.oiDirection,
+           r.derivData?.takerBuyRatio, r.derivData?.takerSellRatio, r.derivData?.takerDominance,
+           r.derivData?.topTraderLongRatio, r.derivData?.topTraderShortRatio, r.derivData?.crowdPositioning,
+           r.derivData?.fundingRatePrev1, r.derivData?.fundingRatePrev2, r.derivData?.fundingRateTrend, r.derivData?.fundingRate3pAvg]
         );
         inserted++;
       } catch (e) {
@@ -2452,7 +2771,7 @@ class BestTradesScanner {
     let pending;
     try {
       const result = await pool.query(
-        `SELECT id, asset, direction, entry_price, stop_price, target_price, timeframe, created_at
+        `SELECT id, asset, direction, entry_price, stop_price, target_price, timeframe, created_at, executed
          FROM best_trades_log
          WHERE outcome IS NULL AND entry_price IS NOT NULL AND stop_price IS NOT NULL AND target_price IS NOT NULL
          ORDER BY created_at ASC LIMIT 100`
@@ -2498,13 +2817,26 @@ class BestTradesScanner {
           // Skip if too young (need at least 1 candle after entry)
           if (candlesNeeded < 2) continue;
 
+          // P5: 4h expiry gate for executed trades (4h+ unresolved = 40% WR, diminishing edge)
+          const isExecuted = row.executed === true;
+          const maxAgeExecuted = 4 * 60 * 60e3; // 4 hours
+          if (isExecuted && predAgeMs > maxAgeExecuted) {
+            const expiryHours = Math.round(predAgeMs / 3600000 * 100) / 100;
+            await pool.query(
+              `UPDATE best_trades_log SET outcome='expired', resolved_at=NOW(), hours_to_resolution=$2, exit_reason='expired' WHERE id=$1`,
+              [row.id, expiryHours]
+            );
+            resolved++;
+            continue;
+          }
+
           // Expire very old predictions (>7 days for short TFs, >30 days for long TFs)
           const maxAgeMs = ['5m', '15m', '30m'].includes(tf) ? 7 * 24 * 60 * 60e3 : 30 * 24 * 60 * 60e3;
           if (predAgeMs > maxAgeMs) {
-            // Expire as "expired" — neither win nor loss
+            const expiryHours = Math.round(predAgeMs / 3600000 * 100) / 100;
             await pool.query(
-              `UPDATE best_trades_log SET outcome='expired', resolved_at=NOW() WHERE id=$1`,
-              [row.id]
+              `UPDATE best_trades_log SET outcome='expired', resolved_at=NOW(), hours_to_resolution=$2, exit_reason='expired' WHERE id=$1`,
+              [row.id, expiryHours]
             );
             resolved++;
             continue;
@@ -2564,9 +2896,11 @@ class BestTradesScanner {
                 : ((entryPrice - stopPrice) / entryPrice) * 100;
             }
 
+            const resolutionHours = Math.round((Date.now() - new Date(row.created_at).getTime()) / 3600000 * 100) / 100;
+            const exitReason = outcome === 'win' ? 'tp_hit' : 'sl_hit';
             await pool.query(
-              `UPDATE best_trades_log SET outcome=$1, pnl=$2, resolved_at=NOW() WHERE id=$3`,
-              [outcome, parseFloat(pnl.toFixed(4)), row.id]
+              `UPDATE best_trades_log SET outcome=$1, pnl=$2, resolved_at=NOW(), hours_to_resolution=$4, exit_reason=$5 WHERE id=$3`,
+              [outcome, parseFloat(pnl.toFixed(4)), row.id, resolutionHours, exitReason]
             );
             resolved++;
           }
