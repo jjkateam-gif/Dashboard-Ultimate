@@ -2547,6 +2547,8 @@ class BestTradesScanner {
     if (filters.regime) { conditions.push(`regime = $${fIdx++}`); filterParams.push(filters.regime); }
     if (filters.market_quality) { conditions.push(`market_quality = $${fIdx++}`); filterParams.push(filters.market_quality); }
     if (filters.confidence) { conditions.push(`confidence = $${fIdx++}`); filterParams.push(filters.confidence); }
+    if (filters.date_from) { conditions.push(`created_at >= $${fIdx++}`); filterParams.push(filters.date_from); }
+    if (filters.date_to) { conditions.push(`created_at <= $${fIdx++}`); filterParams.push(filters.date_to); }
     const filterWhere = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
     const filterWhereAnd = conditions.length > 0 ? 'AND ' + conditions.join(' AND ') : '';
 

@@ -83,6 +83,8 @@ router.get('/stats', async (req, res) => {
     if (req.query.regime) filters.regime = req.query.regime;
     if (req.query.market_quality) filters.market_quality = req.query.market_quality;
     if (req.query.confidence) filters.confidence = req.query.confidence;
+    if (req.query.date_from) filters.date_from = req.query.date_from;
+    if (req.query.date_to) filters.date_to = req.query.date_to;
     const stats = await scanner.getStats(filters);
     // Attach leverage risk / Sharpe data from scanner status
     const status = scanner.getStatus();
@@ -273,6 +275,8 @@ router.get('/history-all', async (req, res) => {
     if (req.query.regime) { conditions.push(`regime = $${idx++}`); params.push(req.query.regime); }
     if (req.query.market_quality) { conditions.push(`market_quality = $${idx++}`); params.push(req.query.market_quality); }
     if (req.query.confidence) { conditions.push(`confidence = $${idx++}`); params.push(req.query.confidence); }
+    if (req.query.date_from) { conditions.push(`created_at >= $${idx++}`); params.push(req.query.date_from); }
+    if (req.query.date_to) { conditions.push(`created_at <= $${idx++}`); params.push(req.query.date_to); }
     const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
     const result = await pool.query(
       `SELECT id, asset, direction, probability, confidence, market_quality, rr_ratio, regime, timeframe,

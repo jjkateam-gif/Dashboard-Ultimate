@@ -15508,9 +15508,7 @@ function _toggleBannedFilter() {
 function _toggleAfterFixFilter() {
   window._calFilterAfterFix = !window._calFilterAfterFix;
   window._historyShowCount = 50;
-  if (window._serverStats && window._serverHistory) {
-    _renderUnifiedUI(window._serverStats, window._serverHistory);
-  }
+  _refetchWithFilters();
 }
 
 // Re-fetch stats with current TF/regime/quality filters
@@ -15523,6 +15521,11 @@ async function _refetchWithFilters() {
   if (window._calActiveRegime) params.set('regime', window._calActiveRegime);
   if (window._calActiveMQ) params.set('market_quality', window._calActiveMQ);
   if (window._calActiveConf) params.set('confidence', window._calActiveConf);
+  // After Fix filter sets date_from to March 18
+  if (window._calFilterAfterFix) params.set('date_from', '2026-03-18T00:00:00Z');
+  // Manual date filters
+  if (window._calDateFrom && !window._calFilterAfterFix) params.set('date_from', window._calDateFrom + 'T00:00:00Z');
+  if (window._calDateTo) params.set('date_to', window._calDateTo + 'T23:59:59Z');
   const qs = params.toString();
 
   try {
