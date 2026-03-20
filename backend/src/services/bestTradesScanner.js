@@ -28,7 +28,8 @@ async function refreshFundingRates() {
       'BTC-USDT', 'ETH-USDT', 'SOL-USDT', 'SUI-USDT', 'BNB-USDT',
       'DOGE-USDT', 'XRP-USDT', 'ADA-USDT', 'AVAX-USDT', 'LINK-USDT',
       'DOT-USDT', 'NEAR-USDT', 'ARB-USDT', 'OP-USDT', 'APT-USDT',
-      'INJ-USDT', 'PEPE-USDT', 'BONK-USDT', 'WIF-USDT',
+      'INJ-USDT', 'PEPE-USDT', 'WIF-USDT',
+      // BONK-USDT removed 2026-03-20: not listed on BloFin (error 152002)
     ];
     for (const instId of FUNDING_ASSETS) {
       try {
@@ -41,7 +42,9 @@ async function refreshFundingRates() {
           const sym = instId.replace('-', '');
           fundingRateCache.data[sym] = parseFloat(json.data[0].fundingRate) || 0;
         }
-      } catch (e) { /* skip individual failures */ }
+      } catch (e) {
+        console.warn(`[BestTrades] Funding rate fetch failed for ${instId}: ${e.message}`);
+      }
     }
     fundingRateCache.lastRefresh = now;
     console.log(`[BestTrades] Funding rates refreshed (BloFin): ${Object.keys(fundingRateCache.data).length} pairs`);
@@ -1752,11 +1755,21 @@ class BestTradesScanner {
       return;
     }
 
-    // 2026-03-18: Disable 1h auto-trade execution (keep scanning for data collection)
-    // Data shows 1h signals underperform — scan-only until quality improves
+    // 2026-03-18: Disable 1h auto-trade execution until data proves quality
+    // Auto re-enable when 1h post-fix WR >= 55% on 30+ resolved trades
     if (tf === '1h') {
-      console.log(`[BestTrades] Auto-trade: 1h DISABLED (scan-only) — 2026-03-18 quality floor`);
-      return;
+      const h1Check = await pool.query(`
+        SELECT COUNT(*) FILTER (WHERE outcome IS NOT NULL) as resolved,
+               ROUND(100.0 * COUNT(*) FILTER (WHERE outcome='win') / NULLIF(COUNT(*) FILTER (WHERE outcome IS NOT NULL), 0), 1) as wr
+        FROM best_trades_log WHERE timeframe = '1h' AND created_at > '2026-03-18'
+      `);
+      const h1Resolved = parseInt(h1Check.rows[0]?.resolved) || 0;
+      const h1WR = parseFloat(h1Check.rows[0]?.wr) || 0;
+      if (h1Resolved < 30 || h1WR < 55) {
+        console.log(`[BestTrades] Auto-trade: 1h DISABLED (scan-only) — post-fix WR ${h1WR}% on ${h1Resolved} trades (need 55%+ on 30+)`);
+        return;
+      }
+      console.log(`[BestTrades] Auto-trade: 1h RE-ENABLED — post-fix WR ${h1WR}% on ${h1Resolved} trades ✅`);
     }
 
     // Check per-TF rule: if this TF is explicitly disabled, skip
@@ -2182,11 +2195,15 @@ class BestTradesScanner {
                 last_seen_at = NOW(),
                 probability = $2, confidence = $3, market_quality = $4,
                 ev = $5, raw_probability = $6, confluence_score = $7,
-                signal_snapshot = $8
+                signal_snapshot = $8,
+                tf_bear_count = $9, tf_bull_count = $10,
+                tf_alignment_score = $11, highest_tf_conflict = $12
                WHERE id = $1`,
               [row.id, r.prob, r.confidence, r.marketQuality,
                r.ev, r.rawProb, r.confluenceScore,
-               JSON.stringify({ ...(r.signalSnapshot || {}), cross_tf: r.crossTF, cross_tf_summary: r.crossTFSummary, market_structure: r.marketStructure, funding_rate_score: r.fundingRateScore })]
+               JSON.stringify({ ...(r.signalSnapshot || {}), cross_tf: r.crossTF, cross_tf_summary: r.crossTFSummary, market_structure: r.marketStructure, funding_rate_score: r.fundingRateScore }),
+               r.crossTFSummary?.bear_alignment || 0, r.crossTFSummary?.bull_alignment || 0,
+               r.crossTFSummary?.alignment_score || 0, r.crossTFSummary?.highest_conflict_tf || null]
             );
             debugInfo.errors.push({ asset: r.asset, stage: 'dedup_update_ok', id: row.id });
           } catch (updateErr) {
