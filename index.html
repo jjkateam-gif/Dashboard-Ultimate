@@ -14424,6 +14424,15 @@ function _renderUnifiedUI(stats, history) {
     const bannedCount = ((window._assetStats || {}).bannedAssets || []).length;
     const hasBanned = bannedCount > 0;
 
+    // After-fix WR (post March 18 only)
+    const afterFixDate = '2026-03-18T00:00:00Z';
+    const afterFixTrades = (window._serverHistory || []).filter(e => e.created_at && new Date(e.created_at) >= new Date(afterFixDate) && e.outcome);
+    const afterFixWins = afterFixTrades.filter(e => e.outcome === 'win').length;
+    const afterFixTotal = afterFixTrades.length;
+    const afterFixWR = afterFixTotal > 0 ? (100 * afterFixWins / afterFixTotal).toFixed(1) : null;
+    const afterFixColor = afterFixWR ? (parseFloat(afterFixWR) >= 55 ? '#00f5a0' : parseFloat(afterFixWR) >= 45 ? '#f5c400' : '#ff4d6d') : '#5a7a68';
+    const afterFixActive = window._calFilterAfterFix === true;
+
     summaryEl.innerHTML = `
       ${_sc(null, 'rgba(167,139,250,0.06)', 'rgba(167,139,250,0.15)', wrColor, wrValue + (wrValue !== 'N/A' ? '%' : ''), 'WIN RATE (ALL)')}
       ${hasBanned ? `<div onclick="_toggleBannedFilter()" style="background:${window._calFilterBanned ? 'rgba(0,245,160,0.15)' : 'rgba(0,245,160,0.08)'};border:${window._calFilterBanned ? '2px solid #00f5a0' : '2px solid rgba(0,245,160,0.25)'};border-radius:8px;padding:10px;text-align:center;position:relative;cursor:pointer;transition:all 0.2s" title="Click to filter — show only tradeable assets" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
@@ -14431,6 +14440,11 @@ function _renderUnifiedUI(stats, history) {
         <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">TRADEABLE WR${window._calFilterBanned ? ' ✕' : ''}</div>
         <div style="position:absolute;top:3px;right:5px;font-size:7px;color:#00f5a0">🚫 ${bannedCount} banned</div>
       </div>` : ''}
+      <div onclick="_toggleAfterFixFilter()" style="background:${afterFixActive ? 'rgba(167,139,250,0.2)' : 'rgba(167,139,250,0.06)'};border:${afterFixActive ? '2px solid #a78bfa' : '2px solid rgba(167,139,250,0.2)'};border-radius:8px;padding:10px;text-align:center;position:relative;cursor:pointer;transition:all 0.2s" title="Click to filter — show only post-fix trades (March 18+)" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+        <div style="font-size:18px;font-weight:800;color:${afterFixColor};font-family:'Space Mono',monospace">${afterFixWR || '—'}%</div>
+        <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">AFTER FIX WR${afterFixActive ? ' ✕' : ''}</div>
+        <div style="position:absolute;top:3px;right:5px;font-size:7px;color:#a78bfa">${afterFixWins}W/${afterFixTotal - afterFixWins}L</div>
+      </div>
       ${_sc('win', 'rgba(0,245,160,0.06)', 'rgba(0,245,160,0.12)', '#00f5a0', o.wins || 0, 'WINS')}
       ${_sc('loss', 'rgba(255,77,109,0.06)', 'rgba(255,77,109,0.12)', '#ff4d6d', o.losses || 0, 'LOSSES')}
       ${_sc('pending', 'rgba(245,196,0,0.06)', 'rgba(245,196,0,0.12)', '#f5c400', o.pending || 0, 'PENDING')}
@@ -15148,6 +15162,9 @@ function _renderCalibrationChart(stats, activeTF) {
   if (window._calFilterBanned) {
     allPills.push(`<span onclick="_toggleBannedFilter()" style="display:inline-flex;align-items:center;gap:4px;background:rgba(0,245,160,0.1);border:1px solid #00f5a0;border-radius:12px;padding:2px 8px;cursor:pointer;color:#00f5a0;font-size:9px;font-weight:600">🚫 TRADEABLE ONLY ×</span>`);
   }
+  if (window._calFilterAfterFix) {
+    allPills.push(`<span onclick="_toggleAfterFixFilter()" style="display:inline-flex;align-items:center;gap:4px;background:rgba(167,139,250,0.1);border:1px solid #a78bfa;border-radius:12px;padding:2px 8px;cursor:pointer;color:#a78bfa;font-size:9px;font-weight:600">⚡ AFTER FIX ONLY (Mar 18+) ×</span>`);
+  }
 
   const hasAnyFilterFull = allPills.length > 0;
   const activePillsHtml = hasAnyFilterFull ? `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px;padding:8px 10px;background:rgba(255,107,53,0.05);border:1px solid rgba(255,107,53,0.15);border-radius:6px">
@@ -15276,6 +15293,12 @@ function _renderHistoryTable(history) {
   if (window._calFilterBanned) {
     const bannedSet = new Set(((window._assetStats || {}).bannedAssets || []).map(a => a.toUpperCase()));
     filteredEntries = filteredEntries.filter(e => !bannedSet.has((e.asset || '').toUpperCase()));
+  }
+
+  // Apply after-fix filter (AFTER FIX WR click — March 18+)
+  if (window._calFilterAfterFix) {
+    const afterFixDate = new Date('2026-03-18T00:00:00Z');
+    filteredEntries = filteredEntries.filter(e => e.created_at && new Date(e.created_at) >= afterFixDate);
   }
 
   // Apply outcome filter
@@ -15476,6 +15499,14 @@ async function _filterByOutcome(outcome) {
 
 function _toggleBannedFilter() {
   window._calFilterBanned = !window._calFilterBanned;
+  window._historyShowCount = 50;
+  if (window._serverStats && window._serverHistory) {
+    _renderUnifiedUI(window._serverStats, window._serverHistory);
+  }
+}
+
+function _toggleAfterFixFilter() {
+  window._calFilterAfterFix = !window._calFilterAfterFix;
   window._historyShowCount = 50;
   if (window._serverStats && window._serverHistory) {
     _renderUnifiedUI(window._serverStats, window._serverHistory);
