@@ -25001,19 +25001,24 @@ async function loadServerSignals() {
       headers: { 'Authorization': 'Bearer ' + token }
     });
     const data = await resp.json();
-    const serverSignals = (data.history || []).map(t => ({
-      asset: t.asset, direction: t.direction, prob: t.probability || t.prob || 0,
-      confidence: t.confidence || 'Medium', marketQuality: t.market_quality || t.marketQuality || '?',
-      rr: parseFloat(t.rr_ratio || t.rr || 0), price: t.entry_price || t.price,
-      stopPrice: t.stop_price || t.stopPrice, targetPrice: t.target_price || t.targetPrice,
-      stopPct: t.stop_pct || t.stopPct, targetPct: t.target_pct || t.targetPct,
-      regime: t.regime, timeframe: t.timeframe || '15m', ev: parseFloat(t.ev || 0),
-      entryEfficiency: t.entry_efficiency || '', scanCount: t.scan_count || t.scanCount || 1,
-      executed: t.executed, data_source: t.data_source, engine_source: t.engine_source,
-      signals: t.signal_snapshot ? (typeof t.signal_snapshot === 'string' ? JSON.parse(t.signal_snapshot) : t.signal_snapshot) : {},
-      hits: t.hits_list, misses: t.misses_list, _fromServer: true,
-      ts: t.created_at || t.ts
-    }));
+    const serverSignals = (data.history || []).map(t => {
+      const snap = t.signal_snapshot ? (typeof t.signal_snapshot === 'string' ? JSON.parse(t.signal_snapshot) : t.signal_snapshot) : {};
+      return {
+        asset: t.asset, direction: t.direction, prob: t.probability || t.prob || 0,
+        confidence: t.confidence || 'Medium', marketQuality: t.market_quality || t.marketQuality || '?',
+        rr: parseFloat(t.rr_ratio || t.rr || 0), price: t.entry_price || t.price,
+        stopPrice: t.stop_price || t.stopPrice, targetPrice: t.target_price || t.targetPrice,
+        stopPct: t.stop_pct || t.stopPct, targetPct: t.target_pct || t.targetPct,
+        regime: t.regime, timeframe: t.timeframe || '15m', ev: parseFloat(t.ev || 0),
+        entryEfficiency: t.entry_efficiency || '', scanCount: t.scan_count || t.scanCount || 1,
+        executed: t.executed, data_source: t.data_source, engine_source: t.engine_source,
+        signals: snap,
+        patterns: snap.chartPatterns || [],
+        patternAdj: snap.patternAdj || 0,
+        hits: t.hits_list, misses: t.misses_list, _fromServer: true,
+        ts: t.created_at || t.ts
+      };
+    });
     // Enrich ALL signals (server + existing) with persistent crossTF cache
     const enrichWithCache = (signal) => {
       if (signal.crossTFData && signal.crossTFData.length > 0) return; // already has data
@@ -25288,6 +25293,38 @@ renderProbeResults = function(results, tf) {
           <span style="font-size:7px;color:${alignCol};font-family:'Space Mono',monospace;font-weight:700">${strengthPct}%</span>
         </div>`;
         html += `</div>`;
+      }
+
+      // Row 2b: Chart Patterns (falling wedge, double bottom, etc.)
+      if (r.patterns && r.patterns.length > 0) {
+        html += `<div style="margin-bottom:10px;background:rgba(0,0,0,0.15);border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:8px 10px">`;
+        html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-size:9px;color:#f5c400;font-family:'Space Mono',monospace;font-weight:700">CHART PATTERNS</span>
+          ${r.patternAdj ? '<span style="font-size:8px;padding:2px 8px;border-radius:4px;background:' + (r.patternAdj > 0 ? 'rgba(0,245,160,0.12)' : 'rgba(255,77,109,0.12)') + ';border:1px solid ' + (r.patternAdj > 0 ? 'rgba(0,245,160,0.3)' : 'rgba(255,77,109,0.3)') + ';color:' + (r.patternAdj > 0 ? '#00f5a0' : '#ff4d6d') + ';font-family:\'Space Mono\',monospace;font-weight:700">Adj: ' + (r.patternAdj > 0 ? '+' : '') + r.patternAdj.toFixed(1) + '%</span>' : ''}
+        </div>`;
+        html += `<div style="display:flex;flex-wrap:wrap;gap:6px">`;
+        r.patterns.slice(0, 6).forEach(p => {
+          const isBull = p.direction === 'bullish';
+          const isBear = p.direction === 'bearish';
+          const col = isBull ? '#00f5a0' : isBear ? '#ff4d6d' : '#f5c400';
+          const bg = isBull ? 'rgba(0,245,160,0.08)' : isBear ? 'rgba(255,77,109,0.08)' : 'rgba(245,196,0,0.08)';
+          const border = isBull ? 'rgba(0,245,160,0.25)' : isBear ? 'rgba(255,77,109,0.25)' : 'rgba(245,196,0,0.25)';
+          const stageLabel = p.stage === 'breakout' ? 'BREAKOUT' : p.stage === 'confirmed' ? 'CONFIRMED' : p.stage === 'retest' ? 'RETEST' : p.stage === 'developing' ? 'DEVELOPING' : 'FORMING';
+          const stageIcon = p.stage === 'breakout' ? '⚡' : p.stage === 'confirmed' || p.stage === 'retest' ? '✓' : '◌';
+          const scorePct = p.score != null ? Math.round(p.score * 100) : Math.round((p.baseWinRate || 0) * 100);
+          html += `<div style="background:${bg};border:1px solid ${border};border-radius:6px;padding:6px 10px;min-width:120px">
+            <div style="display:flex;align-items:center;gap:4px;margin-bottom:3px">
+              <span style="font-size:10px;color:${col};font-weight:800;font-family:'Space Mono',monospace">${stageIcon} ${p.name}</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <span style="font-size:7px;color:${col};font-family:'Space Mono',monospace;font-weight:700;padding:1px 5px;border-radius:3px;background:${col}15">${isBull ? '▲ BULL' : isBear ? '▼ BEAR' : '● NEUTRAL'}</span>
+              <span style="font-size:7px;color:#ccc;font-family:'Space Mono',monospace">${stageLabel}</span>
+              <span style="font-size:7px;color:${col};font-family:'Space Mono',monospace;font-weight:700">${scorePct}%</span>
+            </div>
+            ${p.description ? '<div style="font-size:7px;color:#5a7a68;font-family:\'Space Mono\',monospace;margin-top:3px;line-height:1.3">' + p.description.substring(0, 80) + '</div>' : ''}
+          </div>`;
+        });
+        html += `</div></div>`;
       }
 
       // Row 3: Entry / Stop / Target + Position size
