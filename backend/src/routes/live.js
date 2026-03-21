@@ -394,23 +394,53 @@ router.post('/order', async (req, res) => {
         const asset = instId.replace('-USDT', '').replace('USDT', '');
         const updateResult = await pool.query(
           `UPDATE best_trades_log
-           SET executed = true, order_id = $1, engine_source = 'manual_frontend'
+           SET executed = true, order_id = $1, engine_source = 'manual_frontend',
+               entry_price_real = $4, gates_applied = false
            WHERE id = (
              SELECT id FROM best_trades_log
              WHERE asset = $2 AND direction = $3 AND executed = false AND outcome IS NULL
              ORDER BY created_at DESC LIMIT 1
            )
            RETURNING id, asset, direction`,
-          [result.orderId, asset, direction]
+          [result.orderId, asset, direction, markPrice]
         );
         if (updateResult.rows.length > 0) {
           const r = updateResult.rows[0];
           console.log(`[Order] ✅ Marked best_trades_log #${r.id} (${r.asset} ${r.direction}) as executed with orderId=${result.orderId}`);
         } else {
-          console.log(`[Order] No matching pending signal found in best_trades_log for ${asset} ${direction}`);
+          // No matching signal — insert a new record so the trade is always tracked
+          await pool.query(
+            `INSERT INTO best_trades_log
+             (asset, direction, probability, entry_price, executed, order_id, timeframe, engine_source, data_source, entry_price_real, gates_applied)
+             VALUES ($1, $2, 0, $3, true, $4, 'manual', 'manual_frontend', 'manual_execute', $3, false)`,
+            [asset, direction, markPrice, result.orderId]
+          );
+          console.log(`[Order] ✅ Created new best_trades_log entry for manual trade ${asset} ${direction} orderId=${result.orderId}`);
         }
       } catch (e) {
         console.warn('[Order] Could not update best_trades_log executed field:', e.message);
+      }
+
+      // Fix 2: Insert into live_positions so the engine tracks this position
+      try {
+        await pool.query(
+          `INSERT INTO live_positions
+           (user_id, protocol, market, direction, entry_price,
+            size_usd, collateral_usd, leverage, open_tx, sl_price, tp_price, order_id, margin_mode)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+          [
+            req.user.id, 'blofin', instId, direction, markPrice,
+            sizeUsd, collateral, lev,
+            result.orderId || null,
+            slPrice ? parseFloat(slPrice) : null,
+            tpPrice ? parseFloat(tpPrice) : null,
+            result.orderId || null,
+            marginMode || 'cross',
+          ]
+        );
+        console.log(`[Order] ✅ live_positions INSERT: ${instId} ${direction} | Size: $${sizeUsd.toFixed(2)} | Lev: ${lev}x`);
+      } catch (lpErr) {
+        console.warn(`[Order] live_positions INSERT failed: ${lpErr.message}`);
       }
     }
 
