@@ -1,8 +1,18 @@
 require('dotenv').config();
 
-if (!process.env.JWT_SECRET) {
-  console.error('FATAL: JWT_SECRET environment variable is required');
+// ── Startup Environment Variable Validation ──
+const REQUIRED_ENV = ['JWT_SECRET', 'DATABASE_URL'];
+const RECOMMENDED_ENV = ['BLOFIN_API_KEY', 'BLOFIN_SECRET', 'BLOFIN_PASSPHRASE'];
+
+const missingRequired = REQUIRED_ENV.filter(v => !process.env[v]);
+if (missingRequired.length > 0) {
+  console.error(`FATAL: Missing required environment variables: ${missingRequired.join(', ')}`);
   process.exit(1);
+}
+
+const missingRecommended = RECOMMENDED_ENV.filter(v => !process.env[v]);
+if (missingRecommended.length > 0) {
+  console.warn(`WARNING: Missing recommended environment variables (live trading will be disabled): ${missingRecommended.join(', ')}`);
 }
 
 const express = require('express');
@@ -72,11 +82,6 @@ const server = app.listen(PORT, () => {
 // Then load routes and DB (async)
 async function initDB() {
   try {
-    if (!process.env.DATABASE_URL) {
-      console.error('WARNING: DATABASE_URL not set. DB features disabled.');
-      return;
-    }
-
     const { runMigrations, pool } = require('./db');
     await runMigrations();
 

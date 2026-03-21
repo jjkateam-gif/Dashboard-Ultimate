@@ -1048,7 +1048,7 @@ class BestTradesScanner {
       leverage: 1,
       tfRules: {},  // Per-TF overrides: { "5m": { enabled: true, minProb: 60, minQuality: "B" }, ... }
       bannedAssets: [],  // Assets banned from LIVE TRADING (still scanned & logged for data collection)
-      assetOverrides: { 'ETH': { minProb: 72 } },  // Per-asset minimum probability overrides
+      assetOverrides: { 'ETH': { minProb: 72 }, 'BNB': { minProbLong: 68, minProbShort: 63 } },  // Per-asset minimum probability overrides (supports minProb, minProbLong, minProbShort)
     };
     this.scanTimers = {};       // { '5m': timer, '15m': timer, ... }
     this.lastResults = [];      // combined results across all TFs
@@ -2161,8 +2161,14 @@ class BestTradesScanner {
     const rejectReasons = {};
     const bannedSet = new Set((this.settings.bannedAssets || []).map(a => a.toUpperCase()));
     const qualifying = results.filter(r => {
+      // #15: Per-trade gate decision logging — build structured log for each signal
+      const gateLog = [];
+      const gateBlock = (gate, detail) => { gateLog.push({ gate, result: 'block', detail }); r.gateLog = gateLog; rejectReasons[r.asset] = detail; return false; };
+      const gatePass = (gate, detail) => { gateLog.push({ gate, result: 'pass', detail }); };
+
       // BANNED ASSET CHECK — asset is banned from live trading (still logged for data collection)
-      if (bannedSet.has(r.asset.toUpperCase())) { rejectReasons[r.asset] = `BANNED from live trading`; return false; }
+      if (bannedSet.has(r.asset.toUpperCase())) { return gateBlock('banned_asset', 'BANNED from live trading'); }
+      gatePass('banned_asset', 'not banned');
 
       // P6 #21: Minimum scan_count gate (scan_count 1-2 = 40-48% WR, 5+ = 60%+)
       // scan_count is tracked in _logResults dedup — check if this asset has a pending entry
@@ -2172,38 +2178,41 @@ class BestTradesScanner {
       // P6 #22: Session-aware UTC hour gate (13-15 UTC = 0-18% WR — block auto-execute)
       const utcHour = new Date().getUTCHours();
       if (utcHour >= 13 && utcHour <= 15) {
-        rejectReasons[r.asset] = `UTC hour ${utcHour} (13-15 UTC dead zone = 0-18% WR) — auto-execute blocked`;
-        return false;
+        return gateBlock('session_hour', `UTC ${utcHour} in 13-15 dead zone (0-18% WR)`);
       }
       // Session-aware probability penalty for weak hours
       if (utcHour >= 21 && utcHour <= 23) {
         r.prob = Math.round(r.prob * 0.4); // Suppressed hours
+        gatePass('session_hour', `UTC ${utcHour} — suppressed (0.4x)`);
       } else if ((utcHour >= 4 && utcHour <= 10) || (utcHour >= 16 && utcHour <= 19)) {
         r.prob = Math.round(r.prob * 0.7); // Reduced hours
+        gatePass('session_hour', `UTC ${utcHour} — reduced (0.7x)`);
+      } else {
+        gatePass('session_hour', `UTC ${utcHour} — full weight`);
       }
       // Full weight: 00-03 UTC, 11 UTC, 20 UTC — no adjustment needed
 
       // P6 #23: Minimum R:R filter (RR < 1.5 = 46-47% WR, RR > 2.0 = 66.7% WR)
       if (r.rr < 1.5) {
-        rejectReasons[r.asset] = `RR ${r.rr?.toFixed(1)} < 1.5 minimum — weak risk/reward`;
-        return false;
+        return gateBlock('min_rr', `RR ${r.rr?.toFixed(1)} < 1.5 minimum`);
       }
+      gatePass('min_rr', `RR ${r.rr?.toFixed(1)}`);
 
       // Market structure gate — validated March 20: contracting/uptrend shorts = 0-18% WR
       if (r.marketStructure && r.marketStructure.structure) {
         const ms = r.marketStructure.structure;
         if (ms === 'contracting') {
-          rejectReasons[r.asset] = `Market structure CONTRACTING — all signals blocked (0% WR)`;
-          return false;
+          return gateBlock('market_structure', 'CONTRACTING — all signals blocked (0% WR)');
         }
         if (ms === 'uptrend' && r.direction === 'short') {
-          rejectReasons[r.asset] = `Market structure UPTREND — shorts blocked (18% WR)`;
-          return false;
+          return gateBlock('market_structure', 'UPTREND — shorts blocked (18% WR)');
         }
         if (ms === 'downtrend' && r.direction === 'long') {
-          rejectReasons[r.asset] = `Market structure DOWNTREND — longs blocked`;
-          return false;
+          return gateBlock('market_structure', 'DOWNTREND — longs blocked');
         }
+        gatePass('market_structure', ms);
+      } else {
+        gatePass('market_structure', 'no data');
       }
 
       // 4h conflict: LOG as flag but do NOT block — collecting data to validate first
@@ -2217,35 +2226,51 @@ class BestTradesScanner {
           if (r.direction === 'short' && h4Direction === 'bull') {
             r.h4Conflict = true;
             r.h4ConflictReason = '4h bullish — short against macro trend';
+            gatePass('4h_alignment', `CONFLICT flagged: ${r.h4ConflictReason}`);
           } else if (r.direction === 'long' && h4Direction === 'bear') {
             r.h4Conflict = true;
             r.h4ConflictReason = '4h bearish — long against macro trend';
+            gatePass('4h_alignment', `CONFLICT flagged: ${r.h4ConflictReason}`);
+          } else {
+            gatePass('4h_alignment', `aligned (4h=${h4Direction}, dir=${r.direction})`);
           }
+        } else {
+          gatePass('4h_alignment', 'no 4h data or stale');
         }
+      } else {
+        gatePass('4h_alignment', 'no cross-TF data');
       }
 
-      // Per-asset minimum probability override
+      // Per-asset minimum probability override (supports direction-specific: minProbLong, minProbShort)
       const assetOverride = (this.settings.assetOverrides || {})[r.asset.toUpperCase()] || {};
-      const effectiveMinProb = assetOverride.minProb || minProb;
-      if (r.prob < effectiveMinProb) { rejectReasons[r.asset] = `prob ${r.prob}% < min ${effectiveMinProb}%`; return false; }
-      if (r.marketQuality !== 'A') { rejectReasons[r.asset] = `quality ${r.marketQuality} — only A-grade allowed`; return false; }
-      if (minQuality && (QUALITY_ORDER[r.marketQuality] || 0) < (QUALITY_ORDER[minQuality] || 0)) { rejectReasons[r.asset] = `quality ${r.marketQuality} < min ${minQuality}`; return false; }
+      const assetMinProb = (r.direction === 'long' ? assetOverride.minProbLong : assetOverride.minProbShort) || assetOverride.minProb || null;
+      const effectiveMinProb = assetMinProb || minProb;
+      if (r.prob < effectiveMinProb) { return gateBlock('min_prob', `prob ${r.prob}% < min ${effectiveMinProb}%`); }
+      gatePass('min_prob', `${r.prob}% >= ${effectiveMinProb}%`);
+      if (r.marketQuality !== 'A') { return gateBlock('quality_grade', `quality ${r.marketQuality} — only A-grade allowed`); }
+      gatePass('quality_grade', r.marketQuality);
+      if (minQuality && (QUALITY_ORDER[r.marketQuality] || 0) < (QUALITY_ORDER[minQuality] || 0)) { return gateBlock('min_quality', `quality ${r.marketQuality} < min ${minQuality}`); }
+      if (minQuality) gatePass('min_quality', `${r.marketQuality} >= ${minQuality}`);
       // Confidence filter: only apply if per-TF rule explicitly sets minConfidence
       if (minConfidence) {
         const confOrder = { 'High': 3, 'Medium': 2, 'Low': 1, 'high': 3, 'medium': 2, 'low': 1 };
-        if ((confOrder[r.confidence] || 0) < (confOrder[minConfidence] || 0)) { rejectReasons[r.asset] = `conf ${r.confidence} < min ${minConfidence}`; return false; }
+        if ((confOrder[r.confidence] || 0) < (confOrder[minConfidence] || 0)) { return gateBlock('min_confidence', `conf ${r.confidence} < min ${minConfidence}`); }
+        gatePass('min_confidence', `${r.confidence} >= ${minConfidence}`);
       }
-      if (r.entryEfficiency === 'Chasing') { rejectReasons[r.asset] = 'Chasing entry — extended move, poor entry location'; return false; }
-      if (r.ev <= 0) { rejectReasons[r.asset] = `Negative EV (${r.ev.toFixed(3)}) — risk exceeds reward`; return false; }
+      if (r.entryEfficiency === 'Chasing') { return gateBlock('entry_efficiency', 'Chasing entry — extended move, poor entry location'); }
+      gatePass('entry_efficiency', r.entryEfficiency || 'ok');
+      if (r.ev <= 0) { return gateBlock('positive_ev', `Negative EV (${r.ev.toFixed(3)}) — risk exceeds reward`); }
+      gatePass('positive_ev', `EV ${r.ev.toFixed(3)}`);
 
       // Volume bull on shorts = -20pp edge — buying pressure fights the short
       if (r.direction === 'short' && r.signalSnapshot?.Volume?.bull && (r.volumeRatio || 0) > 2) {
-        rejectReasons[r.asset] = 'Volume conflict — buying volume (ratio ' + (r.volumeRatio||0).toFixed(1) + 'x) fighting short';
-        return false;
+        return gateBlock('volume_conflict', 'Volume conflict — buying volume (ratio ' + (r.volumeRatio||0).toFixed(1) + 'x) fighting short');
       }
+      gatePass('volume_conflict', r.direction === 'short' ? `vol ratio ${(r.volumeRatio||0).toFixed(1)}x` : 'n/a (long)');
 
       // Direction-aware minimum probability (raised March 20 — 60%+ trades = 78.7% WR post-fix)
-      const dirMinProb = r.direction === 'long' ? 65 : 60;
+      // 2026-03-21: 15m shorts floor raised 60→65 (#42 — 15m short WR underperforming at 60% gate)
+      const dirMinProb = r.direction === 'long' ? 65 : (tf === '15m' ? 65 : 60);
 
       // 3/4 bear signal minimum gate for shorts (validated: 4/4 = 83.1% WR, 3/4 = 59.5% WR, 2/4 = 44.4% WR)
       if (r.direction === 'short') {
@@ -2256,38 +2281,46 @@ class BestTradesScanner {
           r.signalSnapshot?.Volume?.bear,
         ].filter(Boolean).length;
         if (coreBearCount < 3) {
-          rejectReasons[r.asset] = `Only ${coreBearCount}/4 core bear signals — minimum 3 required for auto-trade`;
-          return false;
+          return gateBlock('bear_signal_min', `Only ${coreBearCount}/4 core bear signals — minimum 3 required`);
         }
+        gatePass('bear_signal_min', `${coreBearCount}/4 core bear signals`);
       }
       // Ichimoku inside cloud + short = +6pp boost (68.3% WR on 63 trades vs 54.9% overall)
       if (r.direction === 'short' && r.signalSnapshot?.Ichimoku?.priceVsCloud === 'inside') {
         r.prob = Math.min(85, r.prob + 6);
+        gatePass('ichi_cloud_boost', '+6pp (inside cloud short)');
       }
 
       // OBV positive slope on shorts = +4pp boost (66.4% WR — weak buying confirms short continuation)
       if (r.direction === 'short' && r.signalSnapshot?.Volume?.obvSlope > 0) {
         r.prob = Math.min(85, r.prob + 4);
+        gatePass('obv_slope_boost', '+4pp (OBV positive slope on short)');
       }
 
-      const effectiveDirMinProb = Math.max(assetOverride.minProb || minProb, dirMinProb);
-      if (r.prob < effectiveDirMinProb) { rejectReasons[r.asset] = `prob ${r.prob}% < dir-aware min ${effectiveDirMinProb}%`; return false; }
+      const effectiveDirMinProb = Math.max(assetMinProb || minProb, dirMinProb);
+      if (r.prob < effectiveDirMinProb) { return gateBlock('dir_min_prob', `prob ${r.prob}% < dir-aware min ${effectiveDirMinProb}% (${r.direction})`); }
+      gatePass('dir_min_prob', `${r.prob}% >= ${effectiveDirMinProb}% (${r.direction})`);
 
       // Flip confidence gate — skip first trade after direction change (34.2% WR)
       const flipCheck = this._checkFlipConfidence(r.asset, tf, r.direction);
       if (flipCheck.skip) {
-        rejectReasons[r.asset] = flipCheck.reason;
-        return false;
+        return gateBlock('flip_confidence', flipCheck.reason);
       }
+      gatePass('flip_confidence', 'no recent flip');
 
       // #27 — Per-TF leverage limits: hardcode 4h to max 1x until fixed
-      if (tf === '4h' && r.marketQuality !== 'A') { rejectReasons[r.asset] = '4h non-A quality'; return false; }
+      if (tf === '4h' && r.marketQuality !== 'A') { return gateBlock('4h_quality', `4h non-A quality (${r.marketQuality})`); }
+      if (tf === '4h') gatePass('4h_quality', 'A grade');
 
       // Cross-TF dedup: don't trade same asset+direction if recently traded on another TF
       const dedupeKey = `${r.asset}|${r.direction}`;
       for (const existing of this.recentTrades) {
-        if (existing.startsWith(dedupeKey + '|')) { rejectReasons[r.asset] = 'cross-TF dedup'; return false; }
+        if (existing.startsWith(dedupeKey + '|')) { return gateBlock('cross_tf_dedup', `already traded ${dedupeKey}`); }
       }
+      gatePass('cross_tf_dedup', 'no recent duplicate');
+
+      // All gates passed — attach gateLog to the result
+      r.gateLog = gateLog;
       return true;
     });
 
@@ -2445,7 +2478,8 @@ class BestTradesScanner {
       // got through qualifying but dropped below threshold after BTC/funding adjustments.
       const finalMinProb = setup.direction === 'long' ? 65 : 60;
       const finalAssetOverride = (this.settings.assetOverrides || {})[setup.asset.toUpperCase()] || {};
-      const finalEffectiveMin = Math.max(finalAssetOverride.minProb || minProb, finalMinProb);
+      const finalAssetMinProb = (setup.direction === 'long' ? finalAssetOverride.minProbLong : finalAssetOverride.minProbShort) || finalAssetOverride.minProb || null;
+      const finalEffectiveMin = Math.max(finalAssetMinProb || minProb, finalMinProb);
       if (setup.prob < finalEffectiveMin) {
         console.log(`[BestTrades] ${setup.asset} BLOCKED at final prob check — ${setup.prob}% < ${finalEffectiveMin}% after all adjustments`);
         continue;
@@ -2658,8 +2692,25 @@ class BestTradesScanner {
         return; // Exit — don't proceed to TP/SL or execution logging
       }
 
-      // Step 3b: FILLED — now set TP/SL
-      console.log(`[BestTrades] ✅ LIMIT FILLED: ${setup.asset} ${setup.direction} @ $${limitPrice} — setting TP/SL`);
+      // Step 3b: FILLED — fetch actual fill price from BloFin for slippage tracking (#17)
+      let actualFillPrice = limitPrice; // default to limit price
+      try {
+        const orderDetail = await blofinClient.getOrderDetail(creds, instId, limitOrderId, demo);
+        if (orderDetail && (orderDetail.avgPrice || orderDetail.averagePrice)) {
+          actualFillPrice = parseFloat(orderDetail.avgPrice || orderDetail.averagePrice) || limitPrice;
+        }
+      } catch (fillErr) {
+        console.warn(`[BestTrades] Could not fetch fill price for ${setup.asset}: ${fillErr.message} — using limit price`);
+      }
+      // #19: Calculate slippage between intended signal price and actual fill
+      const slippagePct = setup.price && setup.price > 0
+        ? parseFloat(((Math.abs(actualFillPrice - setup.price) / setup.price) * 100).toFixed(4))
+        : null;
+      if (slippagePct !== null && slippagePct > 0.01) {
+        console.log(`[BestTrades] Slippage: ${setup.asset} intended=$${setup.price} filled=$${actualFillPrice} slip=${slippagePct}%`);
+      }
+
+      console.log(`[BestTrades] ✅ LIMIT FILLED: ${setup.asset} ${setup.direction} @ $${actualFillPrice} (intended: $${limitPrice}) — setting TP/SL`);
       if (tpPrice || slPrice) {
         try {
           await blofinClient.setTpSl({
@@ -2722,7 +2773,9 @@ class BestTradesScanner {
       setup.sessionHourUtc, setup.tradingSession, setup.isWeekend,
       setup.openPositionsCount || null, setup.dailyPnlPct || null, leverageRisk.consecutiveLosses,
       setup.derivData?.globalLongShortRatio, setup.derivData?.markPricePremium, setup.derivData?.bookImbalance,
-      setup.liqRiskScore, setup.liqRiskLevel, setup.liqRiskComponents, 'best_trades_auto'];
+      setup.liqRiskScore, setup.liqRiskLevel, setup.liqRiskComponents, 'best_trades_auto',
+      actualFillPrice, slippagePct, // #17: actual fill price + #19: slippage %
+      JSON.stringify(setup.gateLog || null)]; // #15: gate decisions
 
     const extendedInsertSQL = `INSERT INTO best_trades_log
       (asset, direction, probability, confidence, market_quality, rr_ratio,
@@ -2743,12 +2796,13 @@ class BestTradesScanner {
        session_hour_utc, trading_session, is_weekend,
        open_positions_count, daily_pnl_pct, consecutive_losses_at_entry,
        global_long_short_ratio, mark_price_premium, book_imbalance,
-       liq_risk_score, liq_risk_level, liq_risk_components, engine_source)
+       liq_risk_score, liq_risk_level, liq_risk_components, engine_source,
+       entry_price_real, slippage_pct, gate_decisions)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,
               $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,
               $47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,
               $60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73,$74,$75,$76,$77,$78,$79,$80,
-              $81,$82,$83,$84)
+              $81,$82,$83,$84,$85,$86,$87)
       RETURNING id`;
 
     // DB INSERT — order is confirmed filled, order_id is in dbParams
@@ -2791,8 +2845,8 @@ class BestTradesScanner {
       }
     }
 
-    console.log(`[BestTrades] ⚡ EXECUTED: ${setup.asset} ${setup.direction.toUpperCase()} @ LIMIT $${limitPrice} | Prob: ${setup.prob}% | Size: $${posSize} | Lev: ${lev}x | SL: ${slPrice} | TP: ${tpPrice} | OrderId: ${result.orderId} | DB: ${dbId ? '#' + dbId : 'FAILED'}`);
-    this._broadcast('trade', { setup, orderId: result.orderId, posSize, leverage: lev });
+    console.log(`[BestTrades] ⚡ EXECUTED: ${setup.asset} ${setup.direction.toUpperCase()} @ LIMIT $${limitPrice} (fill: $${actualFillPrice}, slip: ${slippagePct ?? 'n/a'}%) | Prob: ${setup.prob}% | Size: $${posSize} | Lev: ${lev}x | SL: ${slPrice} | TP: ${tpPrice} | OrderId: ${result.orderId} | DB: ${dbId ? '#' + dbId : 'FAILED'}`);
+    this._broadcast('trade', { setup, orderId: result.orderId, posSize, leverage: lev, slippagePct, actualFillPrice });
   }
 
   // ── DB Persistence ──
@@ -3005,12 +3059,12 @@ class BestTradesScanner {
             session_hour_utc, trading_session, is_weekend,
             open_positions_count, daily_pnl_pct, consecutive_losses_at_entry,
             global_long_short_ratio, mark_price_premium, book_imbalance,
-            liq_risk_score, liq_risk_level, liq_risk_components, engine_source)
+            liq_risk_score, liq_risk_level, liq_risk_components, engine_source, gate_decisions)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,
                    $28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,
                    $46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,
                    $59,$60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73,$74,$75,$76,$77,$78,$79,
-                   $80,$81,$82,$83)`,
+                   $80,$81,$82,$83,$84)`,
           [r.asset, r.direction, r.prob, r.confidence,
            r.marketQuality, r.rr, r.price, r.stopPrice, r.targetPrice,
            r.stopPct, r.targetPct, r.regime, false, r.timeframe || '15m',
@@ -3034,7 +3088,8 @@ class BestTradesScanner {
            r.sessionHourUtc, r.tradingSession, r.isWeekend,
            null, null, leverageRisk.consecutiveLosses,
            r.derivData?.globalLongShortRatio, r.derivData?.markPricePremium, r.derivData?.bookImbalance,
-           r.liqRiskScore, r.liqRiskLevel, r.liqRiskComponents, 'best_trades_signal']
+           r.liqRiskScore, r.liqRiskLevel, r.liqRiskComponents, 'best_trades_signal',
+           JSON.stringify(r.gateLog || null)]
         );
         inserted++;
       } catch (e) {
@@ -3381,7 +3436,7 @@ class BestTradesScanner {
           if (isExecuted && predAgeMs > maxAgeExecuted) {
             const expiryHours = Math.round(predAgeMs / 3600000 * 100) / 100;
             await pool.query(
-              `UPDATE best_trades_log SET outcome='expired', resolved_at=NOW(), hours_to_resolution=$2, exit_reason='expired' WHERE id=$1`,
+              `UPDATE best_trades_log SET outcome='expired', resolved_at=NOW(), closed_at=COALESCE(closed_at, NOW()), hours_to_resolution=$2, exit_reason='expired' WHERE id=$1`,
               [row.id, expiryHours]
             );
             resolved++;
@@ -3393,7 +3448,7 @@ class BestTradesScanner {
           if (predAgeMs > maxAgeMs) {
             const expiryHours = Math.round(predAgeMs / 3600000 * 100) / 100;
             await pool.query(
-              `UPDATE best_trades_log SET outcome='expired', resolved_at=NOW(), hours_to_resolution=$2, exit_reason='expired' WHERE id=$1`,
+              `UPDATE best_trades_log SET outcome='expired', resolved_at=NOW(), closed_at=COALESCE(closed_at, NOW()), hours_to_resolution=$2, exit_reason='expired' WHERE id=$1`,
               [row.id, expiryHours]
             );
             resolved++;
@@ -3476,9 +3531,14 @@ class BestTradesScanner {
 
             const resolutionHours = Math.round((Date.now() - new Date(row.created_at).getTime()) / 3600000 * 100) / 100;
             const exitReason = outcome === 'win' ? 'tp_hit' : 'sl_hit';
+            // #19: exit price is target (win) or stop (loss) for paper resolution
+            const exitPrice = outcome === 'win' ? targetPrice : stopPrice;
             await pool.query(
-              `UPDATE best_trades_log SET outcome=$1, pnl=$2, resolved_at=NOW(), hours_to_resolution=$4, exit_reason=$5, mae_pct=$6, mfe_pct=$7 WHERE id=$3`,
-              [outcome, parseFloat(pnl.toFixed(4)), row.id, resolutionHours, exitReason, maePct, mfePct]
+              `UPDATE best_trades_log SET outcome=$1, pnl=$2, resolved_at=NOW(), closed_at=COALESCE(closed_at, NOW()),
+               hours_to_resolution=$4, exit_reason=$5, mae_pct=$6, mfe_pct=$7,
+               exit_price_real = COALESCE(exit_price_real, $8)
+               WHERE id=$3`,
+              [outcome, parseFloat(pnl.toFixed(4)), row.id, resolutionHours, exitReason, maePct, mfePct, exitPrice]
             );
             resolved++;
           }
@@ -3542,11 +3602,11 @@ class BestTradesScanner {
 
         // P0 FIX: Skip orders we've already reconciled in a previous cycle (order_id already exists in DB)
         const alreadyReconciled = await pool.query(
-          `SELECT id FROM best_trades_log WHERE order_id = $1 AND data_source = 'signal_matched' LIMIT 1`,
+          `SELECT id FROM best_trades_log WHERE order_id = $1 AND data_source IN ('signal_matched', 'blofin_only') LIMIT 1`,
           [orderId]
         );
         if (alreadyReconciled.rows.length > 0) {
-          continue; // Already reconciled — skip entirely to prevent duplicate processing
+          continue; // Already reconciled or logged as blofin_only — skip entirely to prevent duplicate processing
         }
 
         // Try to match by order_id first (most reliable)
@@ -3586,8 +3646,11 @@ class BestTradesScanner {
         if (matchResult.rows.length > 0) {
           const tradeId = matchResult.rows[0].id;
           const realOutcome = pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'breakeven';
-          // Calculate real PnL % from fill prices if available
-          const entryPriceReal = avgPrice || null;
+          // #17: Determine if this is an opening or closing order
+          // Close orders have pnl != 0 or reduceOnly=true; their avgPrice is the exit price
+          const isCloseOrder = (pnl !== 0) || order.reduceOnly === true || order.reduceOnly === 'true';
+          const entryPriceReal = !isCloseOrder && avgPrice ? avgPrice : null;
+          const exitPriceReal = isCloseOrder && avgPrice ? avgPrice : null;
 
           // ── Determine exit_reason from BloFin order data ──
           let exitReason = null;
@@ -3631,8 +3694,17 @@ class BestTradesScanner {
                 executed = true,
                 order_id = COALESCE(order_id, $2),
                 entry_price_real = COALESCE(entry_price_real, $3),
+                exit_price_real = COALESCE(exit_price_real, $8),
                 trading_fee_real = COALESCE(trading_fee_real, $4),
                 blofin_pnl_usd = COALESCE(blofin_pnl_usd, $5),
+                pnl = CASE WHEN $5 IS NOT NULL AND $5 != 0 THEN
+                  CASE WHEN direction = 'long' AND $8 IS NOT NULL AND entry_price_real IS NOT NULL AND entry_price_real > 0
+                    THEN ROUND((($8::decimal - entry_price_real) / entry_price_real) * 100, 4)
+                  WHEN direction = 'short' AND $8 IS NOT NULL AND entry_price_real IS NOT NULL AND entry_price_real > 0
+                    THEN ROUND(((entry_price_real - $8::decimal) / entry_price_real) * 100, 4)
+                  ELSE pnl END
+                ELSE pnl END,
+                outcome = CASE WHEN $5 IS NOT NULL AND $5 != 0 THEN $9 ELSE outcome END,
                 data_source = 'signal_matched',
                 engine_source = COALESCE(engine_source, 'best_trades_auto'),
                 exit_reason = COALESCE(exit_reason, $6),
@@ -3642,9 +3714,21 @@ class BestTradesScanner {
                     THEN ROUND(EXTRACT(EPOCH FROM ($7::timestamptz - created_at)) / 3600.0, 2)
                     ELSE NULL
                   END
-                )
+                ),
+                hours_to_resolution = COALESCE(hours_to_resolution,
+                  CASE WHEN $7 IS NOT NULL
+                    THEN ROUND(EXTRACT(EPOCH FROM ($7::timestamptz - created_at)) / 3600.0, 2)
+                    ELSE NULL
+                  END
+                ),
+                slippage_pct = CASE WHEN $3 IS NOT NULL AND entry_price IS NOT NULL AND entry_price > 0 THEN
+                  CASE WHEN direction = 'long'
+                    THEN ROUND((($3::decimal - entry_price) / entry_price) * 100, 4)
+                    ELSE ROUND(((entry_price - $3::decimal) / entry_price) * 100, 4)
+                  END
+                ELSE slippage_pct END
                WHERE id = $1`,
-              [tradeId, orderId, entryPriceReal, Math.abs(fee), pnl, exitReason, closedAt]
+              [tradeId, orderId, entryPriceReal, Math.abs(fee), pnl, exitReason, closedAt, exitPriceReal, realOutcome]
             );
             updated++;
             alreadyMatchedTradeIds.add(tradeId); // P0 FIX: Mark as matched so no other order matches this row
@@ -3653,12 +3737,61 @@ class BestTradesScanner {
           }
           matched++;
         } else {
+          // ────────────────────────────────────────────────────────────────
+          // UNGATED TRADE DETECTION (#18/#21)
+          // This BloFin order has NO matching signal in best_trades_log.
+          // It was executed on BloFin without going through the signal engine
+          // gates (probability, regime, scan count, asset ban, etc.).
+          //
+          // Architectural note: The full fix is to route ALL BloFin execution
+          // through the signal engine so every trade is gated. For now, we:
+          //   (a) Log a warning so these trades are visible in server logs
+          //   (b) Insert a blofin_only record with gates_applied = false
+          //       so dashboards and reports can flag them
+          // ────────────────────────────────────────────────────────────────
+          console.warn(`[BestTrades] UNGATED TRADE DETECTED: ${asset} ${direction} (order ${orderId}) — executed on BloFin with no matching signal. gates_applied=false`);
+
+          // Derive exit_reason for the blofin_only record
+          let ungatedExitReason = null;
+          const ungatedSource = (order.source || '').toLowerCase();
+          const ungatedCancelType = (order.cancelType || '').toLowerCase();
+          const ungatedState = (order.state || '').toLowerCase();
+          if (ungatedCancelType === 'liquidation' || ungatedSource === 'liquidation') ungatedExitReason = 'liquidation';
+          else if (ungatedSource === 'tpsl' || ungatedCancelType === 'tp') ungatedExitReason = 'tp_hit';
+          else if (ungatedCancelType === 'sl') ungatedExitReason = 'sl_hit';
+          else if (order.reduceOnly === true || order.reduceOnly === 'true') ungatedExitReason = 'manual_close';
+          else if (ungatedState === 'filled') ungatedExitReason = 'manual_close';
+
+          try {
+            await pool.query(
+              `INSERT INTO best_trades_log
+                (asset, direction, entry_price, executed, order_id,
+                 entry_price_real, trading_fee_real, blofin_pnl_usd,
+                 data_source, engine_source, outcome, pnl, exit_reason,
+                 created_at, gates_applied)
+               VALUES ($1, $2, $3, true, $4, $3, $5, $6,
+                 'blofin_only', 'blofin_only',
+                 CASE WHEN $6 > 0 THEN 'win' WHEN $6 < 0 THEN 'loss' ELSE NULL END,
+                 $6, $7, COALESCE($8, NOW()), false)`,
+              [asset, direction, avgPrice, orderId, Math.abs(fee), pnl, ungatedExitReason,
+               filledTime ? new Date(parseInt(filledTime) || filledTime) : null]
+            );
+          } catch (insertErr) {
+            // Duplicate order_id or other constraint — safe to ignore
+            if (!insertErr.message.includes('duplicate')) {
+              console.warn(`[BestTrades] Failed to insert blofin_only record for ${asset}:`, insertErr.message);
+            }
+          }
+
           unmatched++;
         }
       }
 
       if (matched > 0 || unmatched > 0) {
         console.log(`[BestTrades] Reconciliation: ${matched} matched (${updated} updated), ${unmatched} unmatched BloFin orders`);
+        if (unmatched > 0) {
+          console.warn(`[BestTrades] WARNING: ${unmatched} BloFin trades had NO signal engine match (ungated). Check blofin_only records.`);
+        }
       }
     } catch (e) {
       console.warn('[BestTrades] Reconciliation error:', e.message);

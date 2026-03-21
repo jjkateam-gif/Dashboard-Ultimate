@@ -433,6 +433,12 @@ async function getOrderHistory(creds, instId, demo) {
   return privateGet('/api/v1/trade/order-history', params, creds, demo);
 }
 
+// #17: Get order detail by orderId — returns fill price (avgPrice) for a specific order
+async function getOrderDetail(creds, instId, orderId, demo) {
+  const params = { instId, orderId };
+  return privateGet('/api/v1/trade/order', params, creds, demo);
+}
+
 module.exports = {
   getBaseUrl,
   DEMO_BASE,
@@ -453,5 +459,6 @@ module.exports = {
   cancelOrder,
   getActiveOrders,
   getOrderHistory,
+  getOrderDetail,
   setTpSl,
 };

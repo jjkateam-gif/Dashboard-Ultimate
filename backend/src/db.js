@@ -6,17 +6,20 @@ console.log('DB URL prefix:', dbUrl ? dbUrl.substring(0, 30) + '...' : 'NOT SET'
 const pool = new Pool({
   connectionString: dbUrl,
   ssl: dbUrl && dbUrl.includes('railway') ? { rejectUnauthorized: false } : false,
-  connectionTimeoutMillis: 10000
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000
 });
 
 pool.on('error', (err) => {
   console.error('Unexpected DB pool error:', err.message);
+  // Don't crash the process — pool will attempt to reconnect on next query
 });
 
 async function runMigrations() {
   const fs = require('fs');
   const path = require('path');
-  const migrations = ['001_init.sql', '002_live_trading.sql', '003_blofin_migration.sql', '004_recommendations.sql', '005_auth_tokens.sql', '006_trade_log.sql', '007_fix_live_strategies.sql', '008_prediction_state.sql', '009_best_trades.sql', '010_best_trades_timeframe.sql', '011_tf_rules.sql', '012_indicator_snapshots.sql', '013_trade_size_mode.sql', '014_scan_count.sql', '015_sizing_mode.sql', '016_market_context.sql', '017_mae_mfe_liqrisk_calibration.sql', '018_reconciliation.sql', '019_hours_open.sql', '020_sync_scanner_schemas.sql'];
+  const migrations = ['001_init.sql', '002_live_trading.sql', '003_blofin_migration.sql', '004_recommendations.sql', '005_auth_tokens.sql', '006_trade_log.sql', '007_fix_live_strategies.sql', '008_prediction_state.sql', '009_best_trades.sql', '010_best_trades_timeframe.sql', '011_tf_rules.sql', '012_indicator_snapshots.sql', '013_trade_size_mode.sql', '014_scan_count.sql', '015_sizing_mode.sql', '016_market_context.sql', '017_mae_mfe_liqrisk_calibration.sql', '018_reconciliation.sql', '019_hours_open.sql', '020_sync_scanner_schemas.sql', '022_fix_timestamps.sql'];
 
   // Create migration tracking table if it doesn't exist
   await pool.query(`

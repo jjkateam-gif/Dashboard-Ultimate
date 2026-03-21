@@ -5,6 +5,23 @@ const { pool } = require('../db');
 const router = express.Router();
 router.use(authenticate);
 
+// ── Input Validation Helpers ──
+function isPositiveInt(val) {
+  const n = parseInt(val);
+  return Number.isFinite(n) && n > 0;
+}
+function isAlphanumDash(val) {
+  return typeof val === 'string' && /^[A-Za-z0-9_-]+$/.test(val);
+}
+function isIsoDate(val) {
+  return typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val) && !isNaN(Date.parse(val));
+}
+const VALID_TIMEFRAMES = ['1m','3m','5m','15m','30m','1h','2h','4h','6h','12h','1d','1w'];
+const VALID_OUTCOMES = ['win','loss','pending','all'];
+const VALID_CONFIDENCES = ['low','medium','high','very_high'];
+const VALID_QUALITIES = ['A+','A','B','C','D'];
+const VALID_REGIMES = ['trending_up','trending_down','ranging','volatile'];
+
 // GET /best-trades/watchlist — current watchlist candidates
 router.get('/watchlist', async (req, res) => {
   try {
@@ -69,6 +86,9 @@ router.post('/scan', async (req, res) => {
 
 // GET /best-trades/results — last scan results
 router.get('/results', (req, res) => {
+  if (req.query.limit && !isPositiveInt(req.query.limit)) {
+    return res.status(400).json({ error: 'limit must be a positive integer' });
+  }
   const limit = parseInt(req.query.limit) || 20;
   res.json({
     results: scanner.getLastResults().slice(0, limit),
@@ -79,6 +99,24 @@ router.get('/results', (req, res) => {
 // GET /best-trades/stats — win rates broken down by timeframe, confidence, quality, regime + Sharpe
 router.get('/stats', async (req, res) => {
   try {
+    if (req.query.timeframe && !VALID_TIMEFRAMES.includes(req.query.timeframe)) {
+      return res.status(400).json({ error: 'Invalid timeframe' });
+    }
+    if (req.query.regime && !VALID_REGIMES.includes(req.query.regime)) {
+      return res.status(400).json({ error: 'Invalid regime' });
+    }
+    if (req.query.market_quality && !VALID_QUALITIES.includes(req.query.market_quality)) {
+      return res.status(400).json({ error: 'Invalid market_quality' });
+    }
+    if (req.query.confidence && !VALID_CONFIDENCES.includes(req.query.confidence)) {
+      return res.status(400).json({ error: 'Invalid confidence' });
+    }
+    if (req.query.date_from && !isIsoDate(req.query.date_from)) {
+      return res.status(400).json({ error: 'Invalid date_from format (use YYYY-MM-DD)' });
+    }
+    if (req.query.date_to && !isIsoDate(req.query.date_to)) {
+      return res.status(400).json({ error: 'Invalid date_to format (use YYYY-MM-DD)' });
+    }
     const filters = {};
     if (req.query.timeframe) filters.timeframe = req.query.timeframe;
     if (req.query.regime) filters.regime = req.query.regime;
@@ -141,6 +179,9 @@ router.post('/banned', async (req, res) => {
 // POST /best-trades/ban/:asset — ban a single asset
 router.post('/ban/:asset', async (req, res) => {
   try {
+    if (!isAlphanumDash(req.params.asset)) {
+      return res.status(400).json({ error: 'Invalid asset name (alphanumeric only)' });
+    }
     const asset = req.params.asset.toUpperCase().trim();
     const settings = await scanner.getSettings();
     const banned = new Set(settings.bannedAssets || []);
@@ -156,6 +197,9 @@ router.post('/ban/:asset', async (req, res) => {
 // POST /best-trades/unban/:asset — unban a single asset
 router.post('/unban/:asset', async (req, res) => {
   try {
+    if (!isAlphanumDash(req.params.asset)) {
+      return res.status(400).json({ error: 'Invalid asset name (alphanumeric only)' });
+    }
     const asset = req.params.asset.toUpperCase().trim();
     const settings = await scanner.getSettings();
     const banned = new Set(settings.bannedAssets || []);
@@ -244,6 +288,11 @@ router.post('/log', async (req, res) => {
             stop_pct, target_pct, rr_ratio, confidence, market_quality,
             timeframe, regime, leverage, mode, source } = req.body;
     if (!asset || !direction) return res.status(400).json({ error: 'asset and direction required' });
+    if (!isAlphanumDash(asset)) return res.status(400).json({ error: 'Invalid asset name' });
+    if (!['long', 'short'].includes(direction)) return res.status(400).json({ error: 'direction must be "long" or "short"' });
+    if (probability !== undefined && (isNaN(probability) || probability < 0 || probability > 100)) {
+      return res.status(400).json({ error: 'probability must be 0-100' });
+    }
     const result = await pool.query(
       `INSERT INTO best_trades_log
        (asset, direction, probability, entry_price, target_price, stop_price,
@@ -265,6 +314,18 @@ router.post('/log', async (req, res) => {
 // GET /best-trades/history — scan log from DB (with optional filters)
 router.get('/history', async (req, res) => {
   try {
+    if (req.query.limit && !isPositiveInt(req.query.limit)) {
+      return res.status(400).json({ error: 'limit must be a positive integer' });
+    }
+    if (req.query.offset && (isNaN(parseInt(req.query.offset)) || parseInt(req.query.offset) < 0)) {
+      return res.status(400).json({ error: 'offset must be a non-negative integer' });
+    }
+    if (req.query.timeframe && !VALID_TIMEFRAMES.includes(req.query.timeframe)) {
+      return res.status(400).json({ error: 'Invalid timeframe' });
+    }
+    if (req.query.outcome && !VALID_OUTCOMES.includes(req.query.outcome)) {
+      return res.status(400).json({ error: 'Invalid outcome' });
+    }
     const limit = Math.min(parseInt(req.query.limit) || 50, 500);
     const offset = parseInt(req.query.offset) || 0;
     const conditions = [];
@@ -528,6 +589,7 @@ router.get('/export/daterange', async (req, res) => {
   try {
     const { from, to } = req.query;
     if (!from || !to) return res.status(400).json({ error: 'from and to query params required (YYYY-MM-DD)' });
+    if (!isIsoDate(from) || !isIsoDate(to)) return res.status(400).json({ error: 'Invalid date format (use YYYY-MM-DD)' });
     const result = await pool.query(
       `SELECT *,
         CASE WHEN data_source = 'signal_matched' THEN 'REAL+SIGNAL'

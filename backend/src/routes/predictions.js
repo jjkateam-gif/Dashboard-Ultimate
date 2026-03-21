@@ -38,6 +38,19 @@ router.get('/stream', (req, res) => {
 
 // POST /predictions/config
 router.post('/config', asyncHandler((req, res) => {
+  if (!req.body || typeof req.body !== 'object') {
+    return res.status(400).json({ error: 'Config object required' });
+  }
+  // Validate known config fields if present
+  if (req.body.mode && !['paper', 'real'].includes(req.body.mode)) {
+    return res.status(400).json({ error: 'mode must be "paper" or "real"' });
+  }
+  if (req.body.interval !== undefined) {
+    const interval = parseInt(req.body.interval);
+    if (!Number.isFinite(interval) || interval < 1000) {
+      return res.status(400).json({ error: 'interval must be >= 1000ms' });
+    }
+  }
   predictionEngine.setConfig(req.body);
   res.json({ success: true, config: predictionEngine.getConfig() });
 }));
@@ -67,7 +80,15 @@ router.post('/stop', asyncHandler((req, res) => {
 // POST /predictions/price — update price cache
 router.post('/price', asyncHandler((req, res) => {
   const { symbol, price } = req.body;
-  if (symbol && price) predictionEngine.updatePrice(symbol, price);
+  if (!symbol || !price) return res.status(400).json({ error: 'symbol and price required' });
+  if (typeof symbol !== 'string' || !/^[A-Za-z0-9]+$/.test(symbol)) {
+    return res.status(400).json({ error: 'Invalid symbol (alphanumeric only)' });
+  }
+  const priceNum = parseFloat(price);
+  if (!Number.isFinite(priceNum) || priceNum <= 0) {
+    return res.status(400).json({ error: 'price must be a positive number' });
+  }
+  predictionEngine.updatePrice(symbol, priceNum);
   res.json({ success: true });
 }));
 
@@ -92,6 +113,9 @@ router.get('/ai/status', asyncHandler((req, res) => {
 
 // GET /predictions/ai/features/:asset — live features for an asset (btc, eth, sol, xrp)
 router.get('/ai/features/:asset', asyncHandler((req, res) => {
+  if (!/^[A-Za-z0-9]+$/.test(req.params.asset)) {
+    return res.status(400).json({ error: 'Invalid asset name (alphanumeric only)' });
+  }
   res.json(predictionEngine.getAIFeatures(req.params.asset));
 }));
 

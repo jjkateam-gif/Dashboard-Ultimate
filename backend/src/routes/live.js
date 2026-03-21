@@ -10,6 +10,19 @@ const crypto = require('crypto');
 const router = express.Router();
 router.use(authenticate);
 
+// ── Input Validation Helpers ──
+function isPositiveInt(val) {
+  const n = parseInt(val);
+  return Number.isFinite(n) && n > 0;
+}
+function isPositiveNum(val) {
+  const n = parseFloat(val);
+  return Number.isFinite(n) && n > 0;
+}
+function isInstId(val) {
+  return typeof val === 'string' && /^[A-Za-z0-9]+-[A-Za-z0-9]+$/.test(val);
+}
+
 /* ======================================================
    BLOFIN CREDENTIALS CRUD
    ====================================================== */
@@ -267,6 +280,8 @@ router.get('/positions', async (req, res) => {
 // GET /live/history - Trade history
 router.get('/history', async (req, res) => {
   try {
+    if (req.query.limit && !isPositiveInt(req.query.limit)) return res.status(400).json({ error: 'limit must be a positive integer' });
+    if (req.query.offset && (isNaN(parseInt(req.query.offset)) || parseInt(req.query.offset) < 0)) return res.status(400).json({ error: 'offset must be a non-negative integer' });
     let limit = parseInt(req.query.limit) || 50;
     if (limit > 500) limit = 500;
     const offset = parseInt(req.query.offset) || 0;
@@ -306,6 +321,13 @@ router.post('/order', async (req, res) => {
     const demo = liveEngine.isDemo(req.user.id);
     const { instId, side, orderType, size, sizeUsd: sizeUsdParam, price, leverage, tpPrice, slPrice, marginMode } = req.body;
     if (!instId || !side) return res.status(400).json({ error: 'instId and side required' });
+    if (!isInstId(instId)) return res.status(400).json({ error: 'Invalid instId format (e.g. BTC-USDT)' });
+    if (!['buy', 'sell'].includes(side)) return res.status(400).json({ error: 'side must be "buy" or "sell"' });
+    if (orderType && !['market', 'limit', 'post_only'].includes(orderType)) return res.status(400).json({ error: 'Invalid orderType' });
+    if (leverage && (!isPositiveInt(leverage) || parseInt(leverage) > 125)) return res.status(400).json({ error: 'leverage must be 1-125' });
+    if (size && !isPositiveNum(size)) return res.status(400).json({ error: 'size must be a positive number' });
+    if (sizeUsdParam && !isPositiveNum(sizeUsdParam)) return res.status(400).json({ error: 'sizeUsd must be a positive number' });
+    if (marginMode && !['cross', 'isolated'].includes(marginMode)) return res.status(400).json({ error: 'marginMode must be "cross" or "isolated"' });
 
     const direction = side === 'buy' ? 'long' : 'short';
     const lev = leverage || 1;
@@ -408,6 +430,8 @@ router.post('/close', async (req, res) => {
     const demo = liveEngine.isDemo(req.user.id);
     const { instId, direction } = req.body;
     if (!instId || !direction) return res.status(400).json({ error: 'instId and direction required' });
+    if (!isInstId(instId)) return res.status(400).json({ error: 'Invalid instId format' });
+    if (!['long', 'short'].includes(direction)) return res.status(400).json({ error: 'direction must be "long" or "short"' });
 
     const result = await blofinClient.closePosition({ creds, instId, direction, demo });
     res.json({ success: true, orderId: result.orderId });
@@ -422,6 +446,7 @@ router.get('/ticker', async (req, res) => {
   try {
     const { instId } = req.query;
     if (!instId) return res.status(400).json({ error: 'instId required' });
+    if (!isInstId(instId)) return res.status(400).json({ error: 'Invalid instId format' });
     const demo = liveEngine.isDemo(req.user.id);
     const ticker = await blofinClient.getTicker(instId, demo);
     res.json({ ticker });
@@ -435,6 +460,9 @@ router.get('/candles', async (req, res) => {
   try {
     const { instId, bar, limit } = req.query;
     if (!instId || !bar) return res.status(400).json({ error: 'instId and bar required' });
+    if (!isInstId(instId)) return res.status(400).json({ error: 'Invalid instId format' });
+    if (!/^[0-9]+[mhdwMHDW]$/.test(bar)) return res.status(400).json({ error: 'Invalid bar/timeframe format' });
+    if (limit && (!isPositiveInt(limit) || parseInt(limit) > 1000)) return res.status(400).json({ error: 'limit must be 1-1000' });
     const raw = await blofinClient.getCandles(instId, bar, limit || '300', false);
     if (!raw || !Array.isArray(raw)) return res.json({ candles: [] });
     // Convert BloFin format [ts, o, h, l, c, vol, volCurrency] to standard
@@ -516,6 +544,10 @@ router.get('/safety', async (req, res) => {
 router.put('/safety', async (req, res) => {
   try {
     const { maxPositionUsd, maxLeverage, dailyLossLimitUsd, autoCloseLiqPct } = req.body;
+    if (maxPositionUsd !== undefined && !isPositiveNum(maxPositionUsd)) return res.status(400).json({ error: 'maxPositionUsd must be a positive number' });
+    if (maxLeverage !== undefined && (!isPositiveInt(maxLeverage) || parseInt(maxLeverage) > 125)) return res.status(400).json({ error: 'maxLeverage must be 1-125' });
+    if (dailyLossLimitUsd !== undefined && !isPositiveNum(dailyLossLimitUsd)) return res.status(400).json({ error: 'dailyLossLimitUsd must be a positive number' });
+    if (autoCloseLiqPct !== undefined && (!isPositiveNum(autoCloseLiqPct) || parseFloat(autoCloseLiqPct) > 100)) return res.status(400).json({ error: 'autoCloseLiqPct must be 0-100' });
     const config = await safetyGuard.updateConfig(req.user.id, {
       max_position_usd: maxPositionUsd,
       max_leverage: maxLeverage,

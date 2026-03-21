@@ -24,6 +24,18 @@ router.post('/', async (req, res) => {
   try {
     const { publicKey, encryptedData, backedUp } = req.body;
     if (!encryptedData) return res.status(400).json({ error: 'Encrypted data required' });
+    if (typeof encryptedData !== 'string' && typeof encryptedData !== 'object') {
+      return res.status(400).json({ error: 'encryptedData must be a string or object' });
+    }
+    if (publicKey && typeof publicKey !== 'string') {
+      return res.status(400).json({ error: 'publicKey must be a string' });
+    }
+    if (publicKey && publicKey.length > 256) {
+      return res.status(400).json({ error: 'publicKey too long (max 256 chars)' });
+    }
+    if (backedUp !== undefined && typeof backedUp !== 'boolean') {
+      return res.status(400).json({ error: 'backedUp must be a boolean' });
+    }
     // Upsert: single atomic operation to avoid DELETE+INSERT race condition
     await pool.query(
       `INSERT INTO wallets (user_id, public_key, encrypted_data, backed_up) VALUES ($1, $2, $3, $4)
