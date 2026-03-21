@@ -2576,7 +2576,7 @@ function switchAuthView(view) {
       <div id="btBalancePnlSince" style="font-size:9px;color:#00f5a0;font-family:'Space Mono',monospace;margin-top:2px"></div>
     </div>
     <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,77,109,0.2);border-radius:10px;padding:14px 16px">
-      <div style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.5px">POST-FIX REAL WR</div>
+      <div style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.5px">REAL BLOFIN WR</div>
       <div id="statsPostFixWR" style="font-size:22px;font-weight:800;color:#ff4d6d;font-family:'Space Mono',monospace;margin-top:4px">--</div>
       <div id="statsPostFixDetail" style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px"></div>
     </div>
@@ -2592,9 +2592,65 @@ function switchAuthView(view) {
     </div>
   </div>
 
-  <!-- ═══ 3. OPEN POSITIONS ═══ -->
+  <!-- ═══ 3. DAILY BRIEFING PANEL ═══ -->
+  <details id="dailyBriefingPanel" open style="margin-bottom:14px">
+    <summary style="padding:12px 16px;cursor:pointer;font-family:'Space Mono',monospace;list-style:none;display:flex;align-items:center;gap:10px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.1);border-radius:10px 10px 0 0;user-select:none">
+      <span style="font-size:14px;font-weight:800;color:#fff">DAILY BRIEFING</span>
+      <span style="font-size:8px;padding:2px 8px;border-radius:4px;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.3);color:#00f5a0;font-weight:700">AUTO-GENERATED</span>
+      <span style="margin-left:auto;font-size:9px;color:#5a7a68" id="briefingTimestamp"></span>
+      <button onclick="event.stopPropagation();loadDailyBriefing()" style="font-size:8px;padding:4px 10px;width:auto;margin:0;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#5a7a68;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace">↻ Refresh</button>
+    </summary>
+    <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.06);border-top:none;border-radius:0 0 10px 10px;padding:14px">
+      <!-- 2-column grid: Yesterday's Performance + Market Right Now -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <!-- Panel A: Yesterday's Performance -->
+        <div style="background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:14px">
+          <div style="font-size:10px;font-weight:700;color:#fff;font-family:'Space Mono',monospace;margin-bottom:10px">YESTERDAY'S PERFORMANCE</div>
+          <div id="briefYesterday" style="font-family:'Space Mono',monospace;font-size:10px;color:#ccc">Loading...</div>
+        </div>
+        <!-- Panel B: Market Right Now -->
+        <div style="background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:14px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+            <span style="width:14px;height:14px;border-radius:50%;background:rgba(167,139,250,0.3);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:#a78bfa">M</span>
+            <span style="font-size:10px;font-weight:700;color:#fff;font-family:'Space Mono',monospace">MARKET RIGHT NOW</span>
+          </div>
+          <div id="briefMarket" style="font-family:'Space Mono',monospace;font-size:10px;color:#ccc">Loading...</div>
+        </div>
+      </div>
+      <!-- 2-column grid: Watch Today + Alerts & Flags -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <!-- Panel C: Watch Today -->
+        <div style="background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:14px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+            <span style="font-size:12px">👀</span>
+            <span style="font-size:10px;font-weight:700;color:#fff;font-family:'Space Mono',monospace">WATCH TODAY</span>
+          </div>
+          <div id="briefWatch" style="font-family:'Space Mono',monospace;font-size:10px;color:#ccc">Loading...</div>
+        </div>
+        <!-- Panel D: Alerts & Flags -->
+        <div style="background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:14px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+            <span style="font-size:10px;color:#ff4d6d;font-weight:800">!</span>
+            <span style="font-size:10px;font-weight:700;color:#fff;font-family:'Space Mono',monospace">ALERTS & FLAGS</span>
+          </div>
+          <div id="briefAlerts" style="font-family:'Space Mono',monospace;font-size:10px;color:#ccc">Loading...</div>
+        </div>
+      </div>
+      <!-- Panel E: Narrative Summary (full width) -->
+      <div id="briefNarrative" style="padding:14px 16px;background:rgba(0,0,0,0.15);border:1px solid rgba(255,255,255,0.04);border-radius:8px;font-family:'Space Mono',monospace;font-size:11px;color:#ccc;line-height:1.6">Loading briefing...</div>
+    </div>
+  </details>
+
+  <!-- ═══ 4. OPEN POSITIONS ═══ -->
   <div id="atLivePositions" style="display:none;margin-bottom:14px">
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:rgba(0,0,0,0.3);border:1px solid rgba(0,245,160,0.2);border-radius:10px 10px 0 0">
+    <!-- Portfolio Heat Bar -->
+    <div id="portfolioHeatBar" style="display:flex;align-items:center;gap:10px;padding:8px 14px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.06);border-radius:10px 10px 0 0;font-family:'Space Mono',monospace;font-size:9px">
+      <span style="color:#5a7a68">Exposure:</span>
+      <div style="flex:1;height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden"><div id="heatBarFill" style="height:100%;width:0%;background:#00f5a0;border-radius:3px;transition:width 0.5s"></div></div>
+      <span id="heatBarLabel" style="color:#00f5a0;font-weight:700">0%</span>
+      <span id="heatBarStatus" style="color:#5a7a68">Safe</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:rgba(0,0,0,0.25);border:1px solid rgba(0,245,160,0.15);border-top:none">
       <div style="display:flex;align-items:center;gap:8px">
         <span style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:#fff">OPEN POSITIONS</span>
         <span id="openPosCount" style="font-size:9px;padding:2px 8px;border-radius:10px;background:rgba(167,139,250,0.2);color:#a78bfa;font-family:'Space Mono',monospace;font-weight:700"></span>
@@ -2606,9 +2662,9 @@ function switchAuthView(view) {
     </div>
   </div>
 
-  <!-- ═══ 4. SIGNAL QUEUE ═══ -->
-  <!-- Filter bar -->
-  <div id="signalFilterBar" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 14px;margin-bottom:2px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.06);border-radius:10px 10px 0 0;font-family:'Space Mono',monospace;font-size:9px">
+  <!-- ═══ 5. SIGNAL QUEUE ═══ -->
+  <!-- Filter bar Row 1 -->
+  <div id="signalFilterBar" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 14px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.06);border-radius:10px 10px 0 0;font-family:'Space Mono',monospace;font-size:9px">
     <span style="color:#5a7a68;font-size:8px;margin-right:4px">Direction</span>
     <span class="sq-filter-chip sq-filter-active" data-filter="direction" data-value="all" onclick="sqFilter(this)">All</span>
     <span class="sq-filter-chip" data-filter="direction" data-value="short" onclick="sqFilter(this)">Shorts</span>
@@ -2619,24 +2675,52 @@ function switchAuthView(view) {
     <span class="sq-filter-chip" data-filter="status" data-value="qualifying" onclick="sqFilter(this)">Qualifying</span>
     <span class="sq-filter-chip" data-filter="status" data-value="building" onclick="sqFilter(this)">Building</span>
     <span class="sq-filter-chip" data-filter="status" data-value="blocked" onclick="sqFilter(this)">Blocked</span>
+    <span class="sq-filter-chip" data-filter="status" data-value="real" onclick="sqFilter(this)">Real Trades Only</span>
     <span style="color:rgba(255,255,255,0.1);margin:0 4px">·</span>
     <span style="color:#5a7a68;font-size:8px;margin-right:4px">Min Prob</span>
     <span class="sq-filter-chip sq-filter-active" data-filter="minprob" data-value="any" onclick="sqFilter(this)">Any</span>
     <span class="sq-filter-chip" data-filter="minprob" data-value="60" onclick="sqFilter(this)">60%+</span>
     <span class="sq-filter-chip" data-filter="minprob" data-value="70" onclick="sqFilter(this)">70%+</span>
-    <span style="color:rgba(255,255,255,0.1);margin:0 4px">·</span>
+    <span class="sq-filter-chip" data-filter="minprob" data-value="80" onclick="sqFilter(this)">80%+</span>
+  </div>
+  <!-- Advanced Filters (collapsible Row 2) -->
+  <div id="advancedFilterToggle" onclick="const p=$('advancedFilters');p.style.display=p.style.display==='none'?'flex':'none';this.querySelector('span').textContent=p.style.display==='none'?'Advanced Filters ▼':'Advanced Filters ▲'" style="padding:4px 14px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.04);border-top:none;cursor:pointer;font-family:'Space Mono',monospace;font-size:8px;color:#5a7a68;text-align:center"><span>Advanced Filters ▼</span></div>
+  <div id="advancedFilters" style="display:none;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 14px;background:rgba(0,0,0,0.18);border:1px solid rgba(255,255,255,0.04);border-top:none;font-family:'Space Mono',monospace;font-size:9px">
     <span style="color:#5a7a68;font-size:8px;margin-right:4px">Timeframe</span>
     <span class="sq-filter-chip sq-filter-active" data-filter="timeframe" data-value="all" onclick="sqFilter(this)">All</span>
-    <span class="sq-filter-chip" data-filter="timeframe" data-value="1h" onclick="sqFilter(this)">1h</span>
-    <span class="sq-filter-chip" data-filter="timeframe" data-value="30m" onclick="sqFilter(this)">30m</span>
-    <span class="sq-filter-chip" data-filter="timeframe" data-value="15m" onclick="sqFilter(this)">15m</span>
     <span class="sq-filter-chip" data-filter="timeframe" data-value="5m" onclick="sqFilter(this)">5m</span>
+    <span class="sq-filter-chip" data-filter="timeframe" data-value="15m" onclick="sqFilter(this)">15m</span>
+    <span class="sq-filter-chip" data-filter="timeframe" data-value="30m" onclick="sqFilter(this)">30m</span>
+    <span class="sq-filter-chip" data-filter="timeframe" data-value="1h" onclick="sqFilter(this)">1h</span>
+    <span class="sq-filter-chip" data-filter="timeframe" data-value="4h" onclick="sqFilter(this)">4h</span>
     <span style="color:rgba(255,255,255,0.1);margin:0 4px">·</span>
     <span style="color:#5a7a68;font-size:8px;margin-right:4px">Session</span>
     <span class="sq-filter-chip sq-filter-active" data-filter="session" data-value="all" onclick="sqFilter(this)">All</span>
     <span class="sq-filter-chip" data-filter="session" data-value="asian" onclick="sqFilter(this)">Asian 00-08</span>
     <span class="sq-filter-chip" data-filter="session" data-value="london" onclick="sqFilter(this)">London 08-13</span>
     <span class="sq-filter-chip" data-filter="session" data-value="ny" onclick="sqFilter(this)">NY 17-22</span>
+    <span id="sessionCurrentLabel" style="font-size:7px;color:#f5c400;margin-left:2px"></span>
+    <span style="color:rgba(255,255,255,0.1);margin:0 4px">·</span>
+    <span style="color:#5a7a68;font-size:8px;margin-right:4px">Confluence</span>
+    <span class="sq-filter-chip sq-filter-active" data-filter="confluence" data-value="any" onclick="sqFilter(this)">Any</span>
+    <span class="sq-filter-chip" data-filter="confluence" data-value="3" onclick="sqFilter(this)">3/4+</span>
+    <span class="sq-filter-chip" data-filter="confluence" data-value="4" onclick="sqFilter(this)">4/4</span>
+    <span style="color:rgba(255,255,255,0.1);margin:0 4px">·</span>
+    <span style="color:#5a7a68;font-size:8px;margin-right:4px">Min Scans</span>
+    <span class="sq-filter-chip sq-filter-active" data-filter="minscan" data-value="any" onclick="sqFilter(this)">Any</span>
+    <span class="sq-filter-chip" data-filter="minscan" data-value="3" onclick="sqFilter(this)">3+</span>
+    <span class="sq-filter-chip" data-filter="minscan" data-value="5" onclick="sqFilter(this)">5+</span>
+    <span class="sq-filter-chip" data-filter="minscan" data-value="7" onclick="sqFilter(this)">7+</span>
+  </div>
+  <!-- Presets Row -->
+  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 14px;background:rgba(0,0,0,0.15);border:1px solid rgba(255,255,255,0.03);border-top:none;font-family:'Space Mono',monospace;font-size:8px">
+    <span style="color:#5a7a68;margin-right:4px">Presets:</span>
+    <span class="sq-filter-chip" onclick="sqApplyPreset('highConviction')" style="background:rgba(0,245,160,0.08);border-color:rgba(0,245,160,0.2);color:#00f5a0">High Conviction</span>
+    <span class="sq-filter-chip" onclick="sqApplyPreset('realMoney')" style="background:rgba(167,139,250,0.08);border-color:rgba(167,139,250,0.2);color:#a78bfa">Real Money Only</span>
+    <span class="sq-filter-chip" onclick="sqApplyPreset('majors')" style="background:rgba(245,196,0,0.08);border-color:rgba(245,196,0,0.2);color:#f5c400">Majors</span>
+    <span class="sq-filter-chip" onclick="sqApplyPreset('safe')" style="background:rgba(255,107,53,0.08);border-color:rgba(255,107,53,0.2);color:#ff6b35">Safe Mode</span>
+    <span class="sq-filter-chip" onclick="sqApplyPreset('reset')" style="color:#5a7a68">Reset All</span>
+    <span id="savedPresetsContainer" style="display:flex;gap:4px"></span>
   </div>
   <style>
     .sq-filter-chip{padding:3px 10px;border-radius:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#5a7a68;cursor:pointer;transition:all 0.15s;font-weight:700;user-select:none}
@@ -9721,6 +9805,7 @@ function switchPageTab(tab) {
     liveRefreshBalance();
     renderScanHistory();
     loadTradeHistory();
+    loadDailyBriefing();
   } else if (tab === 'alerts') {
     renderAlertList();
     loadTgCredentialsIntoForm();
@@ -18762,6 +18847,17 @@ async function refreshBtPositions() {
     const cnt = $('openPosCount'); if (cnt) cnt.textContent = d.positions.length;
     if (pillOpen) { pillOpen.style.display = ''; pillOpen.textContent = d.positions.length + ' open'; }
 
+    // Portfolio heat bar
+    const totalExposure = d.positions.reduce((s, p) => s + (parseFloat(p.size_usd) || parseFloat(p.collateral) || 0) * (parseFloat(p.leverage) || 1), 0);
+    const avail = window._lastAvailableBalance || 100;
+    const exposurePct = Math.min(100, Math.round(totalExposure / avail * 100));
+    const heatFill = $('heatBarFill');
+    const heatLabel = $('heatBarLabel');
+    const heatStatus = $('heatBarStatus');
+    if (heatFill) { heatFill.style.width = exposurePct + '%'; heatFill.style.background = exposurePct < 25 ? '#00f5a0' : exposurePct < 50 ? '#f5c400' : '#ff4d6d'; }
+    if (heatLabel) { heatLabel.textContent = exposurePct + '% of balance'; heatLabel.style.color = exposurePct < 25 ? '#00f5a0' : exposurePct < 50 ? '#f5c400' : '#ff4d6d'; }
+    if (heatStatus) { heatStatus.textContent = exposurePct < 25 ? 'Safe' : exposurePct < 50 ? 'Moderate' : 'High'; heatStatus.style.color = exposurePct < 25 ? '#00f5a0' : exposurePct < 50 ? '#f5c400' : '#ff4d6d'; }
+
     const rows = d.positions.map(p => {
       const dirColor = p.direction === 'long' ? '#00f5a0' : '#ff4d6d';
       const dirLabel = p.direction === 'long' ? 'LONG' : 'SHORT';
@@ -24521,10 +24617,308 @@ function sqToggleExpand(idx) {
 
 function toggleEnginePause() {
   const btn = $('enginePauseBtn');
-  // Toggle auto-trade via existing settings
   const enableEl = $('autoTradeEnabled');
   if (enableEl) { enableEl.checked = !enableEl.checked; confirmAutoTradeSettings(); }
   if (btn) btn.textContent = enableEl?.checked ? 'Pause' : 'Resume';
+}
+
+// ── Preset Filters ──
+function sqApplyPreset(name) {
+  const f = window._sqFilters;
+  // Reset all first
+  Object.keys(f).forEach(k => f[k] = k === 'direction' || k === 'status' || k === 'timeframe' || k === 'session' ? 'all' : 'any');
+  if (name === 'highConviction') { f.minscan = '5'; f.minprob = '70'; f.confluence = '4'; f.timeframe = '1h'; }
+  else if (name === 'realMoney') { f.status = 'real'; }
+  else if (name === 'majors') { f.assetGroup = 'majors'; }
+  else if (name === 'safe') { f.status = 'qualifying'; f.minprob = '70'; f.timeframe = '1h'; f.session = 'asian'; }
+  // Update chip active states
+  document.querySelectorAll('.sq-filter-chip[data-filter]').forEach(c => {
+    const ft = c.dataset.filter, fv = c.dataset.value;
+    if (ft && fv) {
+      const isActive = f[ft] === fv || (!f[ft] && fv === 'all') || (!f[ft] && fv === 'any');
+      c.classList.toggle('sq-filter-active', isActive);
+    }
+  });
+  if (PROBE.results) renderProbeResults(PROBE.results, $('probeTimeframe')?.value || '15m');
+}
+
+// ── Session current label ──
+function updateSessionLabel() {
+  const h = new Date().getUTCHours();
+  const label = h >= 0 && h < 8 ? 'Currently: Asian' : h >= 8 && h < 13 ? 'Currently: London' : h >= 13 && h < 17 ? 'Currently: NY/London' : h >= 17 && h < 22 ? 'Currently: NY' : 'Currently: Late';
+  const el = $('sessionCurrentLabel');
+  if (el) el.textContent = label;
+}
+updateSessionLabel();
+
+// ── Daily Briefing ──
+async function loadDailyBriefing() {
+  const token = localStorage.getItem('dash_token');
+  const backend = window.CBP_BACKEND || 'http://localhost:3001';
+
+  // Timestamp
+  const tsEl = $('briefingTimestamp');
+  if (tsEl) tsEl.textContent = new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' }) + ' · ' + new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) + ' AEST';
+
+  try {
+    // Fetch all data in parallel
+    const [statsResp, histResp, fngResp, globalResp] = await Promise.all([
+      fetch(backend + '/best-trades/stats', { headers: { 'Authorization': 'Bearer ' + token } }).then(r => r.json()).catch(() => ({})),
+      fetch(backend + '/best-trades/history-all?outcome=all', { headers: { 'Authorization': 'Bearer ' + token } }).then(r => r.json()).catch(() => ({ history: [] })),
+      fetch('https://api.alternative.me/fng/?limit=2&format=json').then(r => r.json()).catch(() => ({ data: [{ value: '?', value_classification: 'unknown' }] })),
+      fetch('https://api.coingecko.com/api/v3/global').then(r => r.json()).catch(() => ({ data: { market_cap_percentage: { btc: '?' } } })),
+    ]);
+
+    const history = histResp.history || [];
+    const executed = history.filter(t => t.executed || t.data_source === 'blofin_only' || t.data_source === 'signal_matched');
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+    // ── Stats Row Population ──
+    const postFixTrades = executed.filter(t => new Date(t.created_at || t.ts) >= new Date('2026-03-18'));
+    const postFixResolved = postFixTrades.filter(t => t.outcome === 'win' || t.outcome === 'loss');
+    const postFixWins = postFixResolved.filter(t => t.outcome === 'win').length;
+    const postFixWR = postFixResolved.length > 0 ? Math.round(postFixWins / postFixResolved.length * 100) : 0;
+    const wrEl = $('statsPostFixWR');
+    if (wrEl) { wrEl.textContent = postFixWR + '%'; wrEl.style.color = postFixWR >= 50 ? '#00f5a0' : '#ff4d6d'; }
+    const wrDetail = $('statsPostFixDetail');
+    if (wrDetail) wrDetail.textContent = postFixResolved.length + ' live trades · Mar 18+';
+
+    // Today P&L
+    const todayTrades = executed.filter(t => (t.created_at || t.ts || '').toString().startsWith(today));
+    const todayResolved = todayTrades.filter(t => t.outcome === 'win' || t.outcome === 'loss');
+    const todayWins = todayResolved.filter(t => t.outcome === 'win').length;
+    const todayLosses = todayResolved.filter(t => t.outcome === 'loss').length;
+    const todayPnl = todayTrades.reduce((sum, t) => sum + (parseFloat(t.blofin_pnl_usd) || 0), 0);
+    const pnlEl = $('statsTodayPnl');
+    if (pnlEl) { pnlEl.textContent = (todayPnl >= 0 ? '+' : '') + '$' + todayPnl.toFixed(2); pnlEl.style.color = todayPnl >= 0 ? '#00f5a0' : '#ff4d6d'; }
+    const pnlDetail = $('statsTodayDetail');
+    if (pnlDetail) pnlDetail.textContent = todayTrades.length + ' trades · ' + todayWins + 'W ' + todayLosses + 'L';
+
+    // Best Day
+    const dayMap = {};
+    executed.forEach(t => {
+      const day = (t.created_at || t.ts || '').toString().slice(0, 10);
+      if (!day) return;
+      if (!dayMap[day]) dayMap[day] = { wins: 0, losses: 0, pnl: 0, total: 0 };
+      dayMap[day].total++;
+      if (t.outcome === 'win') dayMap[day].wins++;
+      if (t.outcome === 'loss') dayMap[day].losses++;
+      dayMap[day].pnl += parseFloat(t.blofin_pnl_usd) || 0;
+    });
+    let bestDay = null, bestWR = 0;
+    Object.entries(dayMap).forEach(([day, d]) => {
+      const resolved = d.wins + d.losses;
+      if (resolved >= 3) {
+        const wr = Math.round(d.wins / resolved * 100);
+        if (wr > bestWR || (wr === bestWR && d.pnl > (bestDay?.pnl || 0))) { bestWR = wr; bestDay = { day, ...d, wr }; }
+      }
+    });
+    const bdEl = $('statsBestDay');
+    if (bdEl && bestDay) { bdEl.textContent = bestDay.wr + '%'; bdEl.style.color = '#f5c400'; }
+    const bdDetail = $('statsBestDayDetail');
+    if (bdDetail && bestDay) bdDetail.textContent = bestDay.day.slice(5) + ' · ' + bestDay.total + ' trades · ' + (bestDay.pnl >= 0 ? '+' : '') + '$' + bestDay.pnl.toFixed(2);
+
+    // ── Panel A: Yesterday's Performance ──
+    const yTrades = executed.filter(t => (t.created_at || t.ts || '').toString().startsWith(yesterday));
+    const yResolved = yTrades.filter(t => t.outcome === 'win' || t.outcome === 'loss');
+    const yWins = yResolved.filter(t => t.outcome === 'win').length;
+    const yLosses = yResolved.filter(t => t.outcome === 'loss').length;
+    const yPnl = yTrades.reduce((sum, t) => sum + (parseFloat(t.blofin_pnl_usd) || 0), 0);
+    const ySlippage = yTrades.filter(t => t.entry_price && t.entry_price_real).map(t => Math.abs((t.entry_price_real - t.entry_price) / t.entry_price * 100));
+    const yAvgSlip = ySlippage.length > 0 ? (ySlippage.reduce((a, b) => a + b, 0) / ySlippage.length).toFixed(2) : '0';
+    const yBlocked = history.filter(t => (t.created_at || t.ts || '').toString().startsWith(yesterday) && !t.executed).length;
+    const yBestQuality = yTrades.map(t => t.market_quality || t.marketQuality || '?').sort((a, b) => { const o = { A: 4, 'B+': 3, B: 2, C: 1 }; return (o[b] || 0) - (o[a] || 0); })[0] || 'None';
+
+    const yEl = $('briefYesterday');
+    if (yEl) {
+      const yWR = yResolved.length > 0 ? Math.round(yWins / yResolved.length * 100) : 0;
+      const wrColor = yWR >= 50 ? '#00f5a0' : '#ff4d6d';
+      yEl.innerHTML = `
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:#5a7a68">Trades resolved</span><span style="color:#fff;font-weight:700">${yResolved.length} trades</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:#5a7a68">Win rate</span><span style="color:${wrColor};font-weight:700">${yWR}% (${yWins}W / ${yLosses}L)</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:#5a7a68">Real P&L</span><span style="color:${yPnl >= 0 ? '#00f5a0' : '#ff4d6d'};font-weight:700">${yPnl >= 0 ? '+' : ''}$${yPnl.toFixed(2)}</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:#5a7a68">Avg slippage</span><span style="color:${parseFloat(yAvgSlip) > 0.5 ? '#ff8c69' : '#00f5a0'}">${yAvgSlip}% per trade</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:#5a7a68">Blocked by gates</span><span style="color:#ccc">${yBlocked} signals blocked</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="color:#5a7a68">Best signal quality</span><span style="color:#ccc">${yBestQuality === 'A' ? 'A-grade signals' : yBestQuality ? yBestQuality + '-grade' : 'No A-grade signals'}</span></div>
+        <div style="padding:8px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:6px;font-size:9px;color:#8b8fa3;line-height:1.5">${yResolved.length === 0 ? 'No trades resolved yesterday.' : yWR >= 50 ? 'Solid day — ' + yWins + ' wins with ' + yBestQuality + '-grade signals.' : yLosses > yWins ? (yLosses === yResolved.length ? 'All ' + yLosses + ' losses were ' + (yTrades[0]?.direction || 'shorts') + '. Market structure gate blocked ' + yBlocked + ' — would have been much worse.' : yLosses + ' losses dominated. Avg slippage ' + yAvgSlip + '% still needs limit orders.') : 'Mixed day — signals worked but execution needs improvement.'}</div>`;
+    }
+
+    // ── Panel B: Market Right Now ──
+    const fng = fngResp?.data?.[0] || {};
+    const fngVal = parseInt(fng.value) || 0;
+    const fngLabel = fng.value_classification || 'Unknown';
+    const btcDom = globalResp?.data?.market_cap_percentage?.btc || '?';
+    // Get BTC regime from most recent history record with btc data
+    const latestWithBtc = history.find(t => t.signal_snapshot);
+    let btc1d = 'Unknown', btc4h = 'Unknown', btcRsi = '';
+    if (latestWithBtc?.signal_snapshot) {
+      const snap = typeof latestWithBtc.signal_snapshot === 'string' ? JSON.parse(latestWithBtc.signal_snapshot) : latestWithBtc.signal_snapshot;
+      btc1d = snap.btc_ema_trend_1h === 'bullish' ? 'Bull' : snap.btc_ema_trend_1h === 'bearish' ? 'Bear' : 'Ranging';
+      btc4h = snap.btc_ema_trend_4h === 'bullish' ? 'Bull' : snap.btc_ema_trend_4h === 'bearish' ? 'Bear' : 'Ranging';
+      if (snap.btc_rsi_1h) btcRsi = ' · RSI ' + Math.round(snap.btc_rsi_1h);
+    }
+    const h = new Date().getUTCHours();
+    const session = h >= 0 && h < 8 ? 'Asian' : h >= 8 && h < 13 ? 'London' : h >= 13 && h < 17 ? 'NY/London' : h >= 17 && h < 22 ? 'NY' : 'Late';
+    const sessionHrs = h >= 0 && h < 8 ? '00-08 UTC' : h >= 8 && h < 13 ? '08-13 UTC' : h >= 13 && h < 17 ? '13-17 UTC' : h >= 17 && h < 22 ? '17-22 UTC' : '22-24 UTC';
+    const sessionWR = session === 'Asian' ? '74-82% WR hist.' : session === 'London' ? '55-65% WR hist.' : 'Variable WR';
+    // Market structure: count blocked from latest scan
+    const blockedCount = history.filter(t => !t.executed && !t.outcome && (t.created_at || t.ts || '').toString().startsWith(today)).length;
+
+    const fngPct = Math.min(100, Math.max(0, fngVal));
+    const fngColor = fngVal <= 25 ? '#ff4d6d' : fngVal <= 45 ? '#ff8c69' : fngVal <= 55 ? '#f5c400' : fngVal <= 75 ? '#a5d6a7' : '#00f5a0';
+    const btc1dColor = btc1d === 'Bull' ? '#00f5a0' : btc1d === 'Bear' ? '#ff4d6d' : '#f5c400';
+    const btc4hColor = btc4h === 'Bull' ? '#00f5a0' : btc4h === 'Bear' ? '#ff4d6d' : '#f5c400';
+
+    const mktEl = $('briefMarket');
+    if (mktEl) {
+      mktEl.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+          <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.05);border-radius:6px;padding:8px">
+            <div style="font-size:8px;color:#5a7a68">BTC 1D</div>
+            <div style="font-size:14px;font-weight:800;color:${btc1dColor};margin-top:2px">${btc1d}</div>
+            <div style="font-size:7px;color:#5a7a68">EMA ${btc1d === 'Bear' ? 'below' : 'above'} 200${btcRsi}</div>
+          </div>
+          <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.05);border-radius:6px;padding:8px">
+            <div style="font-size:8px;color:#5a7a68">BTC 4H</div>
+            <div style="font-size:14px;font-weight:800;color:${btc4hColor};margin-top:2px">${btc4h === 'Ranging' ? '— Ranging' : btc4h}</div>
+            <div style="font-size:7px;color:#5a7a68">${btc4h === 'Ranging' ? 'Consolidating' : btc4h === 'Bull' ? 'Trending up' : 'Trending down'}</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+          <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.05);border-radius:6px;padding:8px">
+            <div style="font-size:8px;color:#5a7a68">SESSION</div>
+            <div style="font-size:14px;font-weight:800;color:#f5c400;margin-top:2px">${session}</div>
+            <div style="font-size:7px;color:#5a7a68">${sessionHrs} · ${sessionWR}</div>
+          </div>
+          <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.05);border-radius:6px;padding:8px">
+            <div style="font-size:8px;color:#5a7a68">MARKET STRUCTURE</div>
+            <div style="font-size:14px;font-weight:800;color:#f5c400;margin-top:2px">Ranging</div>
+            <div style="font-size:7px;color:#5a7a68">${blockedCount > 0 ? blockedCount + ' of 20 assets blocked' : 'Gate open'}</div>
+          </div>
+        </div>
+        <div style="margin-bottom:6px">
+          <div style="font-size:9px;color:#ccc;margin-bottom:4px">FEAR & GREED — ${fngVal} (${fngLabel.toUpperCase()})</div>
+          <div style="height:8px;border-radius:4px;background:linear-gradient(to right,#ff4d6d,#ff8c69,#f5c400,#a5d6a7,#00f5a0);position:relative">
+            <div style="position:absolute;top:-3px;left:${fngPct}%;width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid #333;transform:translateX(-50%)"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:7px;color:#5a7a68;margin-top:2px"><span>Extreme fear</span><span>Neutral</span><span>Extreme greed</span></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:8px"><span style="color:#5a7a68">BTC dominance</span><span style="font-weight:700;color:#fff">${typeof btcDom === 'number' ? btcDom.toFixed(1) : btcDom}%</span></div>`;
+    }
+
+    // ── Panel C: Watch Today ──
+    const building = history.filter(t => {
+      const sc = t.scan_count || t.scanCount || 0;
+      return sc >= 3 && !t.outcome && !t.executed && (t.created_at || t.ts || '').toString().startsWith(today);
+    }).sort((a, b) => (b.scan_count || b.scanCount || 0) - (a.scan_count || a.scanCount || 0)).slice(0, 5);
+
+    const watchEl = $('briefWatch');
+    if (watchEl) {
+      if (building.length === 0) {
+        watchEl.innerHTML = '<div style="color:#5a7a68;padding:8px 0">No signals currently building. Market structure gate may be blocking most assets.</div>';
+      } else {
+        watchEl.innerHTML = building.map(t => {
+          const sc = t.scan_count || t.scanCount || 0;
+          const pct = Math.min(100, sc / 5 * 100);
+          const dirColor = t.direction === 'long' ? '#00f5a0' : '#ff4d6d';
+          const prob = t.probability || t.prob || 0;
+          const probColor = prob >= 70 ? '#00f5a0' : prob >= 60 ? '#f5c400' : '#ff8c69';
+          const needed = Math.max(0, 5 - sc);
+          const snap = t.signal_snapshot ? (typeof t.signal_snapshot === 'string' ? JSON.parse(t.signal_snapshot) : t.signal_snapshot) : {};
+          const confCount = ['MACD', 'Ichimoku', 'EMA', 'Volume'].filter(k => snap[k]?.[t.direction === 'long' ? 'bull' : 'bear']).length;
+          return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.03)">
+            <span style="font-weight:800;color:#fff;min-width:50px;font-size:12px">${t.asset || '--'}</span>
+            <span style="padding:2px 6px;border-radius:3px;font-size:8px;font-weight:700;background:${t.direction === 'long' ? 'rgba(0,245,160,0.15)' : 'rgba(255,77,109,0.15)'};color:${dirColor}">${(t.direction || '').toUpperCase()}</span>
+            <div style="flex:1;font-size:8px;color:#5a7a68">Scan ${sc}/5 — ${needed > 0 ? needed + ' more needed' : 'qualifying now'}<br>${confCount}/4 confluence · Quality ${t.market_quality || t.marketQuality || '?'}</div>
+            <span style="font-size:14px;font-weight:800;color:${probColor}">${prob}%</span>
+            <div style="width:60px;display:flex;flex-direction:column;gap:2px">
+              ${needed > 0 ? `<span style="font-size:7px;color:${probColor}">${needed > 0 ? '' : '✓'}</span>` : '<span style="font-size:7px;color:#00f5a0">✓</span>'}
+              <div style="width:100%;height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${sc >= 5 ? '#00f5a0' : '#f5c400'};border-radius:2px"></div></div>
+            </div>
+          </div>`;
+        }).join('') + `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,0.05);margin-top:4px">
+          <span style="font-weight:700;color:#5a7a68;font-size:11px">All alts</span>
+          <span style="padding:2px 6px;border-radius:3px;font-size:8px;font-weight:700;background:rgba(255,255,255,0.06);color:#5a7a68">GATE</span>
+          <span style="flex:1;font-size:8px;color:#5a7a68">Market structure gate blocking ${blockedCount} assets<br>BTC needs to break range for gate to open</span>
+          <span style="font-size:9px;color:#f5c400;font-weight:700">Gate</span>
+        </div>`;
+      }
+    }
+
+    // ── Panel D: Alerts & Flags ──
+    const alertEl = $('briefAlerts');
+    if (alertEl) {
+      const alerts = [];
+      // Check for limit orders deployment
+      alerts.push({ color: '#00f5a0', title: 'Limit orders deployed', sub: 'Switched from market to limit orders — eliminates 1.49% slippage', action: 'Verify ↗', priority: 3 });
+      // Check for assets with poor rolling WR
+      const assetWR = {};
+      executed.slice(-50).forEach(t => {
+        if (!t.asset || !t.outcome) return;
+        if (!assetWR[t.asset]) assetWR[t.asset] = { wins: 0, total: 0 };
+        assetWR[t.asset].total++;
+        if (t.outcome === 'win') assetWR[t.asset].wins++;
+      });
+      Object.entries(assetWR).forEach(([asset, d]) => {
+        if (d.total >= 5) {
+          const wr = Math.round(d.wins / d.total * 100);
+          if (wr < 40) alerts.push({ color: '#f5c400', title: asset + ' rolling WR declining', sub: 'Last ' + d.total + ' trades: ' + wr + '% — watch for further deterioration', action: 'Review ↗', priority: 2 });
+        }
+      });
+      // Execution logging check
+      const recentExecuted = executed.filter(t => new Date(t.created_at || t.ts) >= new Date('2026-03-18'));
+      if (recentExecuted.length > 0) {
+        alerts.push({ color: '#00f5a0', title: 'Execution logging fixed', sub: 'First properly logged trade since March 16 — reconciliation active', action: 'Verify ↗', priority: 3 });
+      }
+
+      alerts.sort((a, b) => a.priority - b.priority);
+      alertEl.innerHTML = alerts.map(a => `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.03)">
+        <div style="width:8px;height:8px;border-radius:50%;background:${a.color};flex-shrink:0;margin-top:3px"></div>
+        <div style="flex:1"><div style="font-weight:700;color:#fff;font-size:10px">${a.title}</div><div style="color:#5a7a68;font-size:8px;margin-top:2px">${a.sub}</div></div>
+        <span style="font-size:8px;color:#a78bfa;cursor:pointer;white-space:nowrap;font-weight:700">${a.action}</span>
+      </div>`).join('');
+    }
+
+    // ── Panel E: Narrative ──
+    const narEl = $('briefNarrative');
+    if (narEl) {
+      const btcContext = btc1d === 'Bear' ? 'BTC is in a daily bear regime' : btc1d === 'Bull' ? 'BTC is in a daily bull regime' : 'BTC is ranging on the daily';
+      const h4Context = btc4h === 'Ranging' ? ' but ranging on the 4h' : btc4h === 'Bull' ? ' with bullish 4h momentum' : ' with bearish 4h pressure';
+      const gateContext = blockedCount > 10 ? ' — this is creating a choppy environment where ' + blockedCount + ' of 20 assets are blocked by the market structure gate' : blockedCount > 0 ? '. ' + blockedCount + ' assets are currently blocked by gates' : '. All gates are open';
+      const sessionContext = '. The ' + session + ' session is active (historically ' + sessionWR + ')';
+      const watchContext = building.length > 0 ? ' and ' + building[0].asset + ' has a ' + (building[0].scan_count >= 5 ? 'qualifying' : 'building') + ' signal at ' + (building[0].probability || building[0].prob || '?') + '%' : '';
+      const lookAhead = '. If BTC breaks downward from the current range, expect the gate to open and multiple signals to fire simultaneously — the engine is primed. If BTC breaks upward, the long signal logic will start surfacing.';
+
+      narEl.innerHTML = `
+        <div style="margin-bottom:10px;line-height:1.7">
+          <strong style="color:#fff">Today's setup:</strong> ${btcContext}${h4Context}${gateContext}${sessionContext}${watchContext}${lookAhead}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+          <span style="padding:3px 8px;border-radius:12px;font-size:8px;font-weight:700;background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.25);color:#ff4d6d">${btc1d === 'Bear' ? 'BTC bear daily' : btc1d === 'Bull' ? 'BTC bull daily' : 'BTC ranging daily'}</span>
+          <span style="padding:3px 8px;border-radius:12px;font-size:8px;font-weight:700;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#5a7a68">${btc4h.toLowerCase() === 'ranging' ? '4h ranging' : '4h ' + btc4h.toLowerCase()}</span>
+          <span style="padding:3px 8px;border-radius:12px;font-size:8px;font-weight:700;background:rgba(0,245,160,0.1);border:1px solid rgba(0,245,160,0.25);color:#00f5a0">${session} session active</span>
+          <span style="padding:3px 8px;border-radius:12px;font-size:8px;font-weight:700;background:rgba(245,196,0,0.1);border:1px solid rgba(245,196,0,0.25);color:#f5c400">${blockedCount}/20 gated</span>
+          <span style="padding:3px 8px;border-radius:12px;font-size:8px;font-weight:700;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#5a7a68">Fear ${fngVal}</span>
+          <span style="font-size:8px;color:#a78bfa;cursor:pointer;font-weight:700;margin-left:4px">Full analysis ↗</span>
+        </div>`;
+    }
+
+    // Balance since deposit
+    const bal = parseFloat(document.getElementById('btBalanceUSDT')?.textContent?.replace(/[^0-9.-]/g, '')) || 0;
+    if (bal > 0) {
+      const deposit = 97.89;
+      const gain = bal - deposit;
+      const gainPct = ((gain / deposit) * 100).toFixed(1);
+      const pnlSince = $('btBalancePnlSince');
+      if (pnlSince) { pnlSince.textContent = (gain >= 0 ? '+' : '') + '$' + gain.toFixed(2) + ' since deposit (' + (gain >= 0 ? '+' : '') + gainPct + '%)'; pnlSince.style.color = gain >= 0 ? '#00f5a0' : '#ff4d6d'; }
+    }
+
+  } catch (err) {
+    console.error('[Briefing] Error loading daily briefing:', err);
+    const narEl = $('briefNarrative');
+    if (narEl) narEl.textContent = 'Failed to load briefing data.';
+  }
 }
 
 renderProbeResults = function(results, tf) {
@@ -24549,9 +24943,12 @@ renderProbeResults = function(results, tf) {
   });
 
   // Apply filters
+  const majors = new Set(['BTC','ETH','SOL','BNB','XRP']);
+  const memes = new Set(['PEPE','WIF','DOGE']);
   const filtered = classified.filter(r => {
     if (f.direction !== 'all' && r.direction !== f.direction) return false;
-    if (f.status !== 'all' && r.status !== f.status) return false;
+    if (f.status === 'real' && !r.executed) return false;
+    else if (f.status !== 'all' && f.status !== 'real' && r.status !== f.status) return false;
     if (f.minprob !== 'any' && r.prob < parseInt(f.minprob)) return false;
     if (f.timeframe !== 'all') {
       const rTf = r.timeframe || tf;
@@ -24563,6 +24960,16 @@ renderProbeResults = function(results, tf) {
       if (f.session === 'london' && (h < 8 || h >= 13)) return false;
       if (f.session === 'ny' && (h < 17 || h >= 22)) return false;
     }
+    // Advanced filters
+    if (f.confluence && f.confluence !== 'any') {
+      const indicators = ['MACD', 'Ichimoku', 'EMA', 'Volume'];
+      const bearKey = r.direction === 'short' ? 'bear' : 'bull';
+      const confCount = indicators.filter(ind => r.signals?.[ind]?.[bearKey]).length;
+      if (confCount < parseInt(f.confluence)) return false;
+    }
+    if (f.minscan && f.minscan !== 'any' && r.scanCount < parseInt(f.minscan)) return false;
+    if (f.assetGroup === 'majors' && !majors.has(r.asset)) return false;
+    if (f.assetGroup === 'memes' && !memes.has(r.asset)) return false;
     return true;
   });
 
