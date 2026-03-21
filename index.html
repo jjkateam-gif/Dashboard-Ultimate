@@ -16858,14 +16858,18 @@ async function runProbEngine() {
 
 // ── Render results ────────────────────────────────────────────
 function renderProbeResults(results, tf) {
+  // Skip old card-grid rendering if results are from server (no regimeData/rrData)
+  // The new signal queue renderer handles all display
+  if (results.length > 0 && results[0]._fromServer) return;
+
   const last = $('probeLastUpdated');
-  if (last) last.textContent = `Last scan: ${PROBE.lastRun.toLocaleTimeString()} · ${tf} timeframe · ${results.length} assets`;
+  if (last && PROBE.lastRun) last.textContent = `Last scan: ${PROBE.lastRun.toLocaleTimeString()} · ${tf} timeframe · ${results.length} assets`;
 
   // Regime banner — use BTC's regime as macro proxy
   const btc = results.find(r => r.asset === 'BTC');
   if (btc) {
     const banner = $('probRegimeBanner');
-    if (banner) {
+    if (banner && btc.regimeData) {
       const rd = btc.regimeData;
       const base = rd.regime.split('_')[0];
       const extra = rd.regime.includes('squeeze') ? ' · 🗜️ Volatility squeeze — breakout imminent' : rd.regime.includes('volatile') ? ' · 💥 Volatile — size down' : '';
@@ -16890,7 +16894,7 @@ function renderProbeResults(results, tf) {
     return;
   }
 
-  el.innerHTML = results.map((r, idx) => {
+  el.innerHTML = results.filter(r => !r._fromServer).map((r, idx) => {
     const dirEmoji = r.direction === 'long' ? '▲' : '▼';
     const dirColor = r.direction === 'long' ? '#00f5a0' : '#ff4d6d';
     const dirLabel = r.direction === 'long' ? 'LONG' : 'SHORT';
@@ -16902,12 +16906,14 @@ function renderProbeResults(results, tf) {
       : '';
 
     // Signal bars
-    const hitBars = r.hits.slice(0, 5).map(h =>
+    const hitsArr = Array.isArray(r.hits) ? r.hits : [];
+    const missesArr = Array.isArray(r.misses) ? r.misses : [];
+    const hitBars = hitsArr.slice(0, 5).map(h =>
       `<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">
         <div style="width:5px;height:5px;border-radius:50%;background:${dirColor};flex-shrink:0"></div>
         <span style="font-size:7px;color:#aaa;font-family:'Space Mono',monospace">${h.label}</span>
       </div>`).join('');
-    const missBars = r.misses.slice(0, 3).map(m =>
+    const missBars = missesArr.slice(0, 3).map(m =>
       `<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">
         <div style="width:5px;height:5px;border-radius:50%;background:#3a3a3a;flex-shrink:0"></div>
         <span style="font-size:7px;color:#3a5a48;font-family:'Space Mono',monospace">${m.label}</span>
