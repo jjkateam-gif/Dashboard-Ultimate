@@ -24633,9 +24633,33 @@ function sqFilter(chip) {
   if (PROBE.results) renderProbeResults(PROBE.results, $('probeTimeframe')?.value || '15m');
 }
 
-function sqToggleExpand(idx) {
-  if (window._sqExpandedIdx.has(idx)) window._sqExpandedIdx.delete(idx);
-  else window._sqExpandedIdx.add(idx);
+async function sqToggleExpand(idx) {
+  if (window._sqExpandedIdx.has(idx)) {
+    window._sqExpandedIdx.delete(idx);
+  } else {
+    window._sqExpandedIdx.add(idx);
+    // Fetch cross-TF data on-demand if signal doesn't have it yet
+    const r = PROBE.results?.[idx];
+    if (r && (!r.crossTFData || r.crossTFData.length === 0)) {
+      const tf = r.tf || r.timeframe || '15m';
+      const cacheKey = r.asset + '|' + r.direction + '|' + tf;
+      if (PROBE.crossTFCache[cacheKey]) {
+        r.crossTFData = PROBE.crossTFCache[cacheKey];
+      } else {
+        try {
+          const sym = r.asset + 'USDT';
+          const ctfData = await fetchCrossTFBias(sym, tf);
+          if (ctfData && ctfData.length > 0) {
+            r.crossTFData = ctfData;
+            PROBE.crossTFCache[cacheKey] = ctfData;
+            // Also cache for opposite direction (same data)
+            const oppDir = r.direction === 'long' ? 'short' : 'long';
+            PROBE.crossTFCache[r.asset + '|' + oppDir + '|' + tf] = ctfData;
+          }
+        } catch (e) { console.warn('[CrossTF] On-demand fetch failed:', e.message); }
+      }
+    }
+  }
   if (PROBE.results) renderProbeResults(PROBE.results, $('probeTimeframe')?.value || '15m');
 }
 
