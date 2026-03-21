@@ -516,4 +516,76 @@ router.get('/export/daterange', async (req, res) => {
   }
 });
 
+// ── ENGINE 2: Live Strategy Engine Exports ──────────────────────
+
+// GET /best-trades/export/live-strategies — all configured live strategies
+router.get('/export/live-strategies', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT *, 'LIVE_STRATEGY_ENGINE' as engine FROM live_strategies ORDER BY created_at DESC`
+    );
+    const today = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="LIVE_STRATEGIES_${today}.csv"`);
+    res.send(rowsToCsv(result.rows));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /best-trades/export/live-trades — all closed trades from Live Strategy Engine
+router.get('/export/live-trades', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT *, 'LIVE_STRATEGY_ENGINE' as engine FROM live_trade_history ORDER BY closed_at DESC`
+    );
+    const today = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="LIVE_ENGINE_TRADES_${today}.csv"`);
+    res.send(rowsToCsv(result.rows));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /best-trades/export/live-positions — current open positions from Live Strategy Engine
+router.get('/export/live-positions', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT *, 'LIVE_STRATEGY_ENGINE' as engine FROM live_positions ORDER BY opened_at DESC`
+    );
+    const today = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="LIVE_ENGINE_POSITIONS_${today}.csv"`);
+    res.send(rowsToCsv(result.rows));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /best-trades/export/index — list all available exports
+router.get('/export/index', (req, res) => {
+  res.json({
+    engine_1_best_trades_scanner: {
+      description: 'AI Probability Scanner — auto-discovers and executes high-probability setups',
+      table: 'best_trades_log',
+      exports: {
+        full: '/best-trades/export/full',
+        real_only: '/best-trades/export/real',
+        daily_snapshot: '/best-trades/export/daily',
+        date_range: '/best-trades/export/daterange?from=YYYY-MM-DD&to=YYYY-MM-DD',
+      }
+    },
+    engine_2_live_strategy: {
+      description: 'Live Strategy Engine — executes user-defined strategies from the Backtester',
+      tables: ['live_strategies', 'live_trade_history', 'live_positions'],
+      exports: {
+        strategies: '/best-trades/export/live-strategies',
+        trades: '/best-trades/export/live-trades',
+        positions: '/best-trades/export/live-positions',
+      }
+    }
+  });
+});
+
 module.exports = router;
