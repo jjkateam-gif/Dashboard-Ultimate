@@ -16858,9 +16858,12 @@ async function runProbEngine() {
 
 // ── Render results ────────────────────────────────────────────
 function renderProbeResults(results, tf) {
-  // Skip old card-grid rendering if results are from server (no regimeData/rrData)
-  // The new signal queue renderer handles all display
-  if (results.length > 0 && results[0]._fromServer) return;
+  // The new signal queue renderer (assigned later) handles all display.
+  // This old function is kept as _probeRenderBase for backward compat.
+  // Wrap entirely in try-catch so crashes here never block the new renderer.
+  try {
+  // Skip if results lack the detailed properties this renderer needs
+  if (!results.length || !results[0].regimeData) return;
 
   const last = $('probeLastUpdated');
   if (last && PROBE.lastRun) last.textContent = `Last scan: ${PROBE.lastRun.toLocaleTimeString()} · ${tf} timeframe · ${results.length} assets`;
@@ -17045,6 +17048,7 @@ function renderProbeResults(results, tf) {
         </table>
       </div>`;
   }
+  } catch(e) { console.warn('[OldRenderer] Skipped:', e.message); }
 }
 
 // ── SVG probability arc ──────────────────────────────────────
