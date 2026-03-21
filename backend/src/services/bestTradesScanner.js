@@ -3,6 +3,8 @@
  * Mirrors the frontend probability engine so trades execute 24/7 on Railway
  * even when the user's browser is closed.
  */
+const fs = require('fs');
+const path = require('path');
 const { fetchKlines } = require('./binance');
 const { sma, ema, rsi, stdev, atr } = require('./indicators');
 const blofinClient = require('./blofinClient');
@@ -13,6 +15,10 @@ const { calculateLiquidationRisk } = require('./liquidationRisk');
 // https no longer needed — switched from Binance to BloFin for funding rates
 let pool = null;
 try { pool = require('../db').pool; } catch {}
+
+// Exports directory for nightly CSV dumps (relative to project root)
+const EXPORTS_DIR = path.resolve(__dirname, '..', '..', '..', 'exports');
+try { fs.mkdirSync(EXPORTS_DIR, { recursive: true }); } catch {}
 
 // ══════════════════════════════════════════════════════════════
 // FUNDING RATE CACHE (fetched from BloFin, refreshed every 5 min)
@@ -3045,6 +3051,9 @@ class BestTradesScanner {
     // Nightly market cache — snapshot at 18:00 UTC daily
     this._scheduleNightlyCache();
 
+    // Nightly CSV export — dump trade logs at 18:00 UTC daily
+    this._scheduleNightlyExport();
+
     // Calibration persistence — save snapshot every 6 hours
     setInterval(() => this._saveCalibrationSnapshot().catch(e => console.warn('[BestTrades] Cal snapshot error:', e.message)), 6 * 60 * 60_000);
     // First snapshot after 10 min (let calibration cache populate first)
@@ -3094,6 +3103,105 @@ class BestTradesScanner {
       console.log(`[BestTrades] Nightly market cache saved for ${today}`);
     } catch (e) {
       console.warn(`[BestTrades] Nightly cache save error: ${e.message}`);
+    }
+  }
+
+  // ── Nightly CSV Export (18:00 UTC daily) ──
+
+  _scheduleNightlyExport() {
+    const now = new Date();
+    const next18UTC = new Date(now);
+    next18UTC.setUTCHours(18, 0, 0, 0);
+    if (now >= next18UTC) next18UTC.setUTCDate(next18UTC.getUTCDate() + 1);
+    const msUntil = next18UTC - now;
+    // Add 30s offset so export runs just after the nightly cache save
+    setTimeout(() => {
+      this._nightlyExport().catch(e => console.error('[BestTrades] Nightly export error:', e.message));
+      // Re-schedule every 24h
+      setInterval(() => {
+        this._nightlyExport().catch(e => console.error('[BestTrades] Nightly export error:', e.message));
+      }, 24 * 60 * 60_000);
+    }, msUntil + 30_000);
+    console.log(`[BestTrades] Nightly CSV export scheduled in ${Math.round((msUntil + 30_000) / 60000)} min (18:00 UTC + 30s)`);
+  }
+
+  async _nightlyExport() {
+    if (!pool) {
+      console.warn('[BestTrades] Nightly export skipped — no DB pool');
+      return;
+    }
+
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const exportDir = EXPORTS_DIR;
+    try { fs.mkdirSync(exportDir, { recursive: true }); } catch {}
+
+    console.log(`[BestTrades] Starting nightly CSV export for ${today}...`);
+
+    // Helper: convert query rows to CSV string
+    const rowsToCsv = (rows) => {
+      if (!rows.length) return '';
+      const headers = Object.keys(rows[0]);
+      const lines = [headers.join(',')];
+      for (const row of rows) {
+        lines.push(headers.map(h => {
+          let val = row[h];
+          if (val === null || val === undefined) return '';
+          if (typeof val === 'object') val = JSON.stringify(val);
+          val = String(val);
+          return (val.includes(',') || val.includes('"') || val.includes('\n'))
+            ? `"${val.replace(/"/g, '""')}"` : val;
+        }).join(','));
+      }
+      return lines.join('\n');
+    };
+
+    try {
+      // 1) FULL_TRADE_LOG — all records
+      const fullResult = await pool.query(
+        `SELECT *,
+          CASE WHEN data_source = 'signal_matched' THEN 'REAL+SIGNAL'
+               WHEN data_source = 'blofin_only' THEN 'REAL_ONLY'
+               ELSE 'PAPER'
+          END as trade_type
+         FROM best_trades_log ORDER BY created_at DESC`
+      );
+      const fullPath = path.join(exportDir, `FULL_TRADE_LOG_${today}.csv`);
+      fs.writeFileSync(fullPath, rowsToCsv(fullResult.rows));
+      console.log(`[BestTrades] Exported FULL_TRADE_LOG_${today}.csv (${fullResult.rows.length} rows)`);
+
+      // 2) REAL_TRADES_ONLY — executed = true
+      const realResult = await pool.query(
+        `SELECT *,
+          CASE WHEN data_source = 'signal_matched' THEN 'REAL+SIGNAL'
+               WHEN data_source = 'blofin_only' THEN 'REAL_ONLY'
+               ELSE 'PAPER'
+          END as trade_type
+         FROM best_trades_log
+         WHERE executed = true
+         ORDER BY created_at DESC`
+      );
+      const realPath = path.join(exportDir, `REAL_TRADES_ONLY_${today}.csv`);
+      fs.writeFileSync(realPath, rowsToCsv(realResult.rows));
+      console.log(`[BestTrades] Exported REAL_TRADES_ONLY_${today}.csv (${realResult.rows.length} rows)`);
+
+      // 3) DAILY_SNAPSHOT — only last 24 hours
+      const snapshotResult = await pool.query(
+        `SELECT *,
+          CASE WHEN data_source = 'signal_matched' THEN 'REAL+SIGNAL'
+               WHEN data_source = 'blofin_only' THEN 'REAL_ONLY'
+               ELSE 'PAPER'
+          END as trade_type
+         FROM best_trades_log
+         WHERE created_at >= NOW() - INTERVAL '24 hours'
+         ORDER BY created_at DESC`
+      );
+      const snapPath = path.join(exportDir, `DAILY_SNAPSHOT_${today}.csv`);
+      fs.writeFileSync(snapPath, rowsToCsv(snapshotResult.rows));
+      console.log(`[BestTrades] Exported DAILY_SNAPSHOT_${today}.csv (${snapshotResult.rows.length} rows)`);
+
+      console.log(`[BestTrades] Nightly CSV export complete — 3 files saved to ${exportDir}`);
+    } catch (e) {
+      console.error(`[BestTrades] Nightly export failed: ${e.message}`);
     }
   }
 
@@ -3411,6 +3519,42 @@ class BestTradesScanner {
           // Calculate real PnL % from fill prices if available
           const entryPriceReal = avgPrice || null;
 
+          // ── Determine exit_reason from BloFin order data ──
+          let exitReason = null;
+          const orderSource = (order.source || '').toLowerCase();
+          const cancelType = (order.cancelType || '').toLowerCase();
+          const orderState = (order.state || '').toLowerCase();
+          const tpTrigger = order.tpTriggerPrice || order.tpTriggerPx || '';
+          const slTrigger = order.slTriggerPrice || order.slTriggerPx || '';
+
+          if (cancelType === 'liquidation' || orderSource === 'liquidation') {
+            exitReason = 'liquidation';
+          } else if (cancelType === 'adl' || orderSource === 'adl') {
+            exitReason = 'adl';
+          } else if (
+            orderSource === 'tpsl' ||
+            cancelType === 'tp' ||
+            (parseFloat(tpTrigger) > 0 && orderState === 'filled')
+          ) {
+            exitReason = 'tp_hit';
+          } else if (
+            cancelType === 'sl' ||
+            (parseFloat(slTrigger) > 0 && orderState === 'filled')
+          ) {
+            exitReason = 'sl_hit';
+          } else if (order.reduceOnly === true || order.reduceOnly === 'true') {
+            exitReason = 'manual_close';
+          } else if (orderState === 'filled') {
+            exitReason = 'manual_close';
+          }
+
+          // ── Calculate closed_at timestamp from BloFin fill time ──
+          let closedAt = null;
+          const fillTimeMs = parseInt(filledTime) || null;
+          if (fillTimeMs) {
+            closedAt = new Date(fillTimeMs);
+          }
+
           try {
             await pool.query(
               `UPDATE best_trades_log SET
@@ -3420,9 +3564,17 @@ class BestTradesScanner {
                 trading_fee_real = COALESCE(trading_fee_real, $4),
                 blofin_pnl_usd = $5,
                 data_source = 'signal_matched',
-                engine_source = COALESCE(engine_source, 'best_trades_auto')
+                engine_source = COALESCE(engine_source, 'best_trades_auto'),
+                exit_reason = COALESCE(exit_reason, $6),
+                closed_at = COALESCE(closed_at, $7),
+                hours_open = COALESCE(hours_open,
+                  CASE WHEN $7 IS NOT NULL
+                    THEN ROUND(EXTRACT(EPOCH FROM ($7::timestamptz - created_at)) / 3600.0, 2)
+                    ELSE NULL
+                  END
+                )
                WHERE id = $1`,
-              [tradeId, orderId, entryPriceReal, Math.abs(fee), pnl]
+              [tradeId, orderId, entryPriceReal, Math.abs(fee), pnl, exitReason, closedAt]
             );
             updated++;
           } catch (e) {
