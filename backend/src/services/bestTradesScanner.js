@@ -2532,10 +2532,121 @@ class BestTradesScanner {
     const rawContracts = posSize / (markPrice * contractValue);
     const contractSize = Math.max(minSize, Math.round(rawContracts / lotSize) * lotSize);
 
-    // Parallel execution: fire BloFin order + DB INSERT simultaneously (zero added latency)
+    // ── LIMIT ORDER EXECUTION WITH 30s FILL WINDOW ──
+    // Place limit order at signal price to eliminate slippage (avg 1.49% on market orders).
+    // If not filled within 30 seconds, cancel and skip — don't chase price.
+    const limitPrice = setup.price; // signal's detected entry price
+    console.log(`[BestTrades] Placing LIMIT ${setup.direction.toUpperCase()} for ${setup.asset} @ $${limitPrice} (mark: $${markPrice}, diff: ${((Math.abs(markPrice - limitPrice) / limitPrice) * 100).toFixed(3)}%)`);
+
+    let result;
+    try {
+      // Step 1: Place limit order (no TP/SL yet — those go on after fill confirmation)
+      const limitResult = await blofinClient.openPosition({
+        creds, instId, direction: setup.direction,
+        size: String(contractSize), leverage: lev,
+        orderType: 'limit', price: String(limitPrice),
+        marginMode: 'cross', demo,
+      });
+      const limitOrderId = limitResult.orderId;
+      if (!limitOrderId) throw new Error('No orderId returned from limit order');
+
+      // Step 2: Poll for fill — check every 5s for 30s max
+      let filled = false;
+      const maxWaitMs = 30_000;
+      const pollIntervalMs = 5_000;
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitMs) {
+        await new Promise(r => setTimeout(r, pollIntervalMs));
+        try {
+          const activeOrders = await blofinClient.getActiveOrders(creds, instId, demo);
+          // If our order is no longer in active orders, it was filled (or cancelled externally)
+          const stillPending = (activeOrders || []).some(o =>
+            (o.orderId === limitOrderId) || (o.orderid === limitOrderId)
+          );
+          if (!stillPending) {
+            filled = true;
+            break;
+          }
+        } catch (pollErr) {
+          console.warn(`[BestTrades] Order poll error for ${setup.asset}: ${pollErr.message}`);
+        }
+      }
+
+      if (!filled) {
+        // Step 3a: Not filled within 30s — cancel and skip
+        console.log(`[BestTrades] ⏱️ LIMIT NOT FILLED: ${setup.asset} ${setup.direction} @ $${limitPrice} after 30s — cancelling`);
+        try {
+          await blofinClient.cancelOrder(creds, instId, limitOrderId, demo);
+          console.log(`[BestTrades] Order ${limitOrderId} cancelled for ${setup.asset}`);
+        } catch (cancelErr) {
+          console.warn(`[BestTrades] Cancel failed for ${setup.asset}: ${cancelErr.message} — may have filled at last moment`);
+          // Check once more — might have filled between last poll and cancel
+          try {
+            const finalCheck = await blofinClient.getActiveOrders(creds, instId, demo);
+            const stillThere = (finalCheck || []).some(o =>
+              (o.orderId === limitOrderId) || (o.orderid === limitOrderId)
+            );
+            if (!stillThere) {
+              filled = true; // Filled at last moment
+              console.log(`[BestTrades] ✅ Order ${limitOrderId} filled at last moment for ${setup.asset}`);
+            }
+          } catch {}
+        }
+      }
+
+      if (!filled) {
+        // Log slippage_skip to DB for tracking
+        if (pool) {
+          try {
+            await pool.query(
+              `INSERT INTO best_trades_log
+               (asset, direction, probability, entry_price, stop_price, target_price,
+                executed, timeframe, engine_source, data_source, exit_reason)
+               VALUES ($1, $2, $3, $4, $5, $6, false, $7, 'best_trades_auto', 'slippage_skip', 'limit_not_filled')`,
+              [setup.asset, setup.direction, setup.prob, limitPrice, setup.stopPrice, setup.targetPrice,
+               setup.timeframe || '15m']
+            );
+          } catch (skipLogErr) {
+            console.warn(`[BestTrades] Slippage skip log failed: ${skipLogErr.message}`);
+          }
+        }
+        console.log(`[BestTrades] ❌ SKIPPED: ${setup.asset} ${setup.direction} — limit @ $${limitPrice} not filled in 30s (mark was $${markPrice})`);
+        this._broadcast('skip', { setup, reason: 'limit_not_filled', limitPrice, markPrice });
+        return; // Exit — don't proceed to TP/SL or execution logging
+      }
+
+      // Step 3b: FILLED — now set TP/SL
+      console.log(`[BestTrades] ✅ LIMIT FILLED: ${setup.asset} ${setup.direction} @ $${limitPrice} — setting TP/SL`);
+      if (tpPrice || slPrice) {
+        try {
+          await blofinClient.setTpSl({
+            creds, instId, direction: setup.direction,
+            size: String(contractSize), tpPrice, slPrice,
+            marginMode: 'cross', demo,
+          });
+          console.log(`[BestTrades] TP/SL set for ${setup.asset}: SL=$${slPrice} TP=$${tpPrice}`);
+        } catch (tpslErr) {
+          console.error(`[BestTrades] ❌ TP/SL FAILED for ${setup.asset}: ${tpslErr.message} — CLOSING position`);
+          try {
+            await blofinClient.closePosition({ creds, instId, direction: setup.direction, marginMode: 'cross', demo });
+          } catch (closeErr) {
+            console.error(`[BestTrades] ❌❌ CRITICAL: Could not close unprotected position ${setup.asset}: ${closeErr.message}`);
+          }
+          return;
+        }
+      }
+
+      result = { orderId: limitOrderId, protocol: 'blofin' };
+    } catch (limitErr) {
+      console.error(`[BestTrades] Limit order failed for ${setup.asset}: ${limitErr.message}`);
+      return;
+    }
+
+    // DB INSERT — BloFin order already confirmed filled above, order_id known
     const dbParams = [setup.asset, setup.direction, setup.prob, setup.confidence,
       setup.marketQuality, setup.rr, setup.price, setup.stopPrice, setup.targetPrice,
-      setup.stopPct, setup.targetPct, setup.regime, true, null /* order_id placeholder */, setup.timeframe || '15m',
+      setup.stopPct, setup.targetPct, setup.regime, true, result.orderId || null, setup.timeframe || '15m',
       JSON.stringify({ ...(setup.signalSnapshot || {}), cross_tf: setup.crossTF, cross_tf_summary: setup.crossTFSummary, market_structure: setup.marketStructure, funding_rate_score: setup.fundingRateScore }),
       setup.rawProb, setup.ev, setup.optimalLev,
       setup.atrValue, JSON.stringify(setup.hits || []), JSON.stringify(setup.misses || []),
@@ -2585,70 +2696,44 @@ class BestTradesScanner {
               $81,$82,$83,$84)
       RETURNING id`;
 
-    // Fire BloFin order and DB insert in parallel — zero added latency
-    const blofinPromise = blofinClient.openPosition({
-      creds, instId, direction: setup.direction,
-      size: String(contractSize), leverage: lev,
-      orderType: 'market', slPrice, tpPrice,
-      marginMode: 'cross', demo,
-    });
-
-    const dbPromise = pool ? pool.query(extendedInsertSQL, dbParams).catch(extErr => {
-      console.warn(`[BestTrades] Extended INSERT failed for ${setup.asset}: ${extErr.message} — trying basic...`);
-      return pool.query(
-        `INSERT INTO best_trades_log
-         (asset, direction, probability, confidence, market_quality, rr_ratio,
-          entry_price, stop_price, target_price, stop_pct, target_pct, regime, executed, timeframe, engine_source)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
-        [setup.asset, setup.direction, setup.prob, setup.confidence,
-         setup.marketQuality, setup.rr, setup.price, setup.stopPrice, setup.targetPrice,
-         setup.stopPct, setup.targetPct, setup.regime, true, setup.timeframe || '15m', 'best_trades_auto']
-      ).catch(basicErr => {
-        console.error(`[BestTrades] BOTH INSERTs failed for ${setup.asset}: ${basicErr.message}`);
-        return null;
-      });
-    }) : Promise.resolve(null);
-
-    const [result, dbResult] = await Promise.all([blofinPromise, dbPromise]);
-    const dbId = dbResult?.rows?.[0]?.id || null;
-
-    // Reconcile: update DB record with real order_id
-    if (result.orderId && dbId && pool) {
+    // DB INSERT — order is confirmed filled, order_id is in dbParams
+    let dbId = null;
+    if (pool) {
       try {
-        await pool.query(
-          `UPDATE best_trades_log SET order_id = $1 WHERE id = $2`,
-          [result.orderId, dbId]
-        );
-      } catch (e) { console.warn(`[BestTrades] Order ID update failed:`, e.message); }
-    }
-
-    // Emergency insert: BloFin succeeded but DB failed entirely
-    if (result.orderId && !dbId && pool) {
-      console.warn(`[BestTrades] ⚠️ EMERGENCY INSERT: ${setup.asset} BloFin order ${result.orderId} succeeded but DB insert failed`);
-      try {
-        await pool.query(
-          `INSERT INTO best_trades_log
-           (asset, direction, probability, entry_price, stop_price, target_price,
-            executed, order_id, timeframe, engine_source, data_source)
-           VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, 'best_trades_auto', 'emergency_insert')`,
-          [setup.asset, setup.direction, setup.prob, setup.price, setup.stopPrice, setup.targetPrice,
-           result.orderId, setup.timeframe || '15m']
-        );
-        console.log(`[BestTrades] ✅ Emergency insert succeeded for ${setup.asset}`);
-      } catch (emergErr) {
-        console.error(`[BestTrades] ❌ EMERGENCY INSERT ALSO FAILED for ${setup.asset}: ${emergErr.message} — order ${result.orderId} is ORPHANED on BloFin`);
+        const dbResult = await pool.query(extendedInsertSQL, dbParams);
+        dbId = dbResult?.rows?.[0]?.id || null;
+      } catch (extErr) {
+        console.warn(`[BestTrades] Extended INSERT failed for ${setup.asset}: ${extErr.message} — trying basic...`);
+        try {
+          const basicResult = await pool.query(
+            `INSERT INTO best_trades_log
+             (asset, direction, probability, confidence, market_quality, rr_ratio,
+              entry_price, stop_price, target_price, stop_pct, target_pct, regime, executed, order_id, timeframe, engine_source)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
+            [setup.asset, setup.direction, setup.prob, setup.confidence,
+             setup.marketQuality, setup.rr, setup.price, setup.stopPrice, setup.targetPrice,
+             setup.stopPct, setup.targetPct, setup.regime, true, result.orderId || null, setup.timeframe || '15m', 'best_trades_auto']
+          );
+          dbId = basicResult?.rows?.[0]?.id || null;
+        } catch (basicErr) {
+          console.error(`[BestTrades] BOTH INSERTs failed for ${setup.asset}: ${basicErr.message} — order ${result.orderId} on BloFin has no DB record!`);
+          // Emergency minimal insert — absolute last resort
+          try {
+            await pool.query(
+              `INSERT INTO best_trades_log
+               (asset, direction, probability, entry_price, executed, order_id, timeframe, engine_source, data_source)
+               VALUES ($1, $2, $3, $4, true, $5, $6, 'best_trades_auto', 'emergency_insert')`,
+              [setup.asset, setup.direction, setup.prob, setup.price, result.orderId, setup.timeframe || '15m']
+            );
+            console.log(`[BestTrades] ✅ Emergency insert succeeded for ${setup.asset}`);
+          } catch (emergErr) {
+            console.error(`[BestTrades] ❌ ALL THREE INSERTs FAILED for ${setup.asset}: ${emergErr.message}`);
+          }
+        }
       }
     }
 
-    // BloFin failed but DB succeeded — clean up the DB record
-    if (!result.orderId && dbId && pool) {
-      try {
-        await pool.query(`DELETE FROM best_trades_log WHERE id = $1`, [dbId]);
-        console.warn(`[BestTrades] BloFin order failed, cleaned up DB record #${dbId} for ${setup.asset}`);
-      } catch (e) { /* ignore cleanup failure */ }
-    }
-
-    console.log(`[BestTrades] ⚡ EXECUTED: ${setup.asset} ${setup.direction.toUpperCase()} @ $${markPrice} | Prob: ${setup.prob}% | Size: $${posSize} | Lev: ${lev}x | SL: ${slPrice} | TP: ${tpPrice} | OrderId: ${result.orderId} | DB: ${dbId ? '#' + dbId : 'FAILED'}`);
+    console.log(`[BestTrades] ⚡ EXECUTED: ${setup.asset} ${setup.direction.toUpperCase()} @ LIMIT $${limitPrice} | Prob: ${setup.prob}% | Size: $${posSize} | Lev: ${lev}x | SL: ${slPrice} | TP: ${tpPrice} | OrderId: ${result.orderId} | DB: ${dbId ? '#' + dbId : 'FAILED'}`);
     this._broadcast('trade', { setup, orderId: result.orderId, posSize, leverage: lev });
   }
 

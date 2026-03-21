@@ -404,6 +404,22 @@ async function getActiveOrders(creds, instId, demo) {
   return privateGet('/api/v1/trade/active-orders', params, creds, demo);
 }
 
+async function setTpSl({ creds, instId, direction, size, tpPrice, slPrice, marginMode, demo }) {
+  const closeSide = direction === 'long' ? 'sell' : 'buy';
+  const body = {
+    instId,
+    marginMode: marginMode || 'cross',
+    positionSide: direction,
+    side: closeSide,
+    size: String(size),
+  };
+  const bid = creds.brokerId || BROKER_ID;
+  if (bid) body.brokerId = bid;
+  if (tpPrice) { body.tpTriggerPrice = String(tpPrice); body.tpOrderPrice = '-1'; }
+  if (slPrice) { body.slTriggerPrice = String(slPrice); body.slOrderPrice = '-1'; }
+  return privatePost('/api/v1/trade/order-tpsl', body, creds, true, demo);
+}
+
 async function getOrderHistory(creds, instId, demo) {
   const params = instId ? { instId } : {};
   return privateGet('/api/v1/trade/order-history', params, creds, demo);
@@ -429,4 +445,5 @@ module.exports = {
   cancelOrder,
   getActiveOrders,
   getOrderHistory,
+  setTpSl,
 };
