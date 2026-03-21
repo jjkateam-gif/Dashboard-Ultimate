@@ -18194,15 +18194,49 @@ async function processAutoTrades(results, tf) {
   const maxSize = +($('policyMaxSize')?.value || 500);
   const posSize = Math.min(+($('autoTradeSize')?.value || 100), maxSize);
 
-  // Filter setups — prob threshold + quality gates
+  // ══════════════════════════════════════════════════════════════════
+  // CRITICAL: Client-side gates must MIRROR server-side gates exactly
+  // Server = bestTradesScanner._processAutoTrades() gates
+  // Without these, client auto-trade bypasses all server protections
+  // ══════════════════════════════════════════════════════════════════
+
+  // GATE 1: Dead zone — UTC 13-15 = 0-18% WR, block ALL trades
+  const utcHour = new Date().getUTCHours();
+  if (utcHour >= 13 && utcHour <= 15) {
+    toast('🚫 Auto-trade blocked: UTC ' + utcHour + ':00 is in 13-15 dead zone (0-18% WR)', 'warn', 5000);
+    console.log('[AutoTrade] BLOCKED: UTC ' + utcHour + ' in 13-15 dead zone');
+    return;
+  }
+
+  // GATE 2: Session probability penalty — apply BEFORE qualifying filter
+  results.forEach(r => {
+    if (utcHour >= 21 && utcHour <= 23) {
+      r.prob = Math.round(r.prob * 0.4); // Suppressed hours
+    } else if ((utcHour >= 4 && utcHour <= 10) || (utcHour >= 16 && utcHour <= 19)) {
+      r.prob = Math.round(r.prob * 0.7); // Reduced hours
+    }
+    // Full weight: 00-03, 11-12, 20 — no adjustment
+  });
+
+  // Filter setups — prob threshold + quality gates + server-mirrored gates
   // Chasing and negative EV are hard blocks — user sees toast notification with reason
   const rejected = [];
+  const BANNED_ASSETS = ['WIF', 'APT']; // Must match server bannedAssets
   const qualifying = results.filter(r => {
+    // GATE 3: Banned assets
+    if (BANNED_ASSETS.includes(r.asset?.toUpperCase())) { rejected.push(r.asset + ': BANNED'); return false; }
+    // GATE 4: Min probability (after session penalty applied above)
     if (r.prob < minProb) return false;
     if (r.marketQuality === 'No-Trade') return false;
     if (r.entryEfficiency === 'Chasing') { rejected.push(r.asset + ': Chasing entry'); return false; }
     const _evVal = r.ev != null ? parseFloat(r.ev) : null;
     if (_evVal !== null && _evVal < 0) { rejected.push(r.asset + ': Negative EV (' + _evVal.toFixed(2) + ')'); return false; }
+    // GATE 5: Min R:R (RR < 1.5 = 46-47% WR)
+    const rrVal = r.rr != null ? parseFloat(r.rr) : null;
+    if (rrVal !== null && rrVal < 1.5) { rejected.push(r.asset + ': Low R:R (' + rrVal.toFixed(1) + ')'); return false; }
+    // GATE 6: Market structure — contracting blocks all, uptrend blocks shorts
+    if (r.marketStructure?.structure === 'contracting') { rejected.push(r.asset + ': Contracting market'); return false; }
+    if (r.marketStructure?.structure === 'uptrend' && r.direction === 'short') { rejected.push(r.asset + ': Uptrend — short blocked'); return false; }
     return true;
   });
   if (rejected.length > 0) {
@@ -18213,10 +18247,22 @@ async function processAutoTrades(results, tf) {
 
   // Refresh balance and sync open positions from BloFin
   await liveRefreshBalance();
+  let _openPositionsList = [];
   try {
     const posR = await fetch(LIVE_API + '/positions', { headers: liveHeaders() });
-    if (posR.ok) { const posD = await posR.json(); _autoTradeOpenCount = (posD.positions || []).length; }
+    if (posR.ok) {
+      const posD = await posR.json();
+      _openPositionsList = posD.positions || [];
+      _autoTradeOpenCount = _openPositionsList.length;
+    }
   } catch {}
+
+  // GATE 7: Build per-asset open position map (max 1 per asset — prevents concentration risk)
+  const _openByAsset = {};
+  _openPositionsList.forEach(p => {
+    const key = (p.market || p.instId || '').replace(/-USDT$/i, '').toUpperCase();
+    if (key) _openByAsset[key] = (_openByAsset[key] || 0) + 1;
+  });
 
   // Check open positions limit
   if (_autoTradeOpenCount >= maxOpen) {
@@ -18237,6 +18283,13 @@ async function processAutoTrades(results, tf) {
   // Only trade as many as balance allows
   let remainingBalance = availBalance;
   for (const r of toTrade) {
+    // GATE 8: Per-asset limit — max 1 open position per asset
+    const assetKey = (r.asset || '').toUpperCase();
+    if ((_openByAsset[assetKey] || 0) >= 1) {
+      console.log('[AutoTrade] ' + r.asset + ' BLOCKED — already has open position');
+      continue;
+    }
+
     // Apply market quality sizing: A=100%, B=80%, C=50%
     const mqAdjSize = Math.round(posSize * (r.mqSizeMult || 1));
     if (remainingBalance < mqAdjSize) {
