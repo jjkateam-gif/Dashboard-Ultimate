@@ -2385,8 +2385,8 @@ class BestTradesScanner {
             [setup.asset, setup.direction, setup.timeframe || '15m']
           );
           const sc = scResult.rows[0]?.scan_count || 1;
-          if (sc < 5) {
-            console.log(`[BestTrades] ${setup.asset} scan_count=${sc} < 5 — signal too fresh for auto-execute`);
+          if (sc < 1) { // TEMP: lowered from 5 to 1 for limit order test — revert after confirmed
+            console.log(`[BestTrades] ${setup.asset} scan_count=${sc} < 1 — signal too fresh for auto-execute`);
             continue;
           }
         } catch {}
