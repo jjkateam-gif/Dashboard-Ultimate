@@ -347,8 +347,8 @@ router.post('/order', async (req, res) => {
 
     const sizeUsd = contractSize * (markPrice || 0) * (contractValue || 1);
 
-    // Safety check
-    const collateral = parseFloat(size) * markPrice / lev;
+    // Safety check — use computed sizeUsd (not raw size input which may be undefined)
+    const collateral = sizeUsd / lev;
     await safetyGuard.canOpenPosition(req.user.id, collateral, lev);
 
     const result = await blofinClient.openPosition({
@@ -373,8 +373,11 @@ router.post('/order', async (req, res) => {
         const updateResult = await pool.query(
           `UPDATE best_trades_log
            SET executed = true, order_id = $1, engine_source = 'manual_frontend'
-           WHERE asset = $2 AND direction = $3 AND executed = false AND outcome IS NULL
-           ORDER BY created_at DESC LIMIT 1
+           WHERE id = (
+             SELECT id FROM best_trades_log
+             WHERE asset = $2 AND direction = $3 AND executed = false AND outcome IS NULL
+             ORDER BY created_at DESC LIMIT 1
+           )
            RETURNING id, asset, direction`,
           [result.orderId, asset, direction]
         );

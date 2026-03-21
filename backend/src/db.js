@@ -16,7 +16,7 @@ pool.on('error', (err) => {
 async function runMigrations() {
   const fs = require('fs');
   const path = require('path');
-  const migrations = ['001_init.sql', '002_live_trading.sql', '003_blofin_migration.sql', '004_recommendations.sql', '005_auth_tokens.sql', '006_trade_log.sql', '008_prediction_state.sql', '009_best_trades.sql', '010_best_trades_timeframe.sql', '011_tf_rules.sql', '012_indicator_snapshots.sql', '013_trade_size_mode.sql', '014_scan_count.sql', '015_sizing_mode.sql', '016_market_context.sql', '017_mae_mfe_liqrisk_calibration.sql', '018_reconciliation.sql', '019_hours_open.sql'];
+  const migrations = ['001_init.sql', '002_live_trading.sql', '003_blofin_migration.sql', '004_recommendations.sql', '005_auth_tokens.sql', '006_trade_log.sql', '007_fix_live_strategies.sql', '008_prediction_state.sql', '009_best_trades.sql', '010_best_trades_timeframe.sql', '011_tf_rules.sql', '012_indicator_snapshots.sql', '013_trade_size_mode.sql', '014_scan_count.sql', '015_sizing_mode.sql', '016_market_context.sql', '017_mae_mfe_liqrisk_calibration.sql', '018_reconciliation.sql', '019_hours_open.sql', '020_sync_scanner_schemas.sql'];
   try {
     for (const file of migrations) {
       const sql = fs.readFileSync(path.join(__dirname, '..', 'migrations', file), 'utf8');

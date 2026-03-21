@@ -3,6 +3,14 @@ const crypto = require('crypto');
 
 const DEMO_BASE = 'https://demo-trading-openapi.blofin.com';
 const LIVE_BASE = 'https://openapi.blofin.com';
+const API_TIMEOUT_MS = 15000; // 15s timeout for all BloFin API calls
+
+function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => clearTimeout(timeout));
+}
 
 // BloFin broker ID — CCXT's registered broker ID (required for CCXT-bound API keys)
 const BROKER_ID = process.env.BLOFIN_BROKER_ID || 'ec6dd3a7dd982d0b';
@@ -54,7 +62,7 @@ async function publicGet(path, params, demo) {
   const baseUrl = getBaseUrl(demo);
   const qs = params ? '?' + new URLSearchParams(params).toString() : '';
   const url = baseUrl + path + qs;
-  const res = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
+  const res = await fetchWithTimeout(url, { headers: { 'Content-Type': 'application/json' } });
   if (!res.ok) throw new Error(`BloFin API ${path}: HTTP ${res.status}`);
   const json = await res.json();
   if (json.code !== '0') throw new Error(`BloFin ${path}: ${json.msg || json.code}`);
@@ -67,7 +75,7 @@ async function privateGet(path, params, creds, demo) {
   const qs = params ? '?' + new URLSearchParams(params).toString() : '';
   const requestPath = path + qs;
   const headers = authHeaders('GET', requestPath, null, creds);
-  const res = await fetch(baseUrl + requestPath, { headers });
+  const res = await fetchWithTimeout(baseUrl + requestPath, { headers });
   if (!res.ok) throw new Error(`BloFin API ${path}: HTTP ${res.status}`);
   const json = await res.json();
   if (json.code !== '0') throw new Error(`BloFin ${path}: ${json.msg || json.code}`);
@@ -78,7 +86,7 @@ async function privatePost(path, body, creds, isTrading = false, demo) {
   consumeToken(isTrading ? tradeBucket : bucket);
   const baseUrl = getBaseUrl(demo);
   const headers = authHeaders('POST', path, body, creds);
-  const res = await fetch(baseUrl + path, {
+  const res = await fetchWithTimeout(baseUrl + path, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),

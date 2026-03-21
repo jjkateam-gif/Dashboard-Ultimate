@@ -231,6 +231,31 @@ router.post('/resolve', async (req, res) => {
   }
 });
 
+// POST /best-trades/log — manually log a trade from the frontend
+router.post('/log', async (req, res) => {
+  try {
+    const { asset, direction, probability, entry_price, target_price, stop_price,
+            stop_pct, target_pct, rr_ratio, confidence, market_quality,
+            timeframe, regime, leverage, mode, source } = req.body;
+    if (!asset || !direction) return res.status(400).json({ error: 'asset and direction required' });
+    const result = await pool.query(
+      `INSERT INTO best_trades_log
+       (asset, direction, probability, entry_price, target_price, stop_price,
+        stop_pct, target_pct, rr_ratio, confidence, market_quality,
+        timeframe, regime, engine_source, data_source, scan_count)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,1)
+       RETURNING id`,
+      [asset, direction, probability, entry_price, target_price, stop_price,
+       stop_pct, target_pct, rr_ratio, confidence, market_quality,
+       timeframe, regime, source || 'manual_log', 'manual_log']
+    );
+    res.json({ success: true, id: result.rows[0].id });
+  } catch (err) {
+    console.error('[BestTrades] Manual log error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /best-trades/history — scan log from DB (with optional filters)
 router.get('/history', async (req, res) => {
   try {

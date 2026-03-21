@@ -112,6 +112,7 @@ router.post('/change-password', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'New password must be at least 8 characters' });
     }
     const result = await pool.query('SELECT password_hash FROM users WHERE id=$1', [req.user.id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'User not found' });
     const valid = await bcrypt.compare(currentPassword, result.rows[0].password_hash);
     if (!valid) return res.status(401).json({ error: 'Current password incorrect' });
 

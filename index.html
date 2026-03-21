@@ -17533,7 +17533,57 @@ function _renderRecRows() {}
 function loadPortfolioSettings() {}
 function savePortfolioSettings() {}
 function recomputePortfolio() {}
-function logBestTrade() { toast('Trade logging now handled by 24/7 server scanner', 'info'); }
+async function logBestTrade(idx) {
+  const r = PROBE.results && PROBE.results[idx];
+  if (!r) { toast('Run a scan first', 'error'); return; }
+  if (_loggedTradeIdxs.has(idx)) { toast('Already logged this trade', 'warning'); return; }
+
+  const slPct  = parseFloat(document.getElementById('bt_sl_' + idx)?.value || r.rrData?.stopPct || r.stopPct || 2);
+  const tpPct  = parseFloat(document.getElementById('bt_tp_' + idx)?.value || r.rrData?.targetPct || r.targetPct || 4);
+  const lev    = parseInt(document.getElementById('bt_lev_' + idx)?.value || 1);
+  const modeBtn = document.getElementById('btMode_perps_' + idx);
+  const mode   = modeBtn?.style?.background?.includes('167') ? 'perps' : 'spot';
+
+  const entry = r.price;
+  const isLong = r.direction === 'long';
+  const targetPrice = isLong ? entry * (1 + tpPct / 100) : entry * (1 - tpPct / 100);
+  const stopPrice   = isLong ? entry * (1 - slPct / 100) : entry * (1 + slPct / 100);
+  const tf = r.tf || r.timeframe || document.getElementById('probeTimeframe')?.value || '15m';
+
+  try {
+    const token = localStorage.getItem('dash_token');
+    const backend = window.CBP_BACKEND || 'http://localhost:3001';
+    const resp = await fetch(backend + '/best-trades/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({
+        asset: r.asset, direction: r.direction, probability: r.prob,
+        entry_price: entry, target_price: targetPrice, stop_price: stopPrice,
+        stop_pct: slPct, target_pct: tpPct, rr_ratio: r.rr,
+        confidence: r.confidence, market_quality: r.marketQuality,
+        timeframe: tf, regime: r.regime || r.regimeData?.regime,
+        leverage: lev, mode: mode, source: 'manual_log'
+      })
+    });
+    const data = await resp.json();
+    if (resp.ok && data.success !== false) {
+      _loggedTradeIdxs.add(idx);
+      toast('Trade logged! Tracking ' + r.asset + ' ' + r.direction.toUpperCase() + ' (SL ' + slPct + '% / TP ' + tpPct + '%)', 'success');
+      const logBtn = document.getElementById('btLogBtn_' + idx);
+      if (logBtn) {
+        logBtn.textContent = '✓ Logged';
+        logBtn.style.background = 'rgba(0,245,160,0.1)';
+        logBtn.style.borderColor = 'rgba(0,245,160,0.3)';
+        logBtn.style.color = '#00f5a0';
+        logBtn.style.cursor = 'default';
+      }
+    } else {
+      toast('Failed to log trade: ' + (data.error || 'unknown'), 'error');
+    }
+  } catch (e) {
+    toast('Failed to log trade: ' + e.message, 'error');
+  }
+}
 function loadBlofinTradeHistory() {}
 function renderBlofinHistory() {}
 function updateBlofinSummary() {}
@@ -24774,7 +24824,7 @@ function closeBlofinModal() {
 // ════════════════════════════════════════════════════════════════
 
 const _probeRenderBase = renderProbeResults;
-window._sqFilters = { direction: 'all', status: 'all', minprob: 'any', timeframe: 'all', session: 'all' };
+window._sqFilters = { direction: 'all', status: 'all', minprob: 'any', timeframe: 'all', session: 'all', confluence: 'any', minscan: 'any', assetGroup: 'all' };
 window._sqExpandedIdx = new Set();
 
 function sqFilter(chip) {
@@ -25292,8 +25342,8 @@ renderProbeResults = function(results, tf) {
     const dirColor = r.direction === 'long' ? '#00f5a0' : '#ff4d6d';
     const dirLabel = r.direction === 'long' ? 'LONG' : 'SHORT';
     const probColor = r.prob >= 70 ? '#00f5a0' : r.prob >= 60 ? '#f5c400' : r.prob >= 50 ? '#ff8c69' : '#ff4d6d';
-    const slPct = parseFloat(r.rrData?.stopPct || 2).toFixed(1);
-    const tpPct = parseFloat(r.rrData?.targetPct || 4).toFixed(1);
+    const slPct = parseFloat(r.rrData?.stopPct ?? r.stopPct ?? r.stop_pct ?? 2).toFixed(1);
+    const tpPct = parseFloat(r.rrData?.targetPct ?? r.targetPct ?? r.target_pct ?? 4).toFixed(1);
     const lev = r.leverage || 1;
     const isExpanded = window._sqExpandedIdx.has(idx);
     const scanPct = Math.min(100, (r.scanCount / 5) * 100);
