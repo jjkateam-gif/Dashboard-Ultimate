@@ -13695,6 +13695,7 @@ const PROBE = {
   running: false,
   results: [],          // [{asset, direction, prob, rr, confidence, signals, regime, funding}]
   histWinRates: {},     // populated from allOptResults if available
+  crossTFCache: {},     // persistent cache: key -> crossTFData (survives re-renders)
 };
 
 // Assets to scan
@@ -16783,6 +16784,11 @@ async function runProbEngine() {
         patternSummary:  patternResult.patternSummary,
         crossTFData,
       });
+      // Persist crossTFData in cache so it survives server-signal re-renders
+      if (crossTFData && crossTFData.length > 0) {
+        PROBE.crossTFCache[asset.label + '|long|' + tf] = crossTFData;
+        PROBE.crossTFCache[asset.label + '|short|' + tf] = crossTFData;
+      }
     } catch (e) {
       console.warn(`[Probe] ${asset.label} failed:`, e.message);
     }
@@ -18904,7 +18910,7 @@ async function refreshBtPositions() {
         <div style="font-size:9px;color:#5a7a68">${slStr}${slStr && tpStr ? ' · ' : ''}${tpStr}</div>
         <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
           <span style="font-size:14px;font-weight:800;color:${pnlColor}">${pnlStr}${pnlPctStr}</span>
-          <button onclick="window.open('https://blofin.com/trade/' + '${instId}','_blank')" style="font-size:8px;padding:5px 10px;width:auto;margin:0;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700">Detail ↗</button>
+          <button onclick="window.open('https://blofin.com/futures/' + '${instId}','_blank')" style="font-size:8px;padding:5px 10px;width:auto;margin:0;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700">Detail ↗</button>
           <button onclick="if(confirm('Close ${marketLabel} ${dirLabel} position?')) closeBtPosition('${instId}','${p.direction}')" style="font-size:8px;padding:5px 10px;width:auto;margin:0;background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.25);color:#ff4d6d;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700">Close</button>
         </div>
       </div>`;
@@ -24979,26 +24985,32 @@ async function loadServerSignals() {
       hits: t.hits_list, misses: t.misses_list, _fromServer: true,
       ts: t.created_at || t.ts
     }));
+    // Enrich ALL signals (server + existing) with persistent crossTF cache
+    const enrichWithCache = (signal) => {
+      if (signal.crossTFData && signal.crossTFData.length > 0) return; // already has data
+      const tf = signal.tf || signal.timeframe || '';
+      const key = signal.asset + '|' + signal.direction + '|' + tf;
+      if (PROBE.crossTFCache[key]) signal.crossTFData = PROBE.crossTFCache[key];
+    };
+    // Also update cache from any existing results that have crossTFData
+    (PROBE.results || []).forEach(r => {
+      if (r.crossTFData && r.crossTFData.length > 0) {
+        const tf = r.tf || r.timeframe || '';
+        PROBE.crossTFCache[r.asset + '|' + r.direction + '|' + tf] = r.crossTFData;
+      }
+    });
+    // Enrich server signals from cache
+    serverSignals.forEach(enrichWithCache);
     // Only use server signals if no manual scan results exist, or merge them
     if (!PROBE.results || PROBE.results.length === 0) {
       PROBE.results = serverSignals;
       renderProbeResults(serverSignals, 'all');
     } else {
-      // Build lookup of browser results' crossTFData by asset+direction+tf
-      const browserCTF = {};
-      PROBE.results.forEach(r => {
-        if (r.crossTFData && r.crossTFData.length > 0) {
-          browserCTF[r.asset + '|' + r.direction + '|' + (r.tf || r.timeframe || '')] = r.crossTFData;
-        }
-      });
-      // Enrich server signals with crossTFData from browser scans
-      serverSignals.forEach(s => {
-        const key = s.asset + '|' + s.direction + '|' + (s.timeframe || s.tf || '');
-        if (browserCTF[key]) s.crossTFData = browserCTF[key];
-      });
       // Merge: add server signals not already in PROBE.results (by asset+direction+tf)
       const existing = new Set(PROBE.results.map(r => r.asset + '|' + r.direction + '|' + (r.tf || r.timeframe || '')));
       const newOnes = serverSignals.filter(s => !existing.has(s.asset + '|' + s.direction + '|' + (s.timeframe || s.tf || '')));
+      // Also re-enrich existing results from cache (in case they lost crossTFData)
+      PROBE.results.forEach(enrichWithCache);
       if (newOnes.length > 0) {
         PROBE.results = [...PROBE.results, ...newOnes].sort((a, b) => (b.prob || 0) - (a.prob || 0));
         renderProbeResults(PROBE.results, $('probeTimeframe')?.value || '15m');
@@ -25290,7 +25302,7 @@ renderProbeResults = function(results, tf) {
           </select>
         </div>
         <div style="margin-left:auto;display:flex;gap:6px">
-          <a href="https://blofin.com/trade/${r.asset}-USDT" target="_blank" rel="noopener" style="font-size:9px;padding:6px 14px;width:auto;margin:0;border-radius:5px;font-family:'Space Mono',monospace;font-weight:700;background:rgba(99,179,237,0.1);border:1px solid rgba(99,179,237,0.3);color:#63b3ed;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:4px">↗ BloFin</a>
+          <a href="https://blofin.com/futures/${r.asset}-USDT" target="_blank" rel="noopener" style="font-size:9px;padding:6px 14px;width:auto;margin:0;border-radius:5px;font-family:'Space Mono',monospace;font-weight:700;background:rgba(99,179,237,0.1);border:1px solid rgba(99,179,237,0.3);color:#63b3ed;cursor:pointer;text-decoration:none;display-inline-flex;align-items:center;gap:4px">↗ BloFin</a>
           <button onclick="logBestTrade(${idx})" id="btLogBtn_${idx}" style="font-size:9px;padding:6px 14px;width:auto;margin:0;border-radius:5px;font-family:'Space Mono',monospace;font-weight:700;background:rgba(245,196,0,0.12);border:1px solid rgba(245,196,0,0.35);color:#f5c400;cursor:pointer">${_loggedTradeIdxs.has(idx) ? '✓ Logged' : 'Log Trade'}</button>
           <button onclick="execFromBestTrades(${idx})" style="font-size:9px;padding:6px 14px;width:auto;margin:0;border-radius:5px;font-family:'Space Mono',monospace;font-weight:700;${execStyle}">⚡ Execute</button>
         </div>
