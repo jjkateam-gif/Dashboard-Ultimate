@@ -271,31 +271,25 @@ async function initDB() {
       app.get('/report/real-trades', async (req, res) => {
         try {
           const { pool: p } = require('./db');
-          const r = await p.query(`SELECT id,asset,direction,timeframe,probability,confidence,market_quality,
-            entry_price,stop_price,target_price,stop_pct,target_pct,rr_ratio,ev,pnl,outcome,regime,
-            entry_efficiency,scan_count,executed,data_source,engine_source,exit_reason,hours_open,
-            created_at,resolved_at,closed_at,entry_price_real,exit_price_real,blofin_pnl_usd,
-            mae_pct,mfe_pct,hours_to_resolution
+          const r = await p.query(`SELECT *,
+            CASE WHEN created_at<'2026-03-18' THEN 'pre_fix' ELSE 'post_fix' END as period
             FROM best_trades_log WHERE executed=true OR data_source IN ('blofin_only','signal_matched')
             ORDER BY created_at ASC`);
           res.json({ count: r.rows.length, trades: r.rows });
-        } catch(e) { res.status(500).json({error:e.message}); }
+        } catch(e) { res.status(500).json({error:e.message,stack:e.stack?.split('\n').slice(0,3)}); }
       });
       app.get('/report/trades-page', async (req, res) => {
         try {
           const { pool: p } = require('./db');
           const page = parseInt(req.query.page || 0);
           const limit = 200;
-          const r = await p.query(`SELECT id,asset,direction,timeframe,probability,confidence,market_quality,
-            entry_price,stop_price,target_price,stop_pct,target_pct,rr_ratio,ev,pnl,outcome,regime,
-            entry_efficiency,scan_count,executed,data_source,engine_source,exit_reason,hours_open,
-            created_at,resolved_at,closed_at,mae_pct,mfe_pct,hours_to_resolution,
+          const r = await p.query(`SELECT *,
             CASE WHEN created_at<'2026-03-18' THEN 'pre_fix' ELSE 'post_fix' END as period,
             CASE WHEN executed=true OR data_source IN ('blofin_only','signal_matched') THEN 'real_executed' ELSE 'paper_signal' END as trade_category
-            FROM best_trades_log ORDER BY created_at ASC LIMIT ${limit} OFFSET ${page*limit}`);
+            FROM best_trades_log ORDER BY created_at ASC LIMIT $1 OFFSET $2`, [limit, page*limit]);
           const countR = await p.query('SELECT COUNT(*) as cnt FROM best_trades_log');
           res.json({ page, totalRows: parseInt(countR.rows[0].cnt), pageSize: limit, trades: r.rows });
-        } catch(e) { res.status(500).json({error:e.message}); }
+        } catch(e) { res.status(500).json({error:e.message,stack:e.stack?.split('\n').slice(0,3)}); }
       });
       app.get('/report/indicator-sample', async (req, res) => {
         try {
