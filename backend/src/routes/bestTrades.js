@@ -408,4 +408,112 @@ router.get('/comparison', async (req, res) => {
   }
 });
 
+// ── CSV Export Download Routes ──────────────────────────────────
+
+function rowsToCsv(rows) {
+  if (!rows.length) return '';
+  const headers = Object.keys(rows[0]);
+  const lines = [headers.join(',')];
+  for (const row of rows) {
+    lines.push(headers.map(h => {
+      let val = row[h];
+      if (val === null || val === undefined) return '';
+      if (typeof val === 'object') val = JSON.stringify(val);
+      val = String(val);
+      return (val.includes(',') || val.includes('"') || val.includes('\n'))
+        ? `"${val.replace(/"/g, '""')}"` : val;
+    }).join(','));
+  }
+  return lines.join('\n');
+}
+
+// GET /best-trades/export/full — download FULL_TRADE_LOG as CSV
+router.get('/export/full', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT *,
+        CASE WHEN data_source = 'signal_matched' THEN 'REAL+SIGNAL'
+             WHEN data_source = 'blofin_only' THEN 'REAL_ONLY'
+             ELSE 'PAPER'
+        END as trade_type
+       FROM best_trades_log ORDER BY created_at DESC`
+    );
+    const today = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="FULL_TRADE_LOG_${today}.csv"`);
+    res.send(rowsToCsv(result.rows));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /best-trades/export/real — download REAL_TRADES_ONLY as CSV
+router.get('/export/real', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT *,
+        CASE WHEN data_source = 'signal_matched' THEN 'REAL+SIGNAL'
+             WHEN data_source = 'blofin_only' THEN 'REAL_ONLY'
+             ELSE 'PAPER'
+        END as trade_type
+       FROM best_trades_log
+       WHERE executed = true
+       ORDER BY created_at DESC`
+    );
+    const today = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="REAL_TRADES_ONLY_${today}.csv"`);
+    res.send(rowsToCsv(result.rows));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /best-trades/export/daily — download DAILY_SNAPSHOT (last 24h) as CSV
+router.get('/export/daily', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT *,
+        CASE WHEN data_source = 'signal_matched' THEN 'REAL+SIGNAL'
+             WHEN data_source = 'blofin_only' THEN 'REAL_ONLY'
+             ELSE 'PAPER'
+        END as trade_type
+       FROM best_trades_log
+       WHERE created_at >= NOW() - INTERVAL '24 hours'
+       ORDER BY created_at DESC`
+    );
+    const today = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="DAILY_SNAPSHOT_${today}.csv"`);
+    res.send(rowsToCsv(result.rows));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /best-trades/export/daterange — download trades within a date range
+// Usage: /best-trades/export/daterange?from=2026-03-18&to=2026-03-21
+router.get('/export/daterange', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    if (!from || !to) return res.status(400).json({ error: 'from and to query params required (YYYY-MM-DD)' });
+    const result = await pool.query(
+      `SELECT *,
+        CASE WHEN data_source = 'signal_matched' THEN 'REAL+SIGNAL'
+             WHEN data_source = 'blofin_only' THEN 'REAL_ONLY'
+             ELSE 'PAPER'
+        END as trade_type
+       FROM best_trades_log
+       WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day')
+       ORDER BY created_at DESC`,
+      [from, to]
+    );
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="TRADE_LOG_${from}_to_${to}.csv"`);
+    res.send(rowsToCsv(result.rows));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
