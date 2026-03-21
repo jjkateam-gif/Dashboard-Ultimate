@@ -16962,10 +16962,13 @@ async function runProbEngine() {
     }
   }
 
-  // Auto-trade hook
-  if ($('autoTradeEnabled')?.checked) {
-    processAutoTrades(results, tf);
-  }
+  // Auto-trade hook — DISABLED on client-side
+  // All auto-execution is handled server-side by bestTradesScanner._processAutoTrades()
+  // which has 38+ gates (dead zone, session penalty, scan count, BTC trend, etc.)
+  // Client-side execution was bypassing all server gates and firing market orders.
+  // if ($('autoTradeEnabled')?.checked) {
+  //   processAutoTrades(results, tf);
+  // }
 }
 
 // ── Render results ────────────────────────────────────────────
@@ -17567,6 +17570,11 @@ const AUTO_SCAN_INTERVALS = {
 
 function startAutoScanTimer() {
   stopAutoScanTimer(); // clear any existing timer
+
+  // Client-side auto-execution DISABLED — server-side bestTradesScanner handles all auto-trades
+  // Background scanning is no longer needed since the client no longer executes trades
+  console.log('[AutoScan] Client-side auto-execution disabled — server handles all auto-trades');
+  return;
 
   const autoTradeOn = $('autoTradeEnabled')?.checked ||
     JSON.parse(localStorage.getItem('dash_autoTrade') || '{}').on;
