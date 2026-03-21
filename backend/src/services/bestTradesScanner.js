@@ -2333,14 +2333,20 @@ class BestTradesScanner {
     }
     console.log(`[BestTrades] ${tf} auto-trade: ${qualifying.length} qualifying, creds unlocked for user ${userId}`);
 
-    // Count open positions
+    // Count open positions (global + per-asset)
     let openCount = 0;
+    const openByAsset = {};
     try {
       const posResult = await pool.query(
-        'SELECT COUNT(*) AS total FROM live_positions WHERE user_id=$1 AND closed_at IS NULL',
+        `SELECT UPPER(REPLACE(REPLACE(market, '-USDT', ''), 'USDT', '')) AS asset, COUNT(*) AS cnt
+         FROM live_positions WHERE user_id=$1 AND closed_at IS NULL
+         GROUP BY UPPER(REPLACE(REPLACE(market, '-USDT', ''), 'USDT', ''))`,
         [userId]
       );
-      openCount = parseInt(posResult.rows[0].total);
+      for (const row of posResult.rows) {
+        openByAsset[row.asset] = parseInt(row.cnt);
+        openCount += parseInt(row.cnt);
+      }
     } catch (e) {
       console.warn('[BestTrades] Open position count query failed:', e.message);
     }
@@ -2383,6 +2389,14 @@ class BestTradesScanner {
     const toTrade = qualifying.slice(0, slotsAvailable);
 
     for (const setup of toTrade) {
+      // P0 FIX: Max 1 open position per asset — prevents concentration risk (APT stacked 3 longs in Week 1)
+      const assetKey = setup.asset.toUpperCase();
+      const MAX_PER_ASSET = 1;
+      if ((openByAsset[assetKey] || 0) >= MAX_PER_ASSET) {
+        console.log(`[BestTrades] ${setup.asset} BLOCKED — already ${openByAsset[assetKey]} open position(s) (max ${MAX_PER_ASSET} per asset)`);
+        continue;
+      }
+
       // P6 #21: Minimum scan_count gate (scan_count 5+ = 60%+ WR, 7+ = 68-90% WR)
       if (pool) {
         try {
@@ -2395,27 +2409,25 @@ class BestTradesScanner {
             console.log(`[BestTrades] ${setup.asset} scan_count=${sc} < 5 — signal too fresh for auto-execute`);
             continue;
           }
+          // P0 FIX: Max scan_count gate — sc=11 had 0% WR in Week 1. Stale signals are harmful.
+          if (sc >= 10) {
+            console.log(`[BestTrades] ${setup.asset} scan_count=${sc} >= 10 — stale signal, blocking (0% WR at sc=11)`);
+            continue;
+          }
         } catch {}
       }
 
       // P6 #25: BTC trend alignment gate — block alt trades fighting BTC macro direction
+      // P0 FIX: Strengthened — plain bear/bull now BLOCKS (not just soft penalty). Week 1 APT longs fired in bear regime.
       const isBtcAsset = setup.asset?.toUpperCase().startsWith('BTC');
       if (!isBtcAsset && setup.btcTrend) {
-        if (setup.btcTrend === 'strong_bull' && setup.direction === 'short') {
-          console.log(`[BestTrades] ${setup.asset} SHORT blocked — BTC trend is strong_bull, don't short alts into BTC rally`);
+        if ((setup.btcTrend === 'strong_bull' || setup.btcTrend === 'bull') && setup.direction === 'short') {
+          console.log(`[BestTrades] ${setup.asset} SHORT blocked — BTC trend is ${setup.btcTrend}, don't short alts into BTC rally`);
           continue;
         }
-        if (setup.btcTrend === 'strong_bear' && setup.direction === 'long') {
-          console.log(`[BestTrades] ${setup.asset} LONG blocked — BTC trend is strong_bear, don't long alts into BTC dump`);
+        if ((setup.btcTrend === 'strong_bear' || setup.btcTrend === 'bear') && setup.direction === 'long') {
+          console.log(`[BestTrades] ${setup.asset} LONG blocked — BTC trend is ${setup.btcTrend}, don't long alts into BTC dump`);
           continue;
-        }
-        // Soft penalty for mild misalignment
-        if (setup.btcTrend === 'bull' && setup.direction === 'short') {
-          setup.prob = Math.max(30, setup.prob - 5);
-          console.log(`[BestTrades] ${setup.asset} SHORT -5pp penalty — BTC trend is bull`);
-        } else if (setup.btcTrend === 'bear' && setup.direction === 'long') {
-          setup.prob = Math.max(30, setup.prob - 5);
-          console.log(`[BestTrades] ${setup.asset} LONG -5pp penalty — BTC trend is bear`);
         }
       }
 
@@ -2426,6 +2438,17 @@ class BestTradesScanner {
       } else if (setup.derivData?.fundingRateTrend === 'falling' && setup.direction === 'long') {
         // Falling funding = crowd is short = contrarian long edge → +5pp bonus
         setup.prob = Math.min(85, setup.prob + 5);
+      }
+
+      // P0 FIX: Final probability re-check after all execution-time adjustments
+      // Week 1 APT fired at 49-59% through boosters. This catches any signal that
+      // got through qualifying but dropped below threshold after BTC/funding adjustments.
+      const finalMinProb = setup.direction === 'long' ? 65 : 60;
+      const finalAssetOverride = (this.settings.assetOverrides || {})[setup.asset.toUpperCase()] || {};
+      const finalEffectiveMin = Math.max(finalAssetOverride.minProb || minProb, finalMinProb);
+      if (setup.prob < finalEffectiveMin) {
+        console.log(`[BestTrades] ${setup.asset} BLOCKED at final prob check — ${setup.prob}% < ${finalEffectiveMin}% after all adjustments`);
+        continue;
       }
 
       // Position sizing: fixed $ or % of total wallet balance
@@ -2470,6 +2493,7 @@ class BestTradesScanner {
         currentExposureUsd += posSize; // track cumulative for heat
         availableBalance -= posSize;
         openCount++;
+        openByAsset[assetKey] = (openByAsset[assetKey] || 0) + 1; // P0 FIX: Update per-asset count
         // Mark as recently traded to prevent duplicate trades from other TFs
         this.recentTrades.add(`${setup.asset}|${setup.direction}|${Date.now()}`);
       } catch (e) {
@@ -2784,6 +2808,12 @@ class BestTradesScanner {
         this.settings.leverage = row.leverage || 1;
         this.settings.tfRules = row.tf_rules || {};
         this.settings.bannedAssets = row.banned_assets || [];
+        // P0 FIX: Ensure APT is always shadow-banned (9.1% real WR Week 1, triple gate failure)
+        const bannedSet = new Set((this.settings.bannedAssets || []).map(a => a.toUpperCase()));
+        if (!bannedSet.has('APT')) {
+          this.settings.bannedAssets.push('APT');
+          console.log('[BestTrades] APT auto-added to banned list (9.1% real WR, Week 1 audit)');
+        }
         this.settings.assetOverrides = row.asset_overrides || { 'ETH': { minProb: 72 } };
         console.log(`[BestTrades] Settings loaded from DB: enabled=${this.settings.enabled}, tf=${this.settings.timeframe}, banned=${(this.settings.bannedAssets || []).length} assets, tfRules=${JSON.stringify(this.settings.tfRules)}, assetOverrides=${JSON.stringify(this.settings.assetOverrides)}`);
       }
@@ -3488,6 +3518,7 @@ class BestTradesScanner {
       }
 
       let matched = 0, unmatched = 0, updated = 0;
+      const alreadyMatchedTradeIds = new Set(); // P0 FIX: Prevent same DB row being matched by multiple BloFin orders
 
       for (const order of orders) {
         // Parse BloFin order data
@@ -3503,6 +3534,15 @@ class BestTradesScanner {
 
         if (!asset || !orderId) continue;
 
+        // P0 FIX: Skip orders we've already reconciled in a previous cycle (order_id already exists in DB)
+        const alreadyReconciled = await pool.query(
+          `SELECT id FROM best_trades_log WHERE order_id = $1 AND data_source = 'signal_matched' LIMIT 1`,
+          [orderId]
+        );
+        if (alreadyReconciled.rows.length > 0) {
+          continue; // Already reconciled — skip entirely to prevent duplicate processing
+        }
+
         // Try to match by order_id first (most reliable)
         let matchResult = await pool.query(
           `SELECT id FROM best_trades_log WHERE order_id = $1 LIMIT 1`,
@@ -3515,10 +3555,11 @@ class BestTradesScanner {
           matchResult = await pool.query(
             `SELECT id FROM best_trades_log
              WHERE asset = $1 AND direction = $2 AND executed = true
+             AND id NOT IN (SELECT unnest($4::int[]))
              AND ABS(EXTRACT(EPOCH FROM (created_at - $3::timestamp))) < 600
              ORDER BY ABS(EXTRACT(EPOCH FROM (created_at - $3::timestamp))) ASC
              LIMIT 1`,
-            [asset, direction, orderTime]
+            [asset, direction, orderTime, Array.from(alreadyMatchedTradeIds)]
           );
         }
 
@@ -3528,10 +3569,11 @@ class BestTradesScanner {
           matchResult = await pool.query(
             `SELECT id FROM best_trades_log
              WHERE asset = $1 AND direction = $2 AND outcome IS NULL
+             AND id NOT IN (SELECT unnest($4::int[]))
              AND ABS(EXTRACT(EPOCH FROM (created_at - $3::timestamp))) < 1800
              ORDER BY ABS(EXTRACT(EPOCH FROM (created_at - $3::timestamp))) ASC
              LIMIT 1`,
-            [asset, direction, orderTime]
+            [asset, direction, orderTime, Array.from(alreadyMatchedTradeIds)]
           );
         }
 
@@ -3584,7 +3626,7 @@ class BestTradesScanner {
                 order_id = COALESCE(order_id, $2),
                 entry_price_real = COALESCE(entry_price_real, $3),
                 trading_fee_real = COALESCE(trading_fee_real, $4),
-                blofin_pnl_usd = $5,
+                blofin_pnl_usd = COALESCE(blofin_pnl_usd, $5),
                 data_source = 'signal_matched',
                 engine_source = COALESCE(engine_source, 'best_trades_auto'),
                 exit_reason = COALESCE(exit_reason, $6),
@@ -3599,6 +3641,7 @@ class BestTradesScanner {
               [tradeId, orderId, entryPriceReal, Math.abs(fee), pnl, exitReason, closedAt]
             );
             updated++;
+            alreadyMatchedTradeIds.add(tradeId); // P0 FIX: Mark as matched so no other order matches this row
           } catch (e) {
             console.warn(`[BestTrades] Reconciliation update failed for trade #${tradeId}:`, e.message);
           }
