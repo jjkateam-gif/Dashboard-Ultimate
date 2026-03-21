@@ -16656,8 +16656,11 @@ async function runProbEngine() {
   const ctfLabel = hasHigherTFs ? ` + cross-TF (${CROSS_TF_MAP[tf].join(', ')})` : '';
   if (setupsEl) setupsEl.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace">
     <div style="font-size:24px;margin-bottom:8px;animation:livePulse 1s infinite">⚡</div>
-    Fetching live data for ${PROBE_ASSETS.length} assets on ${tf}${ctfLabel}${leverage > 1 ? ' · ' + leverage + '× leverage' : ''}...<br>
-    <span style="font-size:8px;opacity:0.6">Running 7 indicators per asset${hasHigherTFs ? ' + higher-TF trend analysis' : ''}, computing ${leverage > 1 ? 'leverage-adjusted ' : ''}confluence...</span>
+    <div id="scanProgressLabel">Fetching live data for ${PROBE_ASSETS.length} assets on ${tf}${ctfLabel}${leverage > 1 ? ' · ' + leverage + '× leverage' : ''}...</div>
+    <div id="scanProgressBar" style="width:200px;height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;margin:10px auto 6px">
+      <div id="scanProgressFill" style="width:0%;height:100%;background:linear-gradient(90deg,#00f5a0,#a78bfa);border-radius:2px;transition:width 0.3s ease"></div>
+    </div>
+    <div id="scanProgressDetail" style="font-size:8px;opacity:0.6">Running 7 indicators per asset${hasHigherTFs ? ' + higher-TF trend analysis' : ''}, computing ${leverage > 1 ? 'leverage-adjusted ' : ''}confluence...</div>
   </div>`;
 
   const results = [];
@@ -16673,7 +16676,17 @@ async function runProbEngine() {
     }
   } catch (e) { console.warn('[Probe] BTC regime fetch failed:', e.message); }
 
+  let _scanIdx = 0;
   for (const asset of PROBE_ASSETS) {
+    _scanIdx++;
+    // Update progress indicator
+    const pctDone = Math.round((_scanIdx / PROBE_ASSETS.length) * 100);
+    const progLabel = $('scanProgressLabel');
+    const progFill = $('scanProgressFill');
+    const progDetail = $('scanProgressDetail');
+    if (progLabel) progLabel.textContent = `Scanning ${asset.label} (${_scanIdx}/${PROBE_ASSETS.length})...`;
+    if (progFill) progFill.style.width = pctDone + '%';
+    if (progDetail) progDetail.textContent = `${pctDone}% complete · sorting by highest probability when done`;
     try {
       // Fetch base TF and higher TFs in parallel
       const [d, crossTFData] = await Promise.all([
@@ -16883,6 +16896,16 @@ async function runProbEngine() {
       r._entryPenalty = penalty;
     }
   }
+
+  // Show sorting transition
+  const _sortingEl = $('probeSetups');
+  if (_sortingEl) _sortingEl.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;font-size:9px;color:#a78bfa;font-family:'Space Mono',monospace">
+    <div style="font-size:20px;margin-bottom:8px">📊</div>
+    Sorting ${results.length} signals by highest probability...<br>
+    <div style="width:200px;height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;margin:10px auto 0">
+      <div style="width:100%;height:100%;background:linear-gradient(90deg,#00f5a0,#a78bfa);border-radius:2px;animation:livePulse 0.6s infinite"></div>
+    </div>
+  </div>`;
 
   // Sort by probability descending
   results.sort((a, b) => b.prob - a.prob);
@@ -19193,7 +19216,8 @@ async function processAutoTrades(results, tf) {
     if (r.prob < minProb) return false;
     if (r.marketQuality === 'No-Trade') return false;
     if (r.entryEfficiency === 'Chasing') { rejected.push(r.asset + ': Chasing entry'); return false; }
-    if (parseFloat(r.ev || 0) <= 0) { rejected.push(r.asset + ': Negative EV'); return false; }
+    const _evVal = r.ev != null ? parseFloat(r.ev) : null;
+    if (_evVal !== null && _evVal < 0) { rejected.push(r.asset + ': Negative EV (' + _evVal.toFixed(2) + ')'); return false; }
     return true;
   });
   if (rejected.length > 0) {
@@ -25200,13 +25224,21 @@ renderProbeResults = function(results, tf) {
   // Classify each result
   const classified = results.map((r, idx) => {
     const scanCount = r.scanCount || r.scan_count || 1;
-    const isBlocked = r.marketQuality === 'No-Trade' || r.entryEfficiency === 'Chasing' || parseFloat(r.ev||0) <= 0 || r.prob < 50;
+    // Determine block reason(s) for transparency
+    const blockReasons = [];
+    if (r.marketQuality === 'No-Trade') blockReasons.push('No-Trade zone');
+    if (r.entryEfficiency === 'Chasing') blockReasons.push('Chasing entry');
+    // Only block on EV if it's explicitly negative (not 0 or undefined — server signals may lack EV)
+    const evVal = r.ev != null ? parseFloat(r.ev) : null;
+    if (evVal !== null && evVal < 0) blockReasons.push('Negative EV');
+    if (r.prob < 50) blockReasons.push('Prob < 50%');
+    const isBlocked = blockReasons.length > 0;
     const isBuilding = scanCount >= 3 && scanCount < 5 && !isBlocked;
     const isQualifying = scanCount >= 5 && r.prob >= minProb && !isBlocked && r.marketQuality !== 'No-Trade';
     let status = 'blocked';
     if (isQualifying) status = 'qualifying';
     else if (isBuilding) status = 'building';
-    return { ...r, idx, scanCount, status };
+    return { ...r, idx, scanCount, status, blockReasons };
   });
 
   // Apply filters
@@ -25294,12 +25326,13 @@ renderProbeResults = function(results, tf) {
     // Quality badge
     const mqColor = r.marketQuality === 'A' ? '#00f5a0' : r.marketQuality === 'B+' ? '#a5d6a7' : r.marketQuality === 'B' ? '#f5c400' : '#ff4d6d';
 
-    // Status label
+    // Status label — show block reason if blocked
+    const blockReasonStr = r.blockReasons && r.blockReasons.length > 0 ? r.blockReasons.join(', ') : '';
     const statusLabel = r.status === 'qualifying'
       ? `<span style="color:#00f5a0;font-weight:700">Qualifying ↗</span>`
       : r.status === 'building'
       ? `<span style="color:#f5c400;font-weight:700">Building (${5 - r.scanCount} more)</span>`
-      : `<span style="color:#ff4d6d;font-weight:700">Blocked</span>`;
+      : `<span style="color:#ff4d6d;font-weight:700" title="${blockReasonStr}">Blocked</span>${blockReasonStr ? '<br><span style="font-size:7px;color:#ff4d6d;opacity:0.7">' + blockReasonStr + '</span>' : ''}`;
 
     // ── COMPACT ROW ──
     let html = `<div class="sq-row" data-idx="${idx}" style="border-left:3px solid ${borderLeft};background:${isExpanded ? 'rgba(255,255,255,0.03)' : 'transparent'};transition:background 0.15s">`;
