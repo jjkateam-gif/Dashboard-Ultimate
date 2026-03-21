@@ -482,6 +482,16 @@ router.get('/stream', (req, res) => {
 
   req.on('close', () => {
     clearInterval(keepAlive);
+    // Clean up SSE client from blofinWs connection
+    if (typeof blofinWs.removeSseClient === 'function') {
+      blofinWs.removeSseClient(req.user.id, res);
+    } else {
+      // Inline cleanup: remove res from the private connection's sseClients set
+      const entry = blofinWs.privateConnections && blofinWs.privateConnections.get(req.user.id);
+      if (entry && entry.sseClients) {
+        entry.sseClients.delete(res);
+      }
+    }
   });
 });
 

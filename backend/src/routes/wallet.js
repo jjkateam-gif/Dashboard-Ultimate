@@ -24,10 +24,10 @@ router.post('/', async (req, res) => {
   try {
     const { publicKey, encryptedData, backedUp } = req.body;
     if (!encryptedData) return res.status(400).json({ error: 'Encrypted data required' });
-    // Upsert: delete old wallet, insert new
-    await pool.query('DELETE FROM wallets WHERE user_id=$1', [req.user.id]);
+    // Upsert: single atomic operation to avoid DELETE+INSERT race condition
     await pool.query(
-      'INSERT INTO wallets (user_id, public_key, encrypted_data, backed_up) VALUES ($1, $2, $3, $4)',
+      `INSERT INTO wallets (user_id, public_key, encrypted_data, backed_up) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id) DO UPDATE SET public_key = $2, encrypted_data = $3, backed_up = $4`,
       [req.user.id, publicKey || null, encryptedData, backedUp || false]
     );
     // Track event

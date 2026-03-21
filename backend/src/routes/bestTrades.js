@@ -22,7 +22,12 @@ router.get('/status', (req, res) => {
 
 // GET /best-trades/settings — current settings
 router.get('/settings', async (req, res) => {
-  res.json(await scanner.getSettings());
+  try {
+    res.json(await scanner.getSettings());
+  } catch (err) {
+    console.error('[BestTrades] Settings fetch error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /best-trades/settings — update settings (syncs from frontend)
@@ -54,11 +59,7 @@ router.post('/settings', async (req, res) => {
 // POST /best-trades/scan — trigger manual scan
 router.post('/scan', async (req, res) => {
   try {
-    // Temporarily enable for one scan if not enabled
-    const wasEnabled = scanner.settings.enabled;
-    if (!wasEnabled) scanner.settings.enabled = true;
-    const results = await scanner.scan();
-    if (!wasEnabled) scanner.settings.enabled = false;
+    const results = await scanner.scan({ force: true });
     res.json({ success: true, results: results.slice(0, 20), total: results.length });
   } catch (err) {
     console.error('[BestTrades] Manual scan error:', err);
@@ -113,8 +114,13 @@ router.get('/stats', async (req, res) => {
 
 // GET /best-trades/banned — get banned assets list
 router.get('/banned', async (req, res) => {
-  const settings = await scanner.getSettings();
-  res.json({ bannedAssets: settings.bannedAssets || [] });
+  try {
+    const settings = await scanner.getSettings();
+    res.json({ bannedAssets: settings.bannedAssets || [] });
+  } catch (err) {
+    console.error('[BestTrades] Banned fetch error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /best-trades/banned — update banned assets list

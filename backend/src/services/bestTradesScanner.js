@@ -2086,8 +2086,8 @@ class BestTradesScanner {
   }
 
   // ── Legacy single-TF scan (for manual trigger / API compat) ──
-  async scan() {
-    if (!this.settings.enabled) return [];
+  async scan(options = {}) {
+    if (!options.force && !this.settings.enabled) return [];
     // Scan the user's preferred TF first, then all others
     const tf = this.settings.timeframe || '15m';
     await this._scanTimeframe(tf);
@@ -2564,7 +2564,13 @@ class BestTradesScanner {
       return;
     }
     const rawContracts = posSize / (markPrice * contractValue);
-    const contractSize = Math.max(minSize, Math.round(rawContracts / lotSize) * lotSize);
+    const roundedContracts = Math.round(rawContracts / lotSize) * lotSize;
+    if (roundedContracts < minSize) {
+      const minNotional = minSize * markPrice * contractValue;
+      console.warn(`[BestTrades] WARNING: ${setup.asset} position size $${posSize} requires minimum ${minSize} contracts ($${minNotional.toFixed(2)}). Skipping — exceeds intended size.`);
+      return;
+    }
+    const contractSize = roundedContracts;
 
     // ── LIMIT ORDER EXECUTION WITH 30s FILL WINDOW ──
     // Place limit order at signal price to eliminate slippage (avg 1.49% on market orders).

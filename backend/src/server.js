@@ -1,4 +1,10 @@
 require('dotenv').config();
+
+if (!process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is required');
+  process.exit(1);
+}
+
 const express = require('express');
 
 // Catch ANY crash and log it
@@ -224,83 +230,6 @@ async function initDB() {
           res.status(500).json({ error: e.message, stack: e.stack?.split('\n').slice(0, 3) });
         }
       });
-      // ── TEMPORARY: Report endpoints for weekly audit (will remove after) ──
-      app.get('/report/summary', async (req, res) => {
-        try {
-          const { pool: p } = require('./db');
-          const [daily, assets, tf, scanDist, pending, cols] = await Promise.all([
-            p.query(`SELECT DATE(created_at) as date, COUNT(*) as total,
-              COUNT(*) FILTER (WHERE outcome IS NOT NULL) as resolved,
-              COUNT(*) FILTER (WHERE outcome='win') as wins, COUNT(*) FILTER (WHERE outcome='loss') as losses,
-              ROUND(100.0*COUNT(*) FILTER (WHERE outcome='win')/NULLIF(COUNT(*) FILTER (WHERE outcome IS NOT NULL),0),1) as wr_pct,
-              ROUND(AVG(CASE WHEN pnl IS NOT NULL THEN pnl END)::numeric,4) as avg_pnl,
-              COUNT(*) FILTER (WHERE executed=true OR data_source IN ('blofin_only','signal_matched')) as real_count,
-              COUNT(*) FILTER (WHERE (executed=true OR data_source IN ('blofin_only','signal_matched')) AND outcome='win') as real_wins,
-              COUNT(*) FILTER (WHERE (executed=true OR data_source IN ('blofin_only','signal_matched')) AND outcome='loss') as real_losses,
-              ROUND(AVG(CASE WHEN (executed=true OR data_source IN ('blofin_only','signal_matched')) AND pnl IS NOT NULL THEN pnl END)::numeric,4) as real_avg_pnl
-              FROM best_trades_log GROUP BY DATE(created_at) ORDER BY date`),
-            p.query(`SELECT asset,
-              COUNT(*) FILTER (WHERE created_at<'2026-03-18' AND outcome IS NOT NULL) as pre_resolved,
-              COUNT(*) FILTER (WHERE created_at<'2026-03-18' AND outcome='win') as pre_wins,
-              ROUND(AVG(CASE WHEN created_at<'2026-03-18' AND pnl IS NOT NULL THEN pnl END)::numeric,4) as pre_avg_pnl,
-              COUNT(*) FILTER (WHERE created_at>='2026-03-18' AND outcome IS NOT NULL) as post_resolved,
-              COUNT(*) FILTER (WHERE created_at>='2026-03-18' AND outcome='win') as post_wins,
-              ROUND(AVG(CASE WHEN created_at>='2026-03-18' AND pnl IS NOT NULL THEN pnl END)::numeric,4) as post_avg_pnl,
-              COUNT(*) FILTER (WHERE executed=true OR data_source IN ('blofin_only','signal_matched')) as real_count,
-              COUNT(*) FILTER (WHERE (executed=true OR data_source IN ('blofin_only','signal_matched')) AND outcome='win') as real_wins,
-              ROUND(AVG(CASE WHEN (executed=true OR data_source IN ('blofin_only','signal_matched')) AND pnl IS NOT NULL THEN pnl END)::numeric,4) as real_avg_pnl,
-              COUNT(*) as total FROM best_trades_log GROUP BY asset ORDER BY total DESC`),
-            p.query(`SELECT timeframe, COUNT(*) as total, COUNT(*) FILTER (WHERE outcome='win') as wins,
-              COUNT(*) FILTER (WHERE outcome='loss') as losses,
-              ROUND(100.0*COUNT(*) FILTER (WHERE outcome='win')/NULLIF(COUNT(*) FILTER (WHERE outcome IS NOT NULL),0),1) as wr,
-              ROUND(AVG(CASE WHEN pnl IS NOT NULL THEN pnl END)::numeric,4) as avg_pnl
-              FROM best_trades_log GROUP BY timeframe ORDER BY total DESC`),
-            p.query(`SELECT scan_count, COUNT(*) as cnt, COUNT(*) FILTER (WHERE outcome='win') as wins,
-              COUNT(*) FILTER (WHERE outcome IS NOT NULL) as resolved,
-              ROUND(100.0*COUNT(*) FILTER (WHERE outcome='win')/NULLIF(COUNT(*) FILTER (WHERE outcome IS NOT NULL),0),1) as wr,
-              ROUND(AVG(CASE WHEN pnl IS NOT NULL THEN pnl END)::numeric,4) as avg_pnl
-              FROM best_trades_log GROUP BY scan_count ORDER BY scan_count`),
-            p.query(`SELECT * FROM best_trades_log WHERE outcome IS NULL ORDER BY created_at DESC`),
-            p.query("SELECT column_name,data_type FROM information_schema.columns WHERE table_name='best_trades_log' ORDER BY ordinal_position")
-          ]);
-          res.json({ daily: daily.rows, assets: assets.rows, tf: tf.rows, scanDist: scanDist.rows,
-            pending: pending.rows, columns: cols.rows,
-            settings: bestTradesScanner.settings, lastScanTimes: bestTradesScanner.lastScanTimeByTF || {} });
-        } catch(e) { res.status(500).json({error:e.message}); }
-      });
-      app.get('/report/real-trades', async (req, res) => {
-        try {
-          const { pool: p } = require('./db');
-          const r = await p.query(`SELECT *,
-            CASE WHEN created_at<'2026-03-18' THEN 'pre_fix' ELSE 'post_fix' END as period
-            FROM best_trades_log WHERE executed=true OR data_source IN ('blofin_only','signal_matched')
-            ORDER BY created_at ASC`);
-          res.json({ count: r.rows.length, trades: r.rows });
-        } catch(e) { res.status(500).json({error:e.message,stack:e.stack?.split('\n').slice(0,3)}); }
-      });
-      app.get('/report/trades-page', async (req, res) => {
-        try {
-          const { pool: p } = require('./db');
-          const page = parseInt(req.query.page || 0);
-          const limit = 200;
-          const r = await p.query(`SELECT *,
-            CASE WHEN created_at<'2026-03-18' THEN 'pre_fix' ELSE 'post_fix' END as period,
-            CASE WHEN executed=true OR data_source IN ('blofin_only','signal_matched') THEN 'real_executed' ELSE 'paper_signal' END as trade_category
-            FROM best_trades_log ORDER BY created_at ASC LIMIT $1 OFFSET $2`, [limit, page*limit]);
-          const countR = await p.query('SELECT COUNT(*) as cnt FROM best_trades_log');
-          res.json({ page, totalRows: parseInt(countR.rows[0].cnt), pageSize: limit, trades: r.rows });
-        } catch(e) { res.status(500).json({error:e.message,stack:e.stack?.split('\n').slice(0,3)}); }
-      });
-      app.get('/report/indicator-sample', async (req, res) => {
-        try {
-          const { pool: p } = require('./db');
-          const r = await p.query(`SELECT id,asset,direction,timeframe,probability,created_at,signal_snapshot
-            FROM best_trades_log WHERE signal_snapshot IS NOT NULL AND signal_snapshot::text NOT IN ('{}','null','')
-            ORDER BY created_at DESC LIMIT 10`);
-          res.json({ samples: r.rows });
-        } catch(e) { res.status(500).json({error:e.message}); }
-      });
-
     } catch (btErr) {
       console.error('Best Trades scanner init error (core routes still working):', btErr.message);
     }

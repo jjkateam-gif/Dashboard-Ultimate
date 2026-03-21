@@ -21,7 +21,7 @@ function loginRateLimit(req, res, next) {
   if (recent.length >= MAX_ATTEMPTS) {
     return res.status(429).json({ error: 'Too many login attempts. Try again in 15 minutes.' });
   }
-  recent.push(now);
+  // Don't increment here — only increment on failed login (see login handler)
   loginAttempts.set(ip, recent);
   // Clean up old entries periodically
   if (loginAttempts.size > 1000) {
@@ -30,6 +30,13 @@ function loginRateLimit(req, res, next) {
     }
   }
   next();
+}
+
+function recordFailedLogin(req) {
+  const ip = req.ip || req.connection.remoteAddress;
+  const attempts = loginAttempts.get(ip) || [];
+  attempts.push(Date.now());
+  loginAttempts.set(ip, attempts);
 }
 
 // POST /auth/login
@@ -41,11 +48,13 @@ router.post('/login', loginRateLimit, async (req, res) => {
     }
     const result = await pool.query('SELECT * FROM users WHERE username=$1', [username]);
     if (result.rows.length === 0) {
+      recordFailedLogin(req);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     const user = result.rows[0];
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
+      recordFailedLogin(req);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     // Create JWT
