@@ -14453,6 +14453,7 @@ function resolveScanLogEntries() { /* Server handles this */ }
 // Cached server data for client-side filtering
 window._serverStats = null;
 window._serverHistory = null;
+if (!window._lastAvailableBalance) window._lastAvailableBalance = 100;
 
 // ── Market Sub-Tab State & Helpers ────────────────────────────
 window._activeMarketTab = 'crypto';
@@ -24620,8 +24621,20 @@ function toggleEnginePause() {
   const btn = $('enginePauseBtn');
   const enableEl = $('autoTradeEnabled');
   if (enableEl) { enableEl.checked = !enableEl.checked; confirmAutoTradeSettings(); }
-  if (btn) btn.textContent = enableEl?.checked ? 'Pause' : 'Resume';
+  const isPaused = !enableEl?.checked;
+  if (btn) btn.textContent = isPaused ? 'Resume' : 'Pause';
+  localStorage.setItem('enginePaused', isPaused ? '1' : '0');
 }
+// Restore pause button state on load/tab switch
+document.addEventListener('DOMContentLoaded', function restorePauseState() {
+  const saved = localStorage.getItem('enginePaused');
+  if (saved === '1') {
+    const btn = $('enginePauseBtn');
+    if (btn) btn.textContent = 'Resume';
+    const enableEl = $('autoTradeEnabled');
+    if (enableEl && enableEl.checked) { enableEl.checked = false; }
+  }
+});
 
 // ── Preset Filters ──
 function sqApplyPreset(name) {
@@ -24662,12 +24675,17 @@ async function loadDailyBriefing() {
   if (tsEl) tsEl.textContent = new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' }) + ' · ' + new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) + ' AEST';
 
   try {
-    // Fetch all data in parallel
+    // Fetch all data in parallel with 8s timeout per request
+    function fetchWithTimeout(url, opts = {}, timeoutMs = 8000) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(timer));
+    }
     const [statsResp, histResp, fngResp, globalResp] = await Promise.all([
-      fetch(backend + '/best-trades/stats', { headers: { 'Authorization': 'Bearer ' + token } }).then(r => r.json()).catch(() => ({})),
-      fetch(backend + '/best-trades/history-all?outcome=all', { headers: { 'Authorization': 'Bearer ' + token } }).then(r => r.json()).catch(() => ({ history: [] })),
-      fetch('https://api.alternative.me/fng/?limit=2&format=json').then(r => r.json()).catch(() => ({ data: [{ value: '?', value_classification: 'unknown' }] })),
-      fetch('https://api.coingecko.com/api/v3/global').then(r => r.json()).catch(() => ({ data: { market_cap_percentage: { btc: '?' } } })),
+      fetchWithTimeout(backend + '/best-trades/stats', { headers: { 'Authorization': 'Bearer ' + token } }).then(r => r.json()).catch(() => ({})),
+      fetchWithTimeout(backend + '/best-trades/history-all?outcome=all', { headers: { 'Authorization': 'Bearer ' + token } }).then(r => r.json()).catch(() => ({ history: [] })),
+      fetchWithTimeout('https://api.alternative.me/fng/?limit=2&format=json').then(r => r.json()).catch(() => ({ data: [{ value: '?', value_classification: 'unknown' }] })),
+      fetchWithTimeout('https://api.coingecko.com/api/v3/global').then(r => r.json()).catch(() => ({ data: { market_cap_percentage: { btc: '?' } } })),
     ]);
 
     const history = histResp.history || [];
@@ -24754,10 +24772,14 @@ async function loadDailyBriefing() {
     const latestWithBtc = history.find(t => t.signal_snapshot);
     let btc1d = 'Unknown', btc4h = 'Unknown', btcRsi = '';
     if (latestWithBtc?.signal_snapshot) {
-      const snap = typeof latestWithBtc.signal_snapshot === 'string' ? JSON.parse(latestWithBtc.signal_snapshot) : latestWithBtc.signal_snapshot;
-      btc1d = snap.btc_ema_trend_1h === 'bullish' ? 'Bull' : snap.btc_ema_trend_1h === 'bearish' ? 'Bear' : 'Ranging';
-      btc4h = snap.btc_ema_trend_4h === 'bullish' ? 'Bull' : snap.btc_ema_trend_4h === 'bearish' ? 'Bear' : 'Ranging';
-      if (snap.btc_rsi_1h) btcRsi = ' · RSI ' + Math.round(snap.btc_rsi_1h);
+      try {
+        const snap = typeof latestWithBtc.signal_snapshot === 'string' ? JSON.parse(latestWithBtc.signal_snapshot) : latestWithBtc.signal_snapshot;
+        btc1d = snap.btc_ema_trend_1h === 'bullish' ? 'Bull' : snap.btc_ema_trend_1h === 'bearish' ? 'Bear' : 'Ranging';
+        btc4h = snap.btc_ema_trend_4h === 'bullish' ? 'Bull' : snap.btc_ema_trend_4h === 'bearish' ? 'Bear' : 'Ranging';
+        if (snap.btc_rsi_1h) btcRsi = ' · RSI ' + Math.round(snap.btc_rsi_1h);
+      } catch (e) {
+        console.warn('Failed to parse BTC regime snapshot:', e);
+      }
     }
     const h = new Date().getUTCHours();
     const session = h >= 0 && h < 8 ? 'Asian' : h >= 8 && h < 13 ? 'London' : h >= 13 && h < 17 ? 'NY/London' : h >= 17 && h < 22 ? 'NY' : 'Late';
@@ -24770,6 +24792,8 @@ async function loadDailyBriefing() {
     const fngColor = fngVal <= 25 ? '#ff4d6d' : fngVal <= 45 ? '#ff8c69' : fngVal <= 55 ? '#f5c400' : fngVal <= 75 ? '#a5d6a7' : '#00f5a0';
     const btc1dColor = btc1d === 'Bull' ? '#00f5a0' : btc1d === 'Bear' ? '#ff4d6d' : '#f5c400';
     const btc4hColor = btc4h === 'Bull' ? '#00f5a0' : btc4h === 'Bear' ? '#ff4d6d' : '#f5c400';
+    const mktStructure = btc4h === 'Bull' ? 'Uptrend' : btc4h === 'Bear' ? 'Downtrend' : 'Ranging';
+    const mktStructureColor = mktStructure === 'Uptrend' ? '#00f5a0' : mktStructure === 'Downtrend' ? '#ff4d6d' : '#f5c400';
 
     const mktEl = $('briefMarket');
     if (mktEl) {
@@ -24794,7 +24818,7 @@ async function loadDailyBriefing() {
           </div>
           <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.05);border-radius:6px;padding:8px">
             <div style="font-size:8px;color:#5a7a68">MARKET STRUCTURE</div>
-            <div style="font-size:14px;font-weight:800;color:#f5c400;margin-top:2px">Ranging</div>
+            <div style="font-size:14px;font-weight:800;color:${mktStructureColor};margin-top:2px">${mktStructure}</div>
             <div style="font-size:7px;color:#5a7a68">${blockedCount > 0 ? blockedCount + ' of 20 assets blocked' : 'Gate open'}</div>
           </div>
         </div>
@@ -24997,7 +25021,7 @@ renderProbeResults = function(results, tf) {
     }
     if (f.session !== 'all') {
       const h = new Date().getUTCHours();
-      if (f.session === 'asian' && (h < 0 || h >= 8)) return false;
+      if (f.session === 'asian' && h >= 8) return false;
       if (f.session === 'london' && (h < 8 || h >= 13)) return false;
       if (f.session === 'ny' && (h < 17 || h >= 22)) return false;
     }
@@ -25044,20 +25068,26 @@ renderProbeResults = function(results, tf) {
 
     // Indicator pills for compact row
     const indicators = ['MACD', 'Ichimoku', 'EMA', 'Volume', 'RSI', 'BB', 'StochRSI'];
+    const isShort = r.direction === 'short';
     const indPills = indicators.map(ind => {
       const sig = r.signals?.[ind === 'Ichimoku' ? 'Ichimoku' : ind === 'BB' ? 'BB' : ind];
       if (!sig) return '';
       const isBull = sig.bull;
       const isBear = sig.bear;
-      const col = isBull ? '#00f5a0' : isBear ? '#ff4d6d' : '#5a7a68';
-      const arrow = isBull ? '↑' : isBear ? '↓' : '·';
+      // Highlight the signal that matches the trade direction
+      const isActive = isShort ? isBear : isBull;
+      const isOpposite = isShort ? isBull : isBear;
+      const col = isActive ? (isShort ? '#ff4d6d' : '#00f5a0') : isOpposite ? (isShort ? '#00f5a0' : '#ff4d6d') : '#5a7a68';
+      const arrow = isActive ? (isShort ? '↓' : '↑') : isOpposite ? (isShort ? '↑' : '↓') : '·';
+      const bg = isActive ? (isShort ? 'rgba(255,77,109,0.1)' : 'rgba(0,245,160,0.1)') : isOpposite ? (isShort ? 'rgba(0,245,160,0.05)' : 'rgba(255,77,109,0.05)') : 'rgba(255,255,255,0.03)';
       const shortName = ind === 'Ichimoku' ? 'Ichi' : ind === 'StochRSI' ? 'SRsi' : ind === 'Volume' ? 'Vol' : ind;
-      return `<span style="font-size:7px;padding:1px 5px;border-radius:3px;background:${isBull ? 'rgba(0,245,160,0.1)' : isBear ? 'rgba(255,77,109,0.1)' : 'rgba(255,255,255,0.03)'};color:${col};font-family:'Space Mono',monospace;font-weight:700">${shortName} ${arrow}</span>`;
+      return `<span style="font-size:7px;padding:1px 5px;border-radius:3px;background:${bg};color:${col};font-family:'Space Mono',monospace;font-weight:700">${shortName} ${arrow}</span>`;
     }).filter(Boolean).join(' ');
 
-    // Confluence count
-    const bullCount = indicators.filter(ind => r.signals?.[ind]?.bull).length;
-    const confLabel = bullCount >= 4 ? `${bullCount}/${indicators.length} confluence` : `${bullCount}/${indicators.length}`;
+    // Confluence count (direction-aware: count bear signals for shorts, bull for longs)
+    const confKey = r.direction === 'short' ? 'bear' : 'bull';
+    const confCount = indicators.filter(ind => r.signals?.[ind]?.[confKey]).length;
+    const confLabel = confCount >= 4 ? `${confCount}/${indicators.length} confluence` : `${confCount}/${indicators.length}`;
 
     // Quality badge
     const mqColor = r.marketQuality === 'A' ? '#00f5a0' : r.marketQuality === 'B+' ? '#a5d6a7' : r.marketQuality === 'B' ? '#f5c400' : '#ff4d6d';

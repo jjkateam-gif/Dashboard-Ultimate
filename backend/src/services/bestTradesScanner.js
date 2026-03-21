@@ -2391,8 +2391,8 @@ class BestTradesScanner {
             [setup.asset, setup.direction, setup.timeframe || '15m']
           );
           const sc = scResult.rows[0]?.scan_count || 1;
-          if (sc < 1) { // TEMP: lowered from 5 to 1 for limit order test — revert after confirmed
-            console.log(`[BestTrades] ${setup.asset} scan_count=${sc} < 1 — signal too fresh for auto-execute`);
+          if (sc < 5) {
+            console.log(`[BestTrades] ${setup.asset} scan_count=${sc} < 5 — signal too fresh for auto-execute`);
             continue;
           }
         } catch {}
@@ -2535,6 +2535,10 @@ class BestTradesScanner {
       }
     } catch {}
 
+    if (!contractValue || contractValue <= 0) {
+      console.error(`[BestTrades] Invalid contractValue ${contractValue} for ${instId} — skipping trade`);
+      return;
+    }
     const rawContracts = posSize / (markPrice * contractValue);
     const contractSize = Math.max(minSize, Math.round(rawContracts / lotSize) * lotSize);
 
@@ -2547,12 +2551,14 @@ class BestTradesScanner {
     let result;
     try {
       // Step 1: Place limit order (no TP/SL yet — those go on after fill confirmation)
-      const limitResult = await blofinClient.openPosition({
+      const limitPromise = blofinClient.openPosition({
         creds, instId, direction: setup.direction,
         size: String(contractSize), leverage: lev,
         orderType: 'limit', price: String(limitPrice),
         marginMode: 'cross', demo,
       });
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('BloFin API timeout after 15s')), 15000));
+      const limitResult = await Promise.race([limitPromise, timeoutPromise]);
       const limitOrderId = limitResult.orderId;
       if (!limitOrderId) throw new Error('No orderId returned from limit order');
 
@@ -2638,6 +2644,19 @@ class BestTradesScanner {
             await blofinClient.closePosition({ creds, instId, direction: setup.direction, marginMode: 'cross', demo });
           } catch (closeErr) {
             console.error(`[BestTrades] ❌❌ CRITICAL: Could not close unprotected position ${setup.asset}: ${closeErr.message}`);
+          }
+          // Log the trade even though TP/SL failed — position was filled then closed
+          if (pool) {
+            try {
+              await pool.query(
+                `INSERT INTO best_trades_log
+                 (asset, direction, probability, entry_price, stop_price, target_price,
+                  executed, order_id, timeframe, engine_source, data_source, exit_reason)
+                 VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, 'best_trades_auto', 'tpsl_failure', 'tpsl_failed_position_closed')`,
+                [setup.asset, setup.direction, setup.prob, limitPrice, setup.stopPrice, setup.targetPrice,
+                 limitOrderId, setup.timeframe || '15m']
+              );
+            } catch (logErr) { console.error('[BestTrades] Failed to log TP/SL failure trade:', logErr.message); }
           }
           return;
         }
@@ -2727,9 +2746,12 @@ class BestTradesScanner {
           try {
             await pool.query(
               `INSERT INTO best_trades_log
-               (asset, direction, probability, entry_price, executed, order_id, timeframe, engine_source, data_source)
-               VALUES ($1, $2, $3, $4, true, $5, $6, 'best_trades_auto', 'emergency_insert')`,
-              [setup.asset, setup.direction, setup.prob, setup.price, result.orderId, setup.timeframe || '15m']
+               (asset, direction, probability, confidence, market_quality, rr_ratio,
+                entry_price, stop_price, target_price, regime,
+                executed, order_id, timeframe, engine_source, data_source)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, 'best_trades_auto', 'emergency_insert')`,
+              [setup.asset, setup.direction, setup.prob, setup.confidence, setup.marketQuality, setup.rr,
+               setup.price, setup.stopPrice, setup.targetPrice, setup.regime, result.orderId, setup.timeframe || '15m']
             );
             console.log(`[BestTrades] ✅ Emergency insert succeeded for ${setup.asset}`);
           } catch (emergErr) {
