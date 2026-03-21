@@ -9806,6 +9806,7 @@ function switchPageTab(tab) {
     renderScanHistory();
     loadTradeHistory();
     loadDailyBriefing();
+    loadServerSignals();
   } else if (tab === 'alerts') {
     renderAlertList();
     loadTgCredentialsIntoForm();
@@ -24920,6 +24921,46 @@ async function loadDailyBriefing() {
     if (narEl) narEl.textContent = 'Failed to load briefing data.';
   }
 }
+
+// ── Load server-side signals across ALL timeframes for the signal queue ──
+async function loadServerSignals() {
+  const token = localStorage.getItem('dash_token');
+  const backend = window.CBP_BACKEND || 'http://localhost:3001';
+  try {
+    const resp = await fetch(backend + '/best-trades/history-all?outcome=pending', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const data = await resp.json();
+    const serverSignals = (data.history || []).map(t => ({
+      asset: t.asset, direction: t.direction, prob: t.probability || t.prob || 0,
+      confidence: t.confidence || 'Medium', marketQuality: t.market_quality || t.marketQuality || '?',
+      rr: parseFloat(t.rr_ratio || t.rr || 0), price: t.entry_price || t.price,
+      stopPrice: t.stop_price || t.stopPrice, targetPrice: t.target_price || t.targetPrice,
+      stopPct: t.stop_pct || t.stopPct, targetPct: t.target_pct || t.targetPct,
+      regime: t.regime, timeframe: t.timeframe || '15m', ev: parseFloat(t.ev || 0),
+      entryEfficiency: t.entry_efficiency || '', scanCount: t.scan_count || t.scanCount || 1,
+      executed: t.executed, data_source: t.data_source, engine_source: t.engine_source,
+      signals: t.signal_snapshot ? (typeof t.signal_snapshot === 'string' ? JSON.parse(t.signal_snapshot) : t.signal_snapshot) : {},
+      hits: t.hits_list, misses: t.misses_list, _fromServer: true,
+      ts: t.created_at || t.ts
+    }));
+    // Only use server signals if no manual scan results exist, or merge them
+    if (!PROBE.results || PROBE.results.length === 0) {
+      PROBE.results = serverSignals;
+      renderProbeResults(serverSignals, 'all');
+    } else {
+      // Merge: add server signals not already in PROBE.results (by asset+direction+tf)
+      const existing = new Set(PROBE.results.map(r => r.asset + '|' + r.direction + '|' + (r.timeframe || '')));
+      const newOnes = serverSignals.filter(s => !existing.has(s.asset + '|' + s.direction + '|' + s.timeframe));
+      if (newOnes.length > 0) {
+        PROBE.results = [...PROBE.results, ...newOnes].sort((a, b) => (b.prob || 0) - (a.prob || 0));
+        renderProbeResults(PROBE.results, $('probeTimeframe')?.value || '15m');
+      }
+    }
+  } catch (e) { console.warn('[SignalQueue] Failed to load server signals:', e.message); }
+}
+// Load server signals on tab open and periodically
+setInterval(loadServerSignals, 60000);
 
 renderProbeResults = function(results, tf) {
   _probeRenderBase(results, tf);
