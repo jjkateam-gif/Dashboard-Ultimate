@@ -2547,59 +2547,139 @@ function switchAuthView(view) {
 <!-- ========== BEST TRADES PAGE ========== -->
 <div id="page_trades" style="display:none">
 
-  <!-- Header -->
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-    <div>
-      <div style="font-size:20px;font-weight:800;color:#ff6b35;letter-spacing:-0.5px">🎯 Best Trades Right Now <span style="font-size:11px;color:#aaa;font-weight:400">— AI Probability Engine</span></div>
-      <!-- Market Sub-Tabs (top of page) -->
-      <div id="marketSubTabsTop" style="display:flex;gap:4px;margin-top:4px">
-        <div onclick="_switchMarketTab('crypto')" id="mtab-top-crypto" style="padding:3px 10px;border-radius:4px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;cursor:pointer;transition:all 0.2s;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);color:#00f5a0">🪙 Crypto</div>
-        <div onclick="_switchMarketTab('stock')" id="mtab-top-stock" style="padding:3px 10px;border-radius:4px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;cursor:pointer;transition:all 0.2s;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);color:#5a7a68">📈 Stocks</div>
-        <div onclick="_switchMarketTab('commodity')" id="mtab-top-commodity" style="padding:3px 10px;border-radius:4px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;cursor:pointer;transition:all 0.2s;background:rgba(255,165,0,0.06);border:1px solid rgba(255,165,0,0.15);color:#5a7a68">🛢️ Commodities</div>
+  <!-- ═══ 1. ENGINE STRIP ═══ -->
+  <div id="engineStrip" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;margin-bottom:12px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,107,53,0.25);border-radius:10px;font-family:'Space Mono',monospace">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <div id="engineDot" style="width:8px;height:8px;border-radius:50%;background:#00f5a0;animation:pulse 2s infinite"></div>
+        <span style="font-size:13px;font-weight:800;color:#fff">Best Trades Scanner</span>
       </div>
-      <div id="probeLastUpdated" style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px">Scanning markets for high-probability setups...</div>
-      <div id="autoScanStatus" style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:1px;display:none"></div>
-      <div id="serverScanStatus" style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:1px;display:none"></div>
+      <span id="engineMeta" style="font-size:9px;color:#5a7a68">Full Auto · 10m scans · 6TF · 20 assets</span>
+      <span id="engineLastScan" style="font-size:9px;color:#5a7a68"></span>
     </div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <select id="probeTimeframe" style="font-size:9px;padding:6px 10px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,107,53,0.3);color:#ff6b35;border-radius:6px;font-family:'Space Mono',monospace">
-        <option value="4h">4H setups</option>
-        <option value="1d">Daily setups</option>
-        <option value="1h">1H setups</option>
-        <option value="30m">30m setups</option>
-        <option value="15m" selected>15m scalps</option>
-        <option value="5m">5m scalps</option>
-      </select>
-      <select id="probeLeverage" style="font-size:9px;padding:6px 10px;background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:6px;font-family:'Space Mono',monospace" title="Leverage level — adjusts SL/TP and probability">
-        <option value="1">1× Spot</option>
-        <option value="2">2× Lev</option>
-        <option value="3">3× Lev</option>
-        <option value="5">5× Lev</option>
-        <option value="10">10× Lev</option>
-      </select>
-      <button onclick="runProbEngine()" id="probeBtn"
-        style="font-size:15px;padding:12px 28px;width:auto;margin:0;background:linear-gradient(135deg,rgba(255,107,53,0.25),rgba(255,107,53,0.15));border:2px solid rgba(255,107,53,0.6);color:#ff6b35;border-radius:8px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;letter-spacing:0.5px;transition:all 0.2s;box-shadow:0 4px 15px rgba(255,107,53,0.2)">
-        ⚡ Scan<br>Now
-      </button>
+    <div style="display:flex;align-items:center;gap:6px">
+      <span id="enginePillQualifying" style="display:none;font-size:9px;padding:3px 10px;border-radius:12px;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);color:#00f5a0;font-weight:700"></span>
+      <span id="enginePillBuilding" style="display:none;font-size:9px;padding:3px 10px;border-radius:12px;background:rgba(245,196,0,0.15);border:1px solid rgba(245,196,0,0.4);color:#f5c400;font-weight:700"></span>
+      <span id="enginePillOpen" style="display:none;font-size:9px;padding:3px 10px;border-radius:12px;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.4);color:#a78bfa;font-weight:700"></span>
+      <span id="enginePillBlocked" style="display:none;font-size:9px;padding:3px 10px;border-radius:12px;background:rgba(255,77,109,0.15);border:1px solid rgba(255,77,109,0.4);color:#ff4d6d;font-weight:700"></span>
+      <button onclick="window.location.href='#autoTradePanel';document.getElementById('autoTradePanel').open=true" style="font-size:10px;padding:6px 14px;width:auto;margin:0;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#ccc;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700">Settings ↗</button>
+      <button id="enginePauseBtn" onclick="toggleEnginePause()" style="font-size:10px;padding:6px 14px;width:auto;margin:0;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#ccc;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700">Pause</button>
+    </div>
+  </div>
+  <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}</style>
+
+  <!-- ═══ 2. STATS ROW ═══ -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">
+    <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(0,245,160,0.2);border-radius:10px;padding:14px 16px">
+      <div style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.5px">BALANCE</div>
+      <div id="btBalanceUSDT" style="font-size:22px;font-weight:800;color:#fff;font-family:'Space Mono',monospace;margin-top:4px">--</div>
+      <div id="btBalancePnlSince" style="font-size:9px;color:#00f5a0;font-family:'Space Mono',monospace;margin-top:2px"></div>
+    </div>
+    <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,77,109,0.2);border-radius:10px;padding:14px 16px">
+      <div style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.5px">POST-FIX REAL WR</div>
+      <div id="statsPostFixWR" style="font-size:22px;font-weight:800;color:#ff4d6d;font-family:'Space Mono',monospace;margin-top:4px">--</div>
+      <div id="statsPostFixDetail" style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px"></div>
+    </div>
+    <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.2);border-radius:10px;padding:14px 16px">
+      <div style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.5px">TODAY P&L</div>
+      <div id="statsTodayPnl" style="font-size:22px;font-weight:800;color:#ccc;font-family:'Space Mono',monospace;margin-top:4px">--</div>
+      <div id="statsTodayDetail" style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px"></div>
+    </div>
+    <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(245,196,0,0.2);border-radius:10px;padding:14px 16px">
+      <div style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.5px">BEST DAY</div>
+      <div id="statsBestDay" style="font-size:22px;font-weight:800;color:#f5c400;font-family:'Space Mono',monospace;margin-top:4px">--</div>
+      <div id="statsBestDayDetail" style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px"></div>
     </div>
   </div>
 
-  <!-- USDT Balance Banner -->
-  <div id="btBalanceBanner" style="display:flex;align-items:center;gap:16px;padding:12px 18px;margin-bottom:14px;background:rgba(0,0,0,0.3);border:1px solid rgba(0,245,160,0.2);border-radius:10px">
-    <div style="display:flex;align-items:center;gap:8px">
-      <div style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.5px">USDT Balance</div>
-      <div id="btBalanceUSDT" style="font-size:16px;font-weight:800;color:#00f5a0;font-family:'Space Mono',monospace">--</div>
+  <!-- ═══ 3. OPEN POSITIONS ═══ -->
+  <div id="atLivePositions" style="display:none;margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:rgba(0,0,0,0.3);border:1px solid rgba(0,245,160,0.2);border-radius:10px 10px 0 0">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:#fff">OPEN POSITIONS</span>
+        <span id="openPosCount" style="font-size:9px;padding:2px 8px;border-radius:10px;background:rgba(167,139,250,0.2);color:#a78bfa;font-family:'Space Mono',monospace;font-weight:700"></span>
+      </div>
+      <button onclick="refreshBtPositions()" style="font-size:8px;padding:4px 10px;width:auto;margin:0;background:rgba(0,245,160,0.08);border:1px solid rgba(0,245,160,0.2);color:#00f5a0;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace">↻ Refresh</button>
     </div>
-    <div style="height:20px;border-left:1px solid rgba(255,255,255,0.1)"></div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <div style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.5px">Available</div>
-      <div id="btBalanceAvail" style="font-size:16px;font-weight:800;color:#ccc;font-family:'Space Mono',monospace">--</div>
+    <div id="atPositionsList" style="background:rgba(0,0,0,0.2);border:1px solid rgba(0,245,160,0.1);border-top:none;border-radius:0 0 10px 10px;padding:0;font-family:'Space Mono',monospace;font-size:10px;color:#5a7a68">
+      Loading positions...
     </div>
-    <div style="height:20px;border-left:1px solid rgba(255,255,255,0.1)"></div>
-    <div id="btFundingBal" style="display:none;align-items:center;gap:8px"></div>
-    <button onclick="liveRefreshBalance()" style="margin-left:auto;font-size:8px;padding:5px 10px;width:auto;margin-top:0;margin-bottom:0;background:rgba(0,245,160,0.08);border:1px solid rgba(0,245,160,0.2);color:#00f5a0;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace">↻ Refresh</button>
   </div>
-  <div id="btBalanceHint" style="display:none;padding:4px 18px;margin-top:-10px;margin-bottom:10px"></div>
+
+  <!-- ═══ 4. SIGNAL QUEUE ═══ -->
+  <!-- Filter bar -->
+  <div id="signalFilterBar" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 14px;margin-bottom:2px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.06);border-radius:10px 10px 0 0;font-family:'Space Mono',monospace;font-size:9px">
+    <span style="color:#5a7a68;font-size:8px;margin-right:4px">Direction</span>
+    <span class="sq-filter-chip sq-filter-active" data-filter="direction" data-value="all" onclick="sqFilter(this)">All</span>
+    <span class="sq-filter-chip" data-filter="direction" data-value="short" onclick="sqFilter(this)">Shorts</span>
+    <span class="sq-filter-chip" data-filter="direction" data-value="long" onclick="sqFilter(this)">Longs</span>
+    <span style="color:rgba(255,255,255,0.1);margin:0 4px">·</span>
+    <span style="color:#5a7a68;font-size:8px;margin-right:4px">Status</span>
+    <span class="sq-filter-chip sq-filter-active" data-filter="status" data-value="all" onclick="sqFilter(this)">All</span>
+    <span class="sq-filter-chip" data-filter="status" data-value="qualifying" onclick="sqFilter(this)">Qualifying</span>
+    <span class="sq-filter-chip" data-filter="status" data-value="building" onclick="sqFilter(this)">Building</span>
+    <span class="sq-filter-chip" data-filter="status" data-value="blocked" onclick="sqFilter(this)">Blocked</span>
+    <span style="color:rgba(255,255,255,0.1);margin:0 4px">·</span>
+    <span style="color:#5a7a68;font-size:8px;margin-right:4px">Min Prob</span>
+    <span class="sq-filter-chip sq-filter-active" data-filter="minprob" data-value="any" onclick="sqFilter(this)">Any</span>
+    <span class="sq-filter-chip" data-filter="minprob" data-value="60" onclick="sqFilter(this)">60%+</span>
+    <span class="sq-filter-chip" data-filter="minprob" data-value="70" onclick="sqFilter(this)">70%+</span>
+    <span style="color:rgba(255,255,255,0.1);margin:0 4px">·</span>
+    <span style="color:#5a7a68;font-size:8px;margin-right:4px">Timeframe</span>
+    <span class="sq-filter-chip sq-filter-active" data-filter="timeframe" data-value="all" onclick="sqFilter(this)">All</span>
+    <span class="sq-filter-chip" data-filter="timeframe" data-value="1h" onclick="sqFilter(this)">1h</span>
+    <span class="sq-filter-chip" data-filter="timeframe" data-value="30m" onclick="sqFilter(this)">30m</span>
+    <span class="sq-filter-chip" data-filter="timeframe" data-value="15m" onclick="sqFilter(this)">15m</span>
+    <span class="sq-filter-chip" data-filter="timeframe" data-value="5m" onclick="sqFilter(this)">5m</span>
+    <span style="color:rgba(255,255,255,0.1);margin:0 4px">·</span>
+    <span style="color:#5a7a68;font-size:8px;margin-right:4px">Session</span>
+    <span class="sq-filter-chip sq-filter-active" data-filter="session" data-value="all" onclick="sqFilter(this)">All</span>
+    <span class="sq-filter-chip" data-filter="session" data-value="asian" onclick="sqFilter(this)">Asian 00-08</span>
+    <span class="sq-filter-chip" data-filter="session" data-value="london" onclick="sqFilter(this)">London 08-13</span>
+    <span class="sq-filter-chip" data-filter="session" data-value="ny" onclick="sqFilter(this)">NY 17-22</span>
+  </div>
+  <style>
+    .sq-filter-chip{padding:3px 10px;border-radius:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#5a7a68;cursor:pointer;transition:all 0.15s;font-weight:700;user-select:none}
+    .sq-filter-chip:hover{background:rgba(255,255,255,0.08);color:#aaa}
+    .sq-filter-active{background:rgba(0,245,160,0.12)!important;border-color:rgba(0,245,160,0.35)!important;color:#00f5a0!important}
+  </style>
+
+  <!-- Signal queue rows -->
+  <div id="probeSetups" style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.06);border-top:none;border-radius:0 0 10px 10px;padding:4px 0;margin-bottom:14px;max-height:600px;overflow-y:auto">
+    <div style="text-align:center;padding:48px 20px;font-family:'Space Mono',monospace">
+      <div style="font-size:40px;margin-bottom:16px">🎯</div>
+      <div style="font-size:18px;font-weight:700;color:#ff6b35;margin-bottom:16px">Find Your Best Trades</div>
+      <div style="font-size:13px;color:#aaa;line-height:1.8;max-width:480px;margin:0 auto 24px">
+        <strong style="color:#fff">Step 1:</strong> Choose a timeframe above <span style="color:#00f5a0">(4H recommended for beginners)</span><br>
+        <strong style="color:#fff">Step 2:</strong> Leave leverage at 1× Spot until comfortable<br>
+        <strong style="color:#fff">Step 3:</strong> Click <strong style="color:#ff6b35">Scan Now</strong> to find high-probability setups
+      </div>
+      <div style="font-size:12px;color:#5a7a68">Scans 20 coins across multiple indicators in real-time</div>
+    </div>
+  </div>
+
+  <!-- Hidden elements needed by existing JS -->
+  <div id="probeSignalTable" style="display:none"><div id="probeSignalTableBody"></div></div>
+  <div id="probRegimeBanner" style="display:none"></div>
+  <div id="probeLastUpdated" style="display:none"></div>
+  <div id="autoScanStatus" style="display:none"></div>
+  <div id="serverScanStatus" style="display:none"></div>
+  <div id="btBalanceAvail" style="display:none"></div>
+  <div id="btFundingBal" style="display:none"></div>
+  <div id="btBalanceHint" style="display:none"></div>
+
+  <!-- Hidden selectors needed by existing JS -->
+  <div style="display:none">
+    <select id="probeTimeframe"><option value="4h">4H</option><option value="1d">1D</option><option value="1h">1H</option><option value="30m">30m</option><option value="15m" selected>15m</option><option value="5m">5m</option></select>
+    <select id="probeLeverage"><option value="1">1×</option><option value="2">2×</option><option value="3">3×</option><option value="5">5×</option><option value="10">10×</option></select>
+    <button id="probeBtn"></button>
+    <!-- Market Sub-Tabs -->
+    <div id="marketSubTabsTop">
+      <div onclick="_switchMarketTab('crypto')" id="mtab-top-crypto"></div>
+      <div onclick="_switchMarketTab('stock')" id="mtab-top-stock"></div>
+      <div onclick="_switchMarketTab('commodity')" id="mtab-top-commodity"></div>
+    </div>
+  </div>
 
   <!-- Auto-Trade Settings Panel -->
   <details id="autoTradePanel" open style="margin-bottom:14px;background:rgba(0,0,0,0.3);border:2px solid rgba(255,107,53,0.35);border-radius:10px;padding:0">
@@ -2751,91 +2831,49 @@ function switchAuthView(view) {
     </div>
   </details>
 
-  <!-- Market regime banner -->
-  <div id="probRegimeBanner" style="display:none;padding:10px 14px;border-radius:8px;margin-bottom:14px;font-family:'Space Mono',monospace;font-size:9px"></div>
-
-  <!-- Top setups grid -->
-  <div id="probeSetups" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:16px">
-    <div style="grid-column:1/-1;text-align:center;padding:48px 20px;font-family:'Space Mono',monospace">
-      <div style="font-size:40px;margin-bottom:16px">🎯</div>
-      <div style="font-size:18px;font-weight:700;color:#ff6b35;margin-bottom:16px">Find Your Best Trades</div>
-      <div style="font-size:13px;color:#aaa;line-height:1.8;max-width:480px;margin:0 auto 24px">
-        <strong style="color:#fff">Step 1:</strong> Choose a timeframe above <span style="color:#00f5a0">(4H recommended for beginners)</span><br>
-        <strong style="color:#fff">Step 2:</strong> Leave leverage at 1× Spot until comfortable<br>
-        <strong style="color:#fff">Step 3:</strong> Click <strong style="color:#ff6b35">Scan Now</strong> to find high-probability setups
+  <!-- ═══ 5. TRADE HISTORY (collapsible) ═══ -->
+  <details id="tradeHistoryDetails" style="margin-bottom:14px">
+    <summary style="padding:12px 16px;cursor:pointer;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:#a78bfa;list-style:none;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.2);border-radius:10px;user-select:none">
+      <span>TRADE HISTORY</span>
+      <span id="tradeHistoryCount" style="font-size:9px;padding:2px 8px;border-radius:10px;background:rgba(167,139,250,0.15);color:#a78bfa;font-weight:700"></span>
+      <span style="font-size:9px;color:#5a7a68;font-weight:400;margin-left:auto">Click to expand</span>
+    </summary>
+    <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-top:none;border-radius:0 0 10px 10px;padding:8px;max-height:500px;overflow-y:auto">
+      <div id="tradeHistoryBody" style="font-family:'Space Mono',monospace;font-size:10px;color:#5a7a68">
+        Loading trade history...
       </div>
-      <div style="font-size:12px;color:#5a7a68">Scans 20 coins across multiple indicators in real-time</div>
     </div>
-  </div>
+  </details>
 
-  <!-- Signal breakdown table -->
-  <div id="probeSignalTable" style="display:none">
-    <div style="font-size:10px;font-weight:700;color:#aaa;font-family:'Space Mono',monospace;letter-spacing:2px;margin-bottom:8px">📋 FULL SIGNAL BREAKDOWN</div>
-    <div id="probeSignalTableBody"></div>
-  </div>
-
-  <!-- How it works -->
-  <div id="probeExplainer" style="margin-top:16px;padding:12px;background:rgba(255,107,53,0.04);border:1px solid rgba(255,107,53,0.12);border-radius:8px;font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace">
-    <span style="color:#ff6b35;font-weight:700">How probability is calculated: </span>
-    Fetches live OHLCV → runs all 7 indicators → counts bullish/bearish signals → weights by historical win rate from your backtests →
-    applies regime multiplier (bull market = higher base rate) → applies funding rate bias (percentile-adaptive) →
-    checks ETF flow momentum (🏦 institutional inflows/outflows) →
-    outputs probability + estimated R/R based on ATR-derived targets. Higher confluence = higher probability.
-    Every scan is logged for historical calibration — see Scan History below.
-    <span style="color:#3a5a48"> · Not financial advice.</span>
-  </div>
-
-  <!-- Scan History & Prediction Accuracy -->
-  <div style="margin-top:20px;border-top:1px solid rgba(255,255,255,0.05);padding-top:16px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <div>
-        <div style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#a78bfa">📜 SCAN HISTORY & CALIBRATION</div>
-        <div style="font-family:'Space Mono',monospace;font-size:9px;color:#5a7a68;margin-top:2px">24/7 server predictions auto-resolve against live price. Click cards, timeframes, regimes or grades to filter.</div>
-        <!-- Market Sub-Tabs -->
-        <div id="marketSubTabs" style="display:flex;gap:4px;margin-top:6px">
-          <div onclick="_switchMarketTab('crypto')" id="mtab-crypto" style="padding:3px 10px;border-radius:4px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;cursor:pointer;transition:all 0.2s;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);color:#00f5a0">🪙 Crypto</div>
-          <div onclick="_switchMarketTab('stock')" id="mtab-stock" style="padding:3px 10px;border-radius:4px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;cursor:pointer;transition:all 0.2s;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);color:#5a7a68">📈 Stocks</div>
-          <div onclick="_switchMarketTab('commodity')" id="mtab-commodity" style="padding:3px 10px;border-radius:4px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;cursor:pointer;transition:all 0.2s;background:rgba(255,165,0,0.06);border:1px solid rgba(255,165,0,0.15);color:#5a7a68">🛢️ Commodities</div>
+  <!-- ═══ 6. SCAN HISTORY & CALIBRATION ═══ -->
+  <details open style="margin-bottom:14px">
+    <summary style="padding:12px 16px;cursor:pointer;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:#a78bfa;list-style:none;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.2);border-radius:10px 10px 0 0;user-select:none">
+      <span>SCAN HISTORY & CALIBRATION</span>
+      <span style="font-size:9px;color:#5a7a68;font-weight:400">24/7 server predictions auto-resolve against live price</span>
+      <div style="margin-left:auto;display:flex;gap:6px" onclick="event.stopPropagation()">
+        <div id="marketSubTabs" style="display:flex;gap:4px">
+          <div onclick="_switchMarketTab('crypto')" id="mtab-crypto" style="padding:3px 10px;border-radius:4px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;cursor:pointer;background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);color:#00f5a0">Crypto</div>
+          <div onclick="_switchMarketTab('stock')" id="mtab-stock" style="padding:3px 10px;border-radius:4px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;cursor:pointer;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);color:#5a7a68">Stocks</div>
+          <div onclick="_switchMarketTab('commodity')" id="mtab-commodity" style="padding:3px 10px;border-radius:4px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;cursor:pointer;background:rgba(255,165,0,0.06);border:1px solid rgba(255,165,0,0.15);color:#5a7a68">Commodities</div>
         </div>
+        <button onclick="renderScanHistory()" style="font-size:8px;padding:4px 10px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">↻</button>
+        <button onclick="triggerServerResolve()" style="font-size:8px;padding:4px 10px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">⚡ Resolve</button>
+        <button onclick="exportScanLog()" style="font-size:8px;padding:4px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:#5a7a68;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">CSV</button>
       </div>
-      <div style="display:flex;gap:6px;align-items:center">
-        <button onclick="renderScanHistory()" style="font-size:8px;padding:5px 12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">↻ Refresh</button>
-        <button onclick="triggerServerResolve()" style="font-size:8px;padding:5px 12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">⚡ Resolve Now</button>
-        <button onclick="exportScanLog()" style="font-size:8px;padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:#5a7a68;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700;width:auto;margin:0">📥 Export CSV</button>
+    </summary>
+    <div style="background:rgba(0,0,0,0.15);border:1px solid rgba(167,139,250,0.1);border-top:none;border-radius:0 0 10px 10px;padding:12px">
+      <div id="marketModeBanner" style="display:none;padding:6px 12px;margin-bottom:8px;border-radius:6px;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;text-align:center"></div>
+      <div id="scanAccuracySummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px"></div>
+      <div id="scannerHeartbeat" style="padding:6px 12px;margin-bottom:8px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.06);border-radius:6px;font-family:'Space Mono',monospace;font-size:8px;color:#5a7a68"></div>
+      <div id="scanCalibrationChart" style="margin-bottom:12px"></div>
+      <div id="comparisonPanel" style="margin-bottom:12px"></div>
+      <div id="assetStatsPanel" style="margin-bottom:12px"></div>
+      <div id="watchlistPanel" style="margin-bottom:12px"></div>
+      <div id="scanHistoryTable" style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-radius:8px;padding:12px;font-family:'Space Mono',monospace;font-size:10px;color:#5a7a68;max-height:400px;overflow-y:auto">
+        Loading scan history from server...
       </div>
     </div>
-    <!-- Market Mode Banner (stocks/commodities) -->
-    <div id="marketModeBanner" style="display:none;padding:6px 12px;margin-bottom:8px;border-radius:6px;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;text-align:center"></div>
-    <!-- Accuracy Summary -->
-    <div id="scanAccuracySummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px"></div>
-    <!-- Scanner Heartbeat -->
-    <div id="scannerHeartbeat" style="padding:6px 12px;margin-bottom:8px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.06);border-radius:6px;font-family:'Space Mono',monospace;font-size:8px;color:#5a7a68"></div>
-    <!-- Calibration Chart (Predicted vs Actual Win Rate) -->
-    <div id="scanCalibrationChart" style="margin-bottom:12px"></div>
-    <!-- Before vs After Comparison Panel -->
-    <div id="comparisonPanel" style="margin-bottom:12px"></div>
-    <!-- Per-Asset Performance & Ban Management -->
-    <div id="assetStatsPanel" style="margin-bottom:12px"></div>
-    <!-- Watchlist: Pre-Signal Tracking -->
-    <div id="watchlistPanel" style="margin-bottom:12px"></div>
-    <!-- Scan History Table -->
-    <div id="scanHistoryTable" style="background:rgba(0,0,0,0.2);border:1px solid rgba(167,139,250,0.1);border-radius:8px;padding:12px;font-family:'Space Mono',monospace;font-size:10px;color:#5a7a68;max-height:400px;overflow-y:auto">
-      Loading scan history from server...
-    </div>
-  </div>
-
-  <!-- Active Positions (from BloFin) -->
-  <div id="atLivePositions" style="display:none;margin-top:20px;border-top:1px solid rgba(255,255,255,0.05);padding-top:16px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#00f5a0">⚡ ACTIVE POSITIONS</div>
-      <button onclick="refreshBtPositions()" style="font-size:9px;padding:5px 12px;background:rgba(0,245,160,0.1);border:1px solid rgba(0,245,160,0.25);color:#00f5a0;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700">↻ Refresh</button>
-    </div>
-    <div id="atPositionsList" style="background:rgba(0,0,0,0.2);border:1px solid rgba(0,245,160,0.1);border-radius:8px;padding:12px;font-family:'Space Mono',monospace;font-size:10px;color:#5a7a68">
-      Loading positions...
-    </div>
-  </div>
-
-  <!-- Old Trade Log removed — all tracking now via 24/7 Scan History & Calibration above -->
+  </details>
 
 </div><!-- end page_trades -->
 
@@ -9682,6 +9720,7 @@ function switchPageTab(tab) {
     refreshBtPositions();
     liveRefreshBalance();
     renderScanHistory();
+    loadTradeHistory();
   } else if (tab === 'alerts') {
     renderAlertList();
     loadTgCredentialsIntoForm();
@@ -18703,76 +18742,140 @@ async function refreshBtPositions() {
   const el = $('atPositionsList');
   if (!container || !el) return;
 
+  // Also update engine strip open pill
+  const pillOpen = $('enginePillOpen');
+
   try {
     const r = await fetch(LIVE_API + '/positions', { headers: liveHeaders() });
-    if (!r.ok) { container.style.display = 'none'; return; }
+    if (!r.ok) { container.style.display = 'none'; if (pillOpen) pillOpen.style.display = 'none'; return; }
     const d = await r.json();
 
     if (!d.positions || d.positions.length === 0) {
       container.style.display = 'block';
-      el.innerHTML = '<div style="text-align:center;padding:12px;color:#5a7a68;font-size:11px">No open positions</div>';
+      el.innerHTML = '<div style="text-align:center;padding:12px;color:#5a7a68;font-size:11px;font-family:\'Space Mono\',monospace">No open positions</div>';
+      const cnt = $('openPosCount'); if (cnt) cnt.textContent = '0';
+      if (pillOpen) pillOpen.style.display = 'none';
       return;
     }
 
     container.style.display = 'block';
-    const header = '<div style="display:grid;grid-template-columns:1.2fr 0.7fr 1fr 1fr 0.8fr 0.6fr 1.2fr 1.2fr;gap:8px;padding:8px 12px;font-size:9px;color:#5a7a68;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.08)"><span>Market</span><span>Dir</span><span>Entry</span><span>Mark</span><span>Size</span><span>Lev</span><span>P&L</span><span>TP / SL Target</span></div>';
+    const cnt = $('openPosCount'); if (cnt) cnt.textContent = d.positions.length;
+    if (pillOpen) { pillOpen.style.display = ''; pillOpen.textContent = d.positions.length + ' open'; }
 
     const rows = d.positions.map(p => {
       const dirColor = p.direction === 'long' ? '#00f5a0' : '#ff4d6d';
-      const dirLabel = p.direction === 'long' ? '▲ LONG' : '▼ SHORT';
+      const dirLabel = p.direction === 'long' ? 'LONG' : 'SHORT';
       const pnl = p.livePnl !== null ? parseFloat(p.livePnl) : null;
       const pnlStr = pnl !== null ? ((pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2)) : '--';
       const pnlColor = pnl !== null ? (pnl >= 0 ? '#00f5a0' : '#ff4d6d') : '#888';
-      const markStr = p.markPrice ? '$' + parseFloat(p.markPrice).toLocaleString(undefined, {maximumFractionDigits:6}) : '--';
       const entryStr = '$' + parseFloat(p.entry_price).toLocaleString(undefined, {maximumFractionDigits:6});
-      const sourceBadge = p.source === 'exchange' ? '<span style="font-size:6px;color:#a78bfa;background:rgba(167,139,250,0.15);padding:1px 4px;border-radius:3px;margin-left:4px">EXCHANGE</span>' : '';
       const marketLabel = p.asset || p.market;
       const pnlPct = p.entry_price && p.markPrice ? (((p.markPrice - p.entry_price) / p.entry_price) * (p.direction === 'long' ? 100 : -100)).toFixed(2) : null;
       const pnlPctStr = pnlPct !== null ? ` (${pnlPct >= 0 ? '+' : ''}${pnlPct}%)` : '';
-
-      // Calculate TP/SL profit and loss targets
-      const entry = parseFloat(p.entry_price) || 0;
       const sizeUsd = parseFloat(p.size_usd) || parseFloat(p.collateral) || 0;
       const lev = parseFloat(p.leverage) || 1;
-      const posSize = sizeUsd * lev;
-      let tpTarget = '--', slTarget = '--';
-      if (p.target_price && entry > 0) {
-        const tpDiff = p.direction === 'long'
-          ? (parseFloat(p.target_price) - entry) / entry
-          : (entry - parseFloat(p.target_price)) / entry;
-        const tpProfit = tpDiff * posSize;
-        tpTarget = '<span style="color:#00f5a0">+$' + Math.abs(tpProfit).toFixed(2) + '</span>';
-      } else if (p.target_pct) {
-        const tpProfit = (parseFloat(p.target_pct) / 100) * posSize;
-        tpTarget = '<span style="color:#00f5a0">+$' + Math.abs(tpProfit).toFixed(2) + '</span>';
-      }
-      if (p.stop_price && entry > 0) {
-        const slDiff = p.direction === 'long'
-          ? (entry - parseFloat(p.stop_price)) / entry
-          : (parseFloat(p.stop_price) - entry) / entry;
-        const slLoss = slDiff * posSize;
-        slTarget = '<span style="color:#ff4d6d">-$' + Math.abs(slLoss).toFixed(2) + '</span>';
-      } else if (p.stop_pct) {
-        const slLoss = (parseFloat(p.stop_pct) / 100) * posSize;
-        slTarget = '<span style="color:#ff4d6d">-$' + Math.abs(slLoss).toFixed(2) + '</span>';
-      }
-      const tpSlStr = tpTarget + ' / ' + slTarget;
+      const instId = p.instId || (marketLabel + '-USDT');
 
-      return '<div style="display:grid;grid-template-columns:1.2fr 0.7fr 1fr 1fr 0.8fr 0.6fr 1.2fr 1.2fr;gap:8px;padding:8px 12px;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.03);border-left:3px solid ' + dirColor + '">' +
-        '<span style="color:#fff;font-weight:700">' + marketLabel + sourceBadge + '</span>' +
-        '<span style="color:' + dirColor + ';font-weight:700">' + dirLabel + '</span>' +
-        '<span style="color:#ccc">' + entryStr + '</span>' +
-        '<span style="color:#a78bfa">' + markStr + '</span>' +
-        '<span style="color:#ccc">$' + sizeUsd.toFixed(2) + '</span>' +
-        '<span style="color:#f5c400;font-weight:700">' + lev + '×</span>' +
-        '<span style="color:' + pnlColor + ';font-weight:700">' + pnlStr + pnlPctStr + '</span>' +
-        '<span style="font-size:9px">' + tpSlStr + '</span>' +
-      '</div>';
+      // Duration
+      const openedAt = p.opened_at || p.cTime;
+      let durStr = '';
+      if (openedAt) {
+        const mins = Math.floor((Date.now() - new Date(parseInt(openedAt) || openedAt).getTime()) / 60000);
+        durStr = mins < 60 ? mins + 'm open' : Math.floor(mins/60) + 'h open';
+      }
+
+      // SL/TP display
+      const slStr = p.stop_price ? 'SL $' + parseFloat(p.stop_price).toLocaleString(undefined,{maximumFractionDigits:4}) : '';
+      const tpStr = p.target_price ? 'TP $' + parseFloat(p.target_price).toLocaleString(undefined,{maximumFractionDigits:4}) : '';
+
+      return `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.04);border-left:3px solid ${dirColor};font-family:'Space Mono',monospace">
+        <div style="min-width:60px"><span style="font-size:13px;font-weight:800;color:#fff">${marketLabel}</span></div>
+        <span style="padding:3px 8px;border-radius:4px;font-size:9px;font-weight:700;background:${p.direction === 'long' ? 'rgba(0,245,160,0.15)' : 'rgba(255,77,109,0.15)'};color:${dirColor}">${dirLabel}</span>
+        <div style="font-size:10px;color:#ccc">Entry ${entryStr} · $${sizeUsd.toFixed(2)} · ${lev}× · <span style="color:#5a7a68">${durStr}</span></div>
+        <div style="font-size:9px;color:#5a7a68">${slStr}${slStr && tpStr ? ' · ' : ''}${tpStr}</div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+          <span style="font-size:14px;font-weight:800;color:${pnlColor}">${pnlStr}${pnlPctStr}</span>
+          <button onclick="window.open('https://blofin.com/trade/' + '${instId}','_blank')" style="font-size:8px;padding:5px 10px;width:auto;margin:0;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700">Detail ↗</button>
+          <button onclick="if(confirm('Close ${marketLabel} ${dirLabel} position?')) closeBtPosition('${instId}','${p.direction}')" style="font-size:8px;padding:5px 10px;width:auto;margin:0;background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.25);color:#ff4d6d;border-radius:5px;cursor:pointer;font-family:'Space Mono',monospace;font-weight:700">Close</button>
+        </div>
+      </div>`;
     }).join('');
 
-    el.innerHTML = header + rows;
+    el.innerHTML = rows;
   } catch (e) {
     container.style.display = 'none';
+    if (pillOpen) pillOpen.style.display = 'none';
+  }
+}
+
+// Close a BloFin position from the dashboard
+async function closeBtPosition(instId, direction) {
+  try {
+    const resp = await fetch(LIVE_API + '/close-position', {
+      method: 'POST',
+      headers: { ...liveHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instId, direction, marginMode: 'cross' }),
+    });
+    if (resp.ok) { toast('Position closed', 'success'); setTimeout(refreshBtPositions, 1500); }
+    else { const d = await resp.json(); toast('Close failed: ' + (d.error || 'unknown'), 'error'); }
+  } catch (e) { toast('Close failed: ' + e.message, 'error'); }
+}
+
+// Load trade history for the collapsible section
+async function loadTradeHistory() {
+  const body = $('tradeHistoryBody');
+  const count = $('tradeHistoryCount');
+  if (!body) return;
+
+  try {
+    const token = localStorage.getItem('dash_token');
+    const backend = window.CBP_BACKEND || 'http://localhost:3001';
+    const resp = await fetch(backend + '/best-trades/history-all?outcome=all', {
+      headers: { 'Authorization': 'Bearer ' + token },
+    });
+    if (!resp.ok) { body.innerHTML = 'Failed to load'; return; }
+    const data = await resp.json();
+    const executed = (data.history || []).filter(t => t.executed);
+    if (count) count.textContent = executed.length + ' trades';
+
+    if (executed.length === 0) {
+      body.innerHTML = '<div style="text-align:center;padding:16px;color:#5a7a68">No executed trades yet</div>';
+      return;
+    }
+
+    const header = `<div style="display:grid;grid-template-columns:0.8fr 0.6fr 0.5fr 0.8fr 0.8fr 0.8fr 0.6fr 0.5fr 0.6fr;gap:6px;padding:6px 10px;font-size:8px;color:#5a7a68;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.08);font-family:'Space Mono',monospace">
+      <span>Asset</span><span>Dir</span><span>TF</span><span>Entry</span><span>Exit</span><span>Real P&L</span><span>Slippage</span><span>Duration</span><span>Result</span>
+    </div>`;
+
+    const rows = executed.slice(0, 100).map(t => {
+      const dirColor = t.direction === 'long' ? '#00f5a0' : '#ff4d6d';
+      const entry = t.entry_price_real || t.entry_price || 0;
+      const exit = t.exit_price_real || '';
+      const pnl = t.blofin_pnl_usd || t.real_pnl_usd;
+      const pnlColor = pnl > 0 ? '#00f5a0' : pnl < 0 ? '#ff4d6d' : '#5a7a68';
+      const pnlStr = pnl != null ? (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2) : '--';
+      const slippage = t.entry_price && t.entry_price_real ? Math.abs((t.entry_price_real - t.entry_price) / t.entry_price * 100).toFixed(3) + '%' : '--';
+      const duration = t.hours_open ? t.hours_open.toFixed(1) + 'h' : '--';
+      const outcome = t.outcome === 'win' ? '<span style="color:#00f5a0;font-weight:700">WIN</span>'
+        : t.outcome === 'loss' ? '<span style="color:#ff4d6d;font-weight:700">LOSS</span>'
+        : '<span style="color:#f5c400">OPEN</span>';
+
+      return `<div style="display:grid;grid-template-columns:0.8fr 0.6fr 0.5fr 0.8fr 0.8fr 0.8fr 0.6fr 0.5fr 0.6fr;gap:6px;padding:5px 10px;font-size:9px;border-bottom:1px solid rgba(255,255,255,0.02);border-left:2px solid ${dirColor};font-family:'Space Mono',monospace">
+        <span style="color:#fff;font-weight:700">${t.asset || '--'}</span>
+        <span style="color:${dirColor}">${(t.direction || '').toUpperCase()}</span>
+        <span style="color:#5a7a68">${t.timeframe || '--'}</span>
+        <span style="color:#ccc">$${parseFloat(entry).toLocaleString(undefined,{maximumFractionDigits:6})}</span>
+        <span style="color:#ccc">${exit ? '$' + parseFloat(exit).toLocaleString(undefined,{maximumFractionDigits:6}) : '--'}</span>
+        <span style="color:${pnlColor};font-weight:700">${pnlStr}</span>
+        <span style="color:#ff8c69">${slippage}</span>
+        <span style="color:#5a7a68">${duration}</span>
+        <span>${outcome}</span>
+      </div>`;
+    }).join('');
+
+    body.innerHTML = header + rows;
+  } catch (e) {
+    body.innerHTML = '<div style="color:#ff4d6d;padding:12px">Error loading trade history</div>';
   }
 }
 
@@ -24396,193 +24499,257 @@ function closeBlofinModal() {
 // ════════════════════════════════════════════════════════════════
 
 const _probeRenderBase = renderProbeResults;
+window._sqFilters = { direction: 'all', status: 'all', minprob: 'any', timeframe: 'all', session: 'all' };
+window._sqExpandedIdx = new Set();
+
+function sqFilter(chip) {
+  const filterType = chip.dataset.filter;
+  const value = chip.dataset.value;
+  window._sqFilters[filterType] = value;
+  // Update active chip styling
+  document.querySelectorAll(`.sq-filter-chip[data-filter="${filterType}"]`).forEach(c => c.classList.remove('sq-filter-active'));
+  chip.classList.add('sq-filter-active');
+  // Re-render with current results
+  if (PROBE.results) renderProbeResults(PROBE.results, $('probeTimeframe')?.value || '15m');
+}
+
+function sqToggleExpand(idx) {
+  if (window._sqExpandedIdx.has(idx)) window._sqExpandedIdx.delete(idx);
+  else window._sqExpandedIdx.add(idx);
+  if (PROBE.results) renderProbeResults(PROBE.results, $('probeTimeframe')?.value || '15m');
+}
+
+function toggleEnginePause() {
+  const btn = $('enginePauseBtn');
+  // Toggle auto-trade via existing settings
+  const enableEl = $('autoTradeEnabled');
+  if (enableEl) { enableEl.checked = !enableEl.checked; confirmAutoTradeSettings(); }
+  if (btn) btn.textContent = enableEl?.checked ? 'Pause' : 'Resume';
+}
+
 renderProbeResults = function(results, tf) {
   _probeRenderBase(results, tf);
 
   const el = $('probeSetups');
   if (!el || !results.length) return;
 
-  el.innerHTML = results.map((r, idx) => {
-    const dirColor  = r.direction === 'long' ? '#00f5a0' : '#ff4d6d';
-    const dirLabel  = r.direction === 'long' ? '▲ LONG'  : '▼ SHORT';
+  const f = window._sqFilters;
+  const minProb = +($('autoTradeMinProb')?.value || 70);
+
+  // Classify each result
+  const classified = results.map((r, idx) => {
+    const scanCount = r.scanCount || r.scan_count || 1;
+    const isBlocked = r.marketQuality === 'No-Trade' || r.entryEfficiency === 'Chasing' || parseFloat(r.ev||0) <= 0 || r.prob < 50;
+    const isBuilding = scanCount >= 3 && scanCount < 5 && !isBlocked;
+    const isQualifying = scanCount >= 5 && r.prob >= minProb && !isBlocked && r.marketQuality !== 'No-Trade';
+    let status = 'blocked';
+    if (isQualifying) status = 'qualifying';
+    else if (isBuilding) status = 'building';
+    return { ...r, idx, scanCount, status };
+  });
+
+  // Apply filters
+  const filtered = classified.filter(r => {
+    if (f.direction !== 'all' && r.direction !== f.direction) return false;
+    if (f.status !== 'all' && r.status !== f.status) return false;
+    if (f.minprob !== 'any' && r.prob < parseInt(f.minprob)) return false;
+    if (f.timeframe !== 'all') {
+      const rTf = r.timeframe || tf;
+      if (rTf !== f.timeframe) return false;
+    }
+    if (f.session !== 'all') {
+      const h = new Date().getUTCHours();
+      if (f.session === 'asian' && (h < 0 || h >= 8)) return false;
+      if (f.session === 'london' && (h < 8 || h >= 13)) return false;
+      if (f.session === 'ny' && (h < 17 || h >= 22)) return false;
+    }
+    return true;
+  });
+
+  // Update engine strip pills
+  const qCount = classified.filter(r => r.status === 'qualifying').length;
+  const bCount = classified.filter(r => r.status === 'building').length;
+  const blCount = classified.filter(r => r.status === 'blocked').length;
+  const pillQ = $('enginePillQualifying'); if (pillQ) { pillQ.style.display = qCount ? '' : 'none'; pillQ.textContent = qCount + ' qualifying'; }
+  const pillB = $('enginePillBuilding'); if (pillB) { pillB.style.display = bCount ? '' : 'none'; pillB.textContent = bCount + ' building'; }
+  const pillBl = $('enginePillBlocked'); if (pillBl) { pillBl.style.display = blCount ? '' : 'none'; pillBl.textContent = blCount + ' blocked'; }
+  const lastScan = $('engineLastScan'); if (lastScan) lastScan.textContent = 'Last: ' + new Date().toLocaleTimeString();
+
+  if (filtered.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:24px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:11px">No signals match current filters</div>';
+    return;
+  }
+
+  el.innerHTML = filtered.map(r => {
+    const idx = r.idx;
+    const dirColor = r.direction === 'long' ? '#00f5a0' : '#ff4d6d';
+    const dirLabel = r.direction === 'long' ? 'LONG' : 'SHORT';
     const probColor = r.prob >= 70 ? '#00f5a0' : r.prob >= 60 ? '#f5c400' : r.prob >= 50 ? '#ff8c69' : '#ff4d6d';
-    const rankLabel = idx === 0 && (r.confidence === 'High' || r.confidence === 'Medium') ? '🥇 TOP SETUP' : idx === 0 ? '#1' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx+1}`;
-    const slPct     = parseFloat(r.rrData?.stopPct   || 2).toFixed(1);
-    const tpPct     = parseFloat(r.rrData?.targetPct || 4).toFixed(1);
-    const lev       = r.leverage || 1;
-    const levSlPct  = r.rrData?.levStopPct   || slPct;
-    const levTpPct  = r.rrData?.levTargetPct || tpPct;
-    const levBadge  = lev > 1 ? `<span style="font-size:8px;padding:2px 6px;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.35);color:#a78bfa;border-radius:4px;font-family:'Space Mono',monospace;font-weight:700">${lev}×</span>` : '';
-    const fundStr   = r.fundingRate != null ? `Funding ${r.fundingRate>0?'+':''}${r.fundingRate.toFixed(3)}%` : '';
-    const arc       = buildProbArc(r.prob, probColor);
-    const hitBars   = r.hits.slice(0,5).map(h =>
-      `<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">
-        <div style="width:5px;height:5px;border-radius:50%;background:${dirColor};flex-shrink:0"></div>
-        <span style="font-size:7px;color:#aaa;font-family:'Space Mono',monospace">${h.label}</span>
-      </div>`).join('');
-    const missBars  = r.misses.slice(0,2).map(m =>
-      `<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">
-        <div style="width:5px;height:5px;border-radius:50%;background:#252525;flex-shrink:0"></div>
-        <span style="font-size:7px;color:#3a5a48;font-family:'Space Mono',monospace">${m.label}</span>
-      </div>`).join('');
-    const canExec = true; // All BloFin USDT pairs are executable
-    const hasPerps = true; // BloFin supports perps for all pairs
-    const execReady = canExec && walletState.loaded;
-    const execStyle = execReady
-      ? 'background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);color:#00f5a0;cursor:pointer'
-      : 'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#444;cursor:default';
+    const slPct = parseFloat(r.rrData?.stopPct || 2).toFixed(1);
+    const tpPct = parseFloat(r.rrData?.targetPct || 4).toFixed(1);
+    const lev = r.leverage || 1;
+    const isExpanded = window._sqExpandedIdx.has(idx);
+    const scanPct = Math.min(100, (r.scanCount / 5) * 100);
 
-    return `
-    <div style="background:rgba(255,255,255,0.02);border:1px solid ${r.prob>=70?'rgba(255,107,53,0.35)':'rgba(255,255,255,0.07)'};border-radius:12px;padding:16px;position:relative;${r.prob>=70?'box-shadow:0 0 20px rgba(255,107,53,0.08)':''}">
+    // Border color by status
+    const borderLeft = r.status === 'qualifying' ? '#00f5a0' : r.status === 'building' ? '#f5c400' : '#ff4d6d';
 
-      <div style="position:absolute;top:10px;right:10px;font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace">${rankLabel}</div>
+    // Indicator pills for compact row
+    const indicators = ['MACD', 'Ichimoku', 'EMA', 'Volume', 'RSI', 'BB', 'StochRSI'];
+    const indPills = indicators.map(ind => {
+      const sig = r.signals?.[ind === 'Ichimoku' ? 'Ichimoku' : ind === 'BB' ? 'BB' : ind];
+      if (!sig) return '';
+      const isBull = sig.bull;
+      const isBear = sig.bear;
+      const col = isBull ? '#00f5a0' : isBear ? '#ff4d6d' : '#5a7a68';
+      const arrow = isBull ? '↑' : isBear ? '↓' : '·';
+      const shortName = ind === 'Ichimoku' ? 'Ichi' : ind === 'StochRSI' ? 'SRsi' : ind === 'Volume' ? 'Vol' : ind;
+      return `<span style="font-size:7px;padding:1px 5px;border-radius:3px;background:${isBull ? 'rgba(0,245,160,0.1)' : isBear ? 'rgba(255,77,109,0.1)' : 'rgba(255,255,255,0.03)'};color:${col};font-family:'Space Mono',monospace;font-weight:700">${shortName} ${arrow}</span>`;
+    }).filter(Boolean).join(' ');
 
-      <!-- Asset header -->
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-        <div style="width:36px;height:36px;border-radius:50%;background:${r.color}22;border:2px solid ${r.color}55;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:${r.color};font-family:'Space Mono',monospace">${r.asset}</div>
-        <div>
-          <div style="font-size:14px;font-weight:800;color:#fff;font-family:'Space Mono',monospace">${r.asset} <span style="color:${dirColor}">${dirLabel}</span> ${levBadge}</div>
-          <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace">$${r.price.toLocaleString(undefined,{maximumFractionDigits:4})} · ${tf}${fundStr?' · '+fundStr:''}</div>
-        </div>
-        <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
-          <span style="font-size:7px;font-weight:700;font-family:'Space Mono',monospace;padding:2px 6px;border-radius:4px;background:${r.marketQuality === 'A' ? 'rgba(0,245,160,0.15)' : r.marketQuality === 'B' ? 'rgba(245,196,0,0.15)' : r.marketQuality === 'C' ? 'rgba(255,140,105,0.15)' : 'rgba(255,77,109,0.15)'};color:${r.marketQuality === 'A' ? '#00f5a0' : r.marketQuality === 'B' ? '#f5c400' : r.marketQuality === 'C' ? '#ff8c69' : '#ff4d6d'};border:1px solid ${r.marketQuality === 'A' ? 'rgba(0,245,160,0.3)' : r.marketQuality === 'B' ? 'rgba(245,196,0,0.3)' : r.marketQuality === 'C' ? 'rgba(255,140,105,0.3)' : 'rgba(255,77,109,0.3)'}">${r.marketQuality === 'No-Trade' ? '⛔ NO TRADE' : (r.marketQuality || '?') + '-Grade'}</span>
-          ${r.snappedStop ? '<span style="font-size:6px;color:#a78bfa;font-family:\'Space Mono\',monospace">🎯 SL snapped to structure</span>' : ''}
-          ${r.entryEfficiency && r.entryEfficiency !== 'Acceptable' ? '<span style="font-size:6px;font-family:\'Space Mono\',monospace;color:' + (r.entryEfficiency === 'Excellent' ? '#00f5a0' : r.entryEfficiency === 'Chasing' ? '#ff4d6d' : '#f5c400') + '">' + (r.entryEfficiency === 'Excellent' ? '✦ Excellent entry' : r.entryEfficiency === 'Chasing' ? '⚠ Chasing (no trade)' : '⏳ Late entry') + '</span>' : ''}
-        </div>
-      </div>
+    // Confluence count
+    const bullCount = indicators.filter(ind => r.signals?.[ind]?.bull).length;
+    const confLabel = bullCount >= 4 ? `${bullCount}/${indicators.length} confluence` : `${bullCount}/${indicators.length}`;
 
-      <!-- Probability + RR -->
-      <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px">
-        ${arc}
-        <div style="flex:1">
-          <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:2px">RISK / REWARD</div>
-          <div style="font-size:20px;font-weight:800;color:#fff;font-family:'Space Mono',monospace">${r.rr}<span style="font-size:10px;color:#5a7a68">:1</span></div>
-          <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">SL ${slPct}%${r.snappedStop ? ' (' + (r.stopATRMult || '') + '× ATR)' : ''} · TP ${tpPct}%${r.mqSizeMult < 1 ? ' · Size: ' + Math.round(r.mqSizeMult*100) + '%' : ''}</div>
-        </div>
-        <div>
-          <div style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;margin-bottom:2px">CONFIDENCE</div>
-          <div style="font-size:13px;font-weight:700;color:${r.confColor};font-family:'Space Mono',monospace">${r.confidence}</div>
-        </div>
-      </div>
+    // Quality badge
+    const mqColor = r.marketQuality === 'A' ? '#00f5a0' : r.marketQuality === 'B+' ? '#a5d6a7' : r.marketQuality === 'B' ? '#f5c400' : '#ff4d6d';
 
-      <!-- SL / TP -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
-        <div>
-          <div style="font-size:7px;color:#ff4d6d;font-family:'Space Mono',monospace;margin-bottom:3px;text-transform:uppercase;letter-spacing:1px">Stop Loss %${lev > 1 ? ` <span style="color:#a78bfa">(×${lev} = -${levSlPct}%)</span>` : ''}</div>
-          <input type="number" id="bt_sl_${idx}" value="${slPct}" step="0.1" min="0.1" max="50"
-            style="width:100%;font-size:9px;padding:5px 6px;background:rgba(255,77,109,0.07);border:1px solid rgba(255,77,109,0.22);color:#ff4d6d;border-radius:4px;font-family:'Space Mono',monospace;box-sizing:border-box">
-        </div>
-        <div>
-          <div style="font-size:7px;color:#00f5a0;font-family:'Space Mono',monospace;margin-bottom:3px;text-transform:uppercase;letter-spacing:1px">Take Profit %${lev > 1 ? ` <span style="color:#a78bfa">(×${lev} = +${levTpPct}%)</span>` : ''}</div>
-          <input type="number" id="bt_tp_${idx}" value="${tpPct}" step="0.1" min="0.1" max="1000"
-            style="width:100%;font-size:9px;padding:5px 6px;background:rgba(0,245,160,0.07);border:1px solid rgba(0,245,160,0.22);color:#00f5a0;border-radius:4px;font-family:'Space Mono',monospace;box-sizing:border-box">
-        </div>
-      </div>
+    // Status label
+    const statusLabel = r.status === 'qualifying'
+      ? `<span style="color:#00f5a0;font-weight:700">Qualifying ↗</span>`
+      : r.status === 'building'
+      ? `<span style="color:#f5c400;font-weight:700">Building (${5 - r.scanCount} more)</span>`
+      : `<span style="color:#ff4d6d;font-weight:700">Blocked</span>`;
 
-      <!-- Mode + Leverage (perps only) -->
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <!-- Mode mini-toggle -->
-        <div style="display:flex;gap:3px;background:rgba(0,0,0,0.25);border-radius:5px;padding:2px">
-          <button onclick="btSetMode(${idx},'spot')" id="btMode_spot_${idx}"
-            style="font-size:7px;padding:3px 7px;width:auto;margin:0;border-radius:3px;font-family:'Space Mono',monospace;cursor:pointer;border:none;background:rgba(0,245,160,0.15);color:#00f5a0;font-weight:700">SPOT</button>
-          <button onclick="btSetMode(${idx},'perps')" id="btMode_perps_${idx}"
-            style="font-size:7px;padding:3px 7px;width:auto;margin:0;border-radius:3px;font-family:'Space Mono',monospace;cursor:pointer;border:none;background:transparent;color:#5a7a68;font-weight:700"
-            ${!hasPerps?'disabled title="Perps not available for '+r.asset+'"':''}>PERPS</button>
-        </div>
-        <!-- Leverage (enabled only for perps) -->
-        <div id="btLevWrap_${idx}" style="display:flex;align-items:center;gap:4px;opacity:0.35;pointer-events:none">
-          <span style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">LEV:</span>
-          <select id="bt_lev_${idx}"
-            style="font-size:8px;padding:3px 5px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);color:#a78bfa;border-radius:4px;font-family:'Space Mono',monospace">
-            <option value="1">1×</option>
-            <option value="2">2×</option>
-            <option value="3">3×</option>
-            <option value="5">5×</option>
-            <option value="10">10×</option>
-            <option value="20">20×</option>
-            <option value="50">50×</option>
-            <option value="100">100×</option>
-          </select>
-        </div>
-      </div>
+    // ── COMPACT ROW ──
+    let html = `<div class="sq-row" data-idx="${idx}" style="border-left:3px solid ${borderLeft};background:${isExpanded ? 'rgba(255,255,255,0.03)' : 'transparent'};transition:background 0.15s">`;
 
-      <!-- Optimal leverage + mode + EV -->
-      <div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:7px;font-family:'Space Mono',monospace;padding:6px 8px;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.12);border-radius:6px">
-        <span style="color:#a78bfa;font-weight:700">Best Lev: ${r.optimalLev || '—'}×</span>
-        <span style="color:#5a7a68">|</span>
-        <span style="color:${r.recommendedMode === 'spot' ? '#00f5a0' : '#f5c400'}">${r.recommendedMode === 'spot' ? '📊 SPOT (no funding fees)' : '⚡ PERPS ' + (r.optimalLev || lev) + '×'}</span>
-        <span style="color:#5a7a68">|</span>
-        <span style="color:${parseFloat(r.ev||0) > 0 ? '#00f5a0' : '#ff4d6d'}">EV: ${parseFloat(r.ev||0) > 0 ? '+' : ''}${r.ev || '0.0'}%</span>
-        <span style="color:#5a7a68">|</span>
-        <span style="color:#ff8c69">Fees: ${r.feePct || '0.00'}%</span>
-      </div>
+    html += `<div onclick="sqToggleExpand(${idx})" style="display:grid;grid-template-columns:80px 70px 1fr 100px 60px 80px 110px;gap:8px;align-items:center;padding:8px 12px;cursor:pointer;font-family:'Space Mono',monospace;font-size:10px;border-bottom:1px solid rgba(255,255,255,0.03)">`;
 
-      <!-- Signals -->
-      <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:8px;margin-bottom:10px">
-        ${hitBars}${missBars}
-      </div>
+    // Asset + TF
+    html += `<div><span style="font-weight:800;color:#fff;font-size:12px">${r.asset}</span><br><span style="font-size:8px;color:#5a7a68">${r.timeframe || tf}</span></div>`;
 
-      <!-- Chart Patterns -->
-      ${r.patterns && r.patterns.length > 0 ? `
-      <div style="margin-bottom:8px;display:flex;flex-wrap:wrap;gap:4px;align-items:center">
-        <span style="font-size:6px;color:#5a7a68;font-family:'Space Mono',monospace;margin-right:2px">PATTERNS:</span>
-        ${r.patterns.slice(0,4).map(p => {
-          const isBull = p.direction === 'bullish';
-          const stageIcon = p.stage === 'breakout' ? '🔥' : p.stage === 'confirmed' || p.stage === 'retest' ? '✓' : '◌';
-          const col = isBull ? '#00f5a0' : '#ff4d6d';
-          const bg = isBull ? 'rgba(0,245,160,0.08)' : 'rgba(255,77,109,0.08)';
-          const border = isBull ? 'rgba(0,245,160,0.2)' : 'rgba(255,77,109,0.2)';
-          return '<span style="font-size:6px;padding:2px 5px;border-radius:3px;background:' + bg + ';border:1px solid ' + border + ';color:' + col + ';font-family:\'Space Mono\',monospace;font-weight:700">' + stageIcon + ' ' + p.name + '</span>';
-        }).join('')}
-        ${r.patternAdj ? '<span style="font-size:6px;color:' + (r.patternAdj > 0 ? '#00f5a0' : '#ff4d6d') + ';font-family:\'Space Mono\',monospace;font-weight:700">' + (r.patternAdj > 0 ? '+' : '') + r.patternAdj.toFixed(1) + '%</span>' : ''}
-      </div>` : ''}
+    // Direction badge
+    html += `<div><span style="padding:3px 8px;border-radius:4px;font-size:9px;font-weight:700;background:${r.direction === 'long' ? 'rgba(0,245,160,0.15)' : 'rgba(255,77,109,0.15)'};border:1px solid ${dirColor}44;color:${dirColor}">${dirLabel}</span></div>`;
 
-      <!-- No-Trade Reasons -->
-      ${(() => {
-        const reasons = [];
-        const minProb = +($('autoTradeMinProb')?.value || 70);
-        if (r.marketQuality === 'No-Trade') reasons.push('⛔ Market quality: No-Trade zone (choppy/dead market)');
-        if (r.isRanging) reasons.push('📊 Ranging market: 20-candle range < 1.5x ATR — signals unreliable');
-        if (r.prob < minProb) reasons.push('📉 Probability ' + r.prob + '% below your minimum (' + minProb + '%)');
-        if (r.entryEfficiency === 'Chasing') reasons.push('🏃 Chasing: 3+ candles extended, >2% from EMA21 — poor entry');
-        if (parseFloat(r.ev||0) <= 0) reasons.push('📊 Negative EV (' + (r.ev||'0') + '%) — risk exceeds expected reward after fees');
-        if (r.confidence === 'Low') reasons.push('⚠️ Low confidence — weak signal confluence');
-        if (r.rr < 1) reasons.push('⚖️ Risk/Reward ' + r.rr + ':1 — reward doesn\'t justify the risk');
-        if (!reasons.length) return '';
-        return '<div style="margin-bottom:8px;padding:8px 10px;background:rgba(255,77,109,0.06);border:1px solid rgba(255,77,109,0.15);border-radius:6px">' +
-          '<div style="font-size:7px;font-weight:700;color:#ff4d6d;font-family:\'Space Mono\',monospace;margin-bottom:4px">🚫 AUTO-TRADE BLOCKED</div>' +
-          reasons.map(r => '<div style="font-size:7px;color:#ff8c69;font-family:\'Space Mono\',monospace;margin-bottom:2px;padding-left:4px">' + r + '</div>').join('') +
-        '</div>';
-      })()}
+    // Indicator pills
+    html += `<div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center">${indPills} <span style="font-size:7px;color:${mqColor};padding:1px 5px;border-radius:3px;background:rgba(255,255,255,0.04);font-weight:700">Quality ${r.marketQuality || '?'}</span> <span style="font-size:7px;color:#aaa">${confLabel}</span></div>`;
 
-      <!-- Probs + Log/Execute -->
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-        <div style="font-size:7px;font-family:'Space Mono',monospace">
-          <span style="color:#00f5a0">▲ Long ${r.longProb}%</span>
-          <span style="color:#5a7a68;margin:0 5px">|</span>
-          <span style="color:#ff4d6d">▼ Short ${r.shortProb}%</span>
-        </div>
-        <div style="display:flex;gap:5px">
-          <button id="btLogBtn_${idx}" onclick="logBestTrade(${idx})"
-            style="font-size:8px;padding:6px 12px;width:auto;margin:0;border-radius:5px;font-family:'Space Mono',monospace;font-weight:700;background:rgba(245,196,0,0.12);border:1px solid rgba(245,196,0,0.35);color:#f5c400;cursor:pointer"
-            title="Log this trade for tracking">
-            ${_loggedTradeIdxs.has(idx) ? '✅ Logged' : '📋 Log Trade'}
-          </button>
-          <button onclick="execFromBestTrades(${idx})"
-            style="font-size:8px;padding:6px 14px;width:auto;margin:0;border-radius:5px;font-family:'Space Mono',monospace;font-weight:700;${execStyle}"
-            title="${execReady ? 'Execute on BloFin' : 'Set up trading wallet first'}">
-            ⚡ Execute
-          </button>
-        </div>
+    // Scan count with progress bar
+    html += `<div style="display:flex;flex-direction:column;gap:2px">
+      <span style="font-size:8px;color:#5a7a68">Scan ${r.scanCount}/5</span>
+      <div style="width:100%;height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden">
+        <div style="width:${scanPct}%;height:100%;background:${r.scanCount >= 5 ? '#00f5a0' : '#f5c400'};border-radius:2px;transition:width 0.3s"></div>
       </div>
     </div>`;
+
+    // RR
+    html += `<div style="font-size:11px;font-weight:700;color:#fff">RR ${r.rr}</div>`;
+
+    // Probability
+    html += `<div style="font-size:16px;font-weight:800;color:${probColor}">${r.prob}%</div>`;
+
+    // Status
+    html += `<div style="text-align:right;font-size:9px">${statusLabel}</div>`;
+
+    html += `</div>`; // end compact grid
+
+    // ── EXPANDED DETAIL ──
+    if (isExpanded) {
+      const execReady = walletState.loaded;
+      const execStyle = execReady
+        ? 'background:rgba(0,245,160,0.15);border:1px solid rgba(0,245,160,0.4);color:#00f5a0;cursor:pointer'
+        : 'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#444;cursor:default';
+
+      html += `<div style="padding:12px 16px 14px 16px;background:rgba(0,0,0,0.15);border-bottom:1px solid rgba(255,255,255,0.05)">`;
+
+      // Row 1: All 7 indicators with numeric values
+      html += `<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:12px">`;
+      indicators.forEach(ind => {
+        const sig = r.signals?.[ind];
+        if (!sig) { html += '<div></div>'; return; }
+        const isBull = sig.bull; const isBear = sig.bear;
+        const col = isBull ? '#00f5a0' : isBear ? '#ff4d6d' : '#5a7a68';
+        const bg = isBull ? 'rgba(0,245,160,0.06)' : isBear ? 'rgba(255,77,109,0.06)' : 'rgba(255,255,255,0.02)';
+        const arrow = isBull ? '▲' : isBear ? '▼' : '●';
+        const numVal = sig.value != null ? (typeof sig.value === 'number' ? sig.value.toFixed(2) : sig.value) : '';
+        html += `<div style="background:${bg};border:1px solid ${col}22;border-radius:6px;padding:6px 8px;text-align:center">
+          <div style="font-size:8px;color:${col};font-weight:700;font-family:'Space Mono',monospace">${arrow} ${ind}</div>
+          <div style="font-size:10px;color:#fff;font-weight:800;margin-top:2px;font-family:'Space Mono',monospace">${numVal}</div>
+          <div style="font-size:7px;color:#5a7a68;margin-top:1px;font-family:'Space Mono',monospace">${sig.label || ''}</div>
+        </div>`;
+      });
+      html += `</div>`;
+
+      // Row 2: Cross-TF alignment
+      if (r.crossTFData && r.crossTFData.length > 0) {
+        html += `<div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+          <span style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;font-weight:700">CROSS-TF:</span>`;
+        r.crossTFData.forEach(ctf => {
+          const ctfCol = ctf.aligned ? '#00f5a0' : ctf.conflict ? '#ff4d6d' : '#5a7a68';
+          html += `<span style="font-size:8px;padding:2px 8px;border-radius:4px;background:${ctf.aligned ? 'rgba(0,245,160,0.08)' : ctf.conflict ? 'rgba(255,77,109,0.08)' : 'rgba(255,255,255,0.03)'};border:1px solid ${ctfCol}33;color:${ctfCol};font-family:'Space Mono',monospace;font-weight:700">${ctf.tf || ctf.timeframe} ${ctf.aligned ? '✓' : ctf.conflict ? '✗' : '?'}</span>`;
+        });
+        html += `</div>`;
+      }
+
+      // Row 3: Entry / Stop / Target + Position size
+      html += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+        <div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:8px">
+          <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace;text-transform:uppercase">Entry</div>
+          <div style="font-size:12px;font-weight:800;color:#fff;font-family:'Space Mono',monospace;margin-top:2px">$${r.price?.toLocaleString(undefined,{maximumFractionDigits:6}) || '--'}</div>
+        </div>
+        <div style="background:rgba(255,77,109,0.04);border-radius:6px;padding:8px">
+          <div style="font-size:7px;color:#ff4d6d;font-family:'Space Mono',monospace;text-transform:uppercase">Stop Loss (${slPct}%)</div>
+          <div style="font-size:12px;font-weight:800;color:#ff4d6d;font-family:'Space Mono',monospace;margin-top:2px">$${r.rrData?.stopPrice ? parseFloat(r.rrData.stopPrice).toLocaleString(undefined,{maximumFractionDigits:6}) : (r.price * (1 - parseFloat(slPct)/100 * (r.direction==='long'?1:-1))).toLocaleString(undefined,{maximumFractionDigits:6})}</div>
+        </div>
+        <div style="background:rgba(0,245,160,0.04);border-radius:6px;padding:8px">
+          <div style="font-size:7px;color:#00f5a0;font-family:'Space Mono',monospace;text-transform:uppercase">Target (${tpPct}%)</div>
+          <div style="font-size:12px;font-weight:800;color:#00f5a0;font-family:'Space Mono',monospace;margin-top:2px">$${r.rrData?.targetPrice ? parseFloat(r.rrData.targetPrice).toLocaleString(undefined,{maximumFractionDigits:6}) : (r.price * (1 + parseFloat(tpPct)/100 * (r.direction==='long'?1:-1))).toLocaleString(undefined,{maximumFractionDigits:6})}</div>
+        </div>
+        <div style="background:rgba(167,139,250,0.04);border-radius:6px;padding:8px">
+          <div style="font-size:7px;color:#a78bfa;font-family:'Space Mono',monospace;text-transform:uppercase">Position Size</div>
+          <div style="font-size:12px;font-weight:800;color:#a78bfa;font-family:'Space Mono',monospace;margin-top:2px">$${parseFloat($('autoTradeSize')?.value || 10).toFixed(0)} × ${lev}×</div>
+          <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">EV: ${parseFloat(r.ev||0) > 0 ? '+' : ''}${r.ev || '0.0'}% · ${r.confidence} conf</div>
+        </div>
+      </div>`;
+
+      // Row 4: SL/TP inputs + Execute buttons
+      html += `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:4px">
+          <span style="font-size:8px;color:#ff4d6d;font-family:'Space Mono',monospace">SL%</span>
+          <input type="number" id="bt_sl_${idx}" value="${slPct}" step="0.1" min="0.1" max="50" style="width:60px;font-size:9px;padding:4px 6px;background:rgba(255,77,109,0.07);border:1px solid rgba(255,77,109,0.22);color:#ff4d6d;border-radius:4px;font-family:'Space Mono',monospace">
+        </div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <span style="font-size:8px;color:#00f5a0;font-family:'Space Mono',monospace">TP%</span>
+          <input type="number" id="bt_tp_${idx}" value="${tpPct}" step="0.1" min="0.1" max="1000" style="width:60px;font-size:9px;padding:4px 6px;background:rgba(0,245,160,0.07);border:1px solid rgba(0,245,160,0.22);color:#00f5a0;border-radius:4px;font-family:'Space Mono',monospace">
+        </div>
+        <div style="display:flex;gap:3px;background:rgba(0,0,0,0.25);border-radius:5px;padding:2px">
+          <button onclick="btSetMode(${idx},'spot')" id="btMode_spot_${idx}" style="font-size:7px;padding:3px 7px;width:auto;margin:0;border-radius:3px;font-family:'Space Mono',monospace;cursor:pointer;border:none;background:rgba(0,245,160,0.15);color:#00f5a0;font-weight:700">SPOT</button>
+          <button onclick="btSetMode(${idx},'perps')" id="btMode_perps_${idx}" style="font-size:7px;padding:3px 7px;width:auto;margin:0;border-radius:3px;font-family:'Space Mono',monospace;cursor:pointer;border:none;background:transparent;color:#5a7a68;font-weight:700">PERPS</button>
+        </div>
+        <div id="btLevWrap_${idx}" style="display:flex;align-items:center;gap:4px;opacity:0.35;pointer-events:none">
+          <select id="bt_lev_${idx}" style="font-size:8px;padding:3px 5px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);color:#a78bfa;border-radius:4px;font-family:'Space Mono',monospace">
+            <option value="1">1×</option><option value="2">2×</option><option value="3">3×</option><option value="5">5×</option><option value="10">10×</option><option value="20">20×</option><option value="50">50×</option>
+          </select>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:6px">
+          <button onclick="logBestTrade(${idx})" id="btLogBtn_${idx}" style="font-size:9px;padding:6px 14px;width:auto;margin:0;border-radius:5px;font-family:'Space Mono',monospace;font-weight:700;background:rgba(245,196,0,0.12);border:1px solid rgba(245,196,0,0.35);color:#f5c400;cursor:pointer">${_loggedTradeIdxs.has(idx) ? '✓ Logged' : 'Log Trade'}</button>
+          <button onclick="execFromBestTrades(${idx})" style="font-size:9px;padding:6px 14px;width:auto;margin:0;border-radius:5px;font-family:'Space Mono',monospace;font-weight:700;${execStyle}">⚡ Execute</button>
+        </div>
+      </div>`;
+
+      html += `</div>`; // end expanded
+    }
+
+    html += `</div>`; // end sq-row
+    return html;
   }).join('');
 
   // Auto-set cards to PERPS + selected leverage when leverage > 1
   const scanLev = parseInt($('probeLeverage')?.value || 1);
   if (scanLev > 1) {
     setTimeout(() => {
-      results.forEach((r, idx) => {
+      window._sqExpandedIdx.forEach(idx => {
         btSetMode(idx, 'perps');
         const levSel = $('bt_lev_' + idx);
         if (levSel) levSel.value = String(scanLev);
