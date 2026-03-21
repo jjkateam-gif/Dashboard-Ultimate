@@ -16781,6 +16781,7 @@ async function runProbEngine() {
         patterns:        patternResult.patterns,
         patternAdj:      patternAdj,
         patternSummary:  patternResult.patternSummary,
+        crossTFData,
       });
     } catch (e) {
       console.warn(`[Probe] ${asset.label} failed:`, e.message);
@@ -25169,14 +25170,70 @@ renderProbeResults = function(results, tf) {
       });
       html += `</div>`;
 
-      // Row 2: Cross-TF alignment
+      // Row 2: Cross-TF alignment — detailed per-indicator grid
       if (r.crossTFData && r.crossTFData.length > 0) {
-        html += `<div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-          <span style="font-size:8px;color:#5a7a68;font-family:'Space Mono',monospace;font-weight:700">CROSS-TF:</span>`;
+        const isShortDir = r.direction === 'short';
+        // Overall alignment summary
+        const alignedCount = r.crossTFData.filter(ctf => isShortDir ? ctf.bear : ctf.bull).length;
+        const opposingCount = r.crossTFData.filter(ctf => isShortDir ? ctf.bull : ctf.bear).length;
+        const totalHTF = r.crossTFData.length;
+        const alignPct = Math.round((alignedCount / totalHTF) * 100);
+        const alignCol = alignedCount === totalHTF ? '#00f5a0' : opposingCount > alignedCount ? '#ff4d6d' : '#f5c400';
+        const alignLabel = alignedCount === totalHTF ? 'FULLY ALIGNED' : opposingCount === 0 ? 'PARTIAL' : 'CONFLICTING';
+
+        html += `<div style="margin-bottom:10px;background:rgba(0,0,0,0.15);border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:8px 10px">`;
+        html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-size:9px;color:#a78bfa;font-family:'Space Mono',monospace;font-weight:700">CROSS-TIMEFRAME INDICATORS</span>
+          <span style="font-size:8px;padding:2px 8px;border-radius:4px;background:${alignCol}18;border:1px solid ${alignCol}44;color:${alignCol};font-family:'Space Mono',monospace;font-weight:700">${alignLabel} ${alignedCount}/${totalHTF} TFs · ${alignPct}%</span>
+        </div>`;
+
+        // Grid header
+        html += `<div style="display:grid;grid-template-columns:60px repeat(4, 1fr);gap:4px;margin-bottom:2px">
+          <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace;padding:3px">TF</div>
+          <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace;text-align:center;padding:3px">EMA 21/55</div>
+          <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace;text-align:center;padding:3px">EMA 200</div>
+          <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace;text-align:center;padding:3px">MACD</div>
+          <div style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace;text-align:center;padding:3px">RSI</div>
+        </div>`;
+
+        // Per-TF rows
         r.crossTFData.forEach(ctf => {
-          const ctfCol = ctf.aligned ? '#00f5a0' : ctf.conflict ? '#ff4d6d' : '#5a7a68';
-          html += `<span style="font-size:8px;padding:2px 8px;border-radius:4px;background:${ctf.aligned ? 'rgba(0,245,160,0.08)' : ctf.conflict ? 'rgba(255,77,109,0.08)' : 'rgba(255,255,255,0.03)'};border:1px solid ${ctfCol}33;color:${ctfCol};font-family:'Space Mono',monospace;font-weight:700">${ctf.tf || ctf.timeframe} ${ctf.aligned ? '✓' : ctf.conflict ? '✗' : '?'}</span>`;
+          const aligned = isShortDir ? ctf.bear : ctf.bull;
+          const opposing = isShortDir ? ctf.bull : ctf.bear;
+          const rowBg = aligned ? 'rgba(0,245,160,0.04)' : opposing ? 'rgba(255,77,109,0.04)' : 'transparent';
+          const rowBorder = aligned ? 'rgba(0,245,160,0.15)' : opposing ? 'rgba(255,77,109,0.15)' : 'rgba(255,255,255,0.04)';
+          const dirIcon = aligned ? '✓' : opposing ? '✗' : '—';
+          const dirCol = aligned ? '#00f5a0' : opposing ? '#ff4d6d' : '#5a7a68';
+
+          // Individual indicators
+          const emaCol = ctf.emaBull ? '#00f5a0' : '#ff4d6d';
+          const emaArrow = ctf.emaBull ? '▲ Bull' : '▼ Bear';
+          const ema200Col = ctf.priceAboveEMA200 == null ? '#5a7a68' : ctf.priceAboveEMA200 ? '#00f5a0' : '#ff4d6d';
+          const ema200Label = ctf.priceAboveEMA200 == null ? '— N/A' : ctf.priceAboveEMA200 ? '▲ Above' : '▼ Below';
+          const macdCol = ctf.macdBull ? '#00f5a0' : '#ff4d6d';
+          const macdArrow = ctf.macdBull ? '▲ Bull' : '▼ Bear';
+          const rsiVal = ctf.rsi != null ? Math.round(ctf.rsi) : '—';
+          const rsiCol = ctf.rsi != null ? (ctf.rsi > 60 ? '#00f5a0' : ctf.rsi < 40 ? '#ff4d6d' : '#f5c400') : '#5a7a68';
+
+          html += `<div style="display:grid;grid-template-columns:60px repeat(4, 1fr);gap:4px;background:${rowBg};border:1px solid ${rowBorder};border-radius:4px;margin-bottom:2px">
+            <div style="font-size:9px;color:${dirCol};font-family:'Space Mono',monospace;font-weight:800;padding:4px 6px;display:flex;align-items:center;gap:4px">${ctf.tf} <span style="font-size:7px">${dirIcon}</span></div>
+            <div style="font-size:8px;color:${emaCol};font-family:'Space Mono',monospace;text-align:center;padding:4px;font-weight:700">${emaArrow}</div>
+            <div style="font-size:8px;color:${ema200Col};font-family:'Space Mono',monospace;text-align:center;padding:4px;font-weight:700">${ema200Label}</div>
+            <div style="font-size:8px;color:${macdCol};font-family:'Space Mono',monospace;text-align:center;padding:4px;font-weight:700">${macdArrow}</div>
+            <div style="font-size:8px;color:${rsiCol};font-family:'Space Mono',monospace;text-align:center;padding:4px;font-weight:700">${rsiVal}</div>
+          </div>`;
         });
+
+        // Strength bar
+        const overallStrength = r.crossTFData.reduce((sum, ctf) => sum + (ctf.strength || 0), 0) / totalHTF;
+        const strengthPct = Math.round(overallStrength * 100);
+        html += `<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <span style="font-size:7px;color:#5a7a68;font-family:'Space Mono',monospace">Strength:</span>
+          <div style="flex:1;height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden">
+            <div style="width:${strengthPct}%;height:100%;background:${alignCol};border-radius:2px"></div>
+          </div>
+          <span style="font-size:7px;color:${alignCol};font-family:'Space Mono',monospace;font-weight:700">${strengthPct}%</span>
+        </div>`;
         html += `</div>`;
       }
 
