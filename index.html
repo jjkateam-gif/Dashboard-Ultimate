@@ -18398,6 +18398,7 @@ function renderTFRulesGrid(savedRules) {
     const isEnabled = rule.enabled !== false; // default: enabled
     const minProb = rule.minProb || globalMin;
     const minQuality = rule.minQuality || '';
+    const minConfidence = rule.minConfidence || '';
     const borderColor = !isEnabled ? 'rgba(255,77,109,0.3)' : hasRule ? 'rgba(167,139,250,0.4)' : 'rgba(255,255,255,0.08)';
     const bgColor = !isEnabled ? 'rgba(255,77,109,0.04)' : hasRule ? 'rgba(167,139,250,0.04)' : 'rgba(0,0,0,0.3)';
 
@@ -18426,6 +18427,15 @@ function renderTFRulesGrid(savedRules) {
           </select>
         </div>
       </div>
+      <div style="margin-top:6px">
+        <label style="font-size:7px;color:#5a7a68;display:block;margin-bottom:2px">MIN CONFIDENCE</label>
+        <select data-tf-confidence="${tf}" style="width:100%;font-size:11px;padding:5px 6px;background:#0a1a10;border:1px solid rgba(167,139,250,0.2);color:#a78bfa;border-radius:4px;font-family:'Space Mono',monospace;box-sizing:border-box;font-weight:700">
+          <option value="" ${!minConfidence ? 'selected' : ''}>Any</option>
+          <option value="low" ${minConfidence === 'low' ? 'selected' : ''}>Min Low</option>
+          <option value="medium" ${minConfidence === 'medium' ? 'selected' : ''}>Min Medium</option>
+          <option value="high" ${minConfidence === 'high' ? 'selected' : ''}>High only</option>
+        </select>
+      </div>
     </div>`;
   }).join('');
 }
@@ -18438,17 +18448,20 @@ function collectTFRules() {
     const enabledEl = document.querySelector(`[data-tf-enabled="${tf}"]`);
     const probEl = document.querySelector(`[data-tf-prob="${tf}"]`);
     const qualityEl = document.querySelector(`[data-tf-quality="${tf}"]`);
+    const confidenceEl = document.querySelector(`[data-tf-confidence="${tf}"]`);
     if (!enabledEl) continue; // grid not rendered yet
 
     const enabled = enabledEl.checked;
     const minProb = parseInt(probEl?.value || 70);
     const minQuality = qualityEl?.value || '';
+    const minConfidence = confidenceEl?.value || '';
 
     // Only store if it differs from defaults or is explicitly disabled
-    if (!enabled || minProb || minQuality) {
+    if (!enabled || minProb || minQuality || minConfidence) {
       rules[tf] = { enabled };
       if (minProb) rules[tf].minProb = minProb;
       if (minQuality) rules[tf].minQuality = minQuality;
+      if (minConfidence) rules[tf].minConfidence = minConfidence;
     }
   }
   return rules;

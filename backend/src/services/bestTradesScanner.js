@@ -2232,7 +2232,7 @@ class BestTradesScanner {
       if (minQuality && (QUALITY_ORDER[r.marketQuality] || 0) < (QUALITY_ORDER[minQuality] || 0)) { rejectReasons[r.asset] = `quality ${r.marketQuality} < min ${minQuality}`; return false; }
       // Confidence filter: only apply if per-TF rule explicitly sets minConfidence
       if (minConfidence) {
-        const confOrder = { 'High': 3, 'Medium': 2, 'Low': 1 };
+        const confOrder = { 'High': 3, 'Medium': 2, 'Low': 1, 'high': 3, 'medium': 2, 'low': 1 };
         if ((confOrder[r.confidence] || 0) < (confOrder[minConfidence] || 0)) { rejectReasons[r.asset] = `conf ${r.confidence} < min ${minConfidence}`; return false; }
       }
       if (r.entryEfficiency === 'Chasing') { rejectReasons[r.asset] = 'Chasing entry — extended move, poor entry location'; return false; }
