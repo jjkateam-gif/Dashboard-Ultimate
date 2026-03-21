@@ -25170,7 +25170,7 @@ async function loadServerSignals() {
     const serverSignals = (data.history || []).map(t => {
       const snap = t.signal_snapshot ? (typeof t.signal_snapshot === 'string' ? JSON.parse(t.signal_snapshot) : t.signal_snapshot) : {};
       return {
-        asset: t.asset, direction: t.direction, prob: t.probability || t.prob || 0,
+        asset: t.asset, sym: t.asset + 'USDT', direction: t.direction, prob: t.probability || t.prob || 0,
         confidence: t.confidence || 'Medium', marketQuality: t.market_quality || t.marketQuality || '?',
         rr: parseFloat(t.rr_ratio || t.rr || 0), price: t.entry_price || t.price,
         stopPrice: t.stop_price || t.stopPrice, targetPrice: t.target_price || t.targetPrice,
@@ -25633,23 +25633,21 @@ function btSetMode(idx, mode) {
 function execFromBestTrades(idx) {
   const r = PROBE.results?.[idx];
   if (!r) { toast('Run a scan first', 'error'); return; }
-  if (false) { // BloFin supports all pairs
-    toast(`${r.asset} is not available for Jupiter execution (not a Solana SPL token)`, 'error');
-    return;
-  }
-  const slPct   = parseFloat($('bt_sl_'  + idx)?.value || r.rrData?.stopPct   || 3);
-  const tpPct   = parseFloat($('bt_tp_'  + idx)?.value || r.rrData?.targetPct || 6);
+  const slPct   = parseFloat($('bt_sl_'  + idx)?.value || r.rrData?.stopPct   || r.stopPct || 3);
+  const tpPct   = parseFloat($('bt_tp_'  + idx)?.value || r.rrData?.targetPct || r.targetPct || 6);
   const lev     = parseInt($('bt_lev_'   + idx)?.value || 1);
   const modeBtn = $('btMode_perps_' + idx);
   const mode    = modeBtn?.style?.background?.includes('167') ? 'perps' : 'spot';
+  // Ensure sym is always set (server signals only have 'asset', not 'sym')
+  const sym = r.sym || (r.asset + 'USDT');
 
   openBlofinModal({
-    sym:       r.sym,
+    sym,
     direction: r.direction,
     slPct, tpPct,
     sizingUsd: parseFloat($('autoTradeSize')?.value || $('policyMaxSize')?.value || 50),
     asset:     r.asset,
-    price:     r.price,  // pass scan price as fallback
+    price:     r.price,
     mode, leverage: lev,
   });
 }
