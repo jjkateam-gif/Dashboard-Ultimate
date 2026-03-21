@@ -2581,6 +2581,9 @@ function switchAuthView(view) {
   </div>
   <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}</style>
 
+  <!-- ═══ SESSION STATUS BANNER ═══ -->
+  <div id="sessionBanner" style="display:none;margin-bottom:8px;padding:8px 14px;border-radius:8px;font-family:'Space Mono',monospace;font-size:10px;display:flex;align-items:center;gap:8px"></div>
+
   <!-- ═══ 2. STATS ROW ═══ -->
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">
     <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(0,245,160,0.2);border-radius:10px;padding:14px 16px">
@@ -24262,6 +24265,34 @@ renderProbeResults = function(results, tf) {
   const pillB = $('enginePillBuilding'); if (pillB) { pillB.style.display = bCount ? '' : 'none'; pillB.textContent = bCount + ' building'; }
   const pillBl = $('enginePillBlocked'); if (pillBl) { pillBl.style.display = blCount ? '' : 'none'; pillBl.textContent = blCount + ' blocked'; }
   const lastScan = $('engineLastScan'); if (lastScan) lastScan.textContent = 'Last: ' + new Date().toLocaleTimeString();
+
+  // Session status banner — shows dead zone, suppressed, reduced, or active
+  const sessionBanner = $('sessionBanner');
+  if (sessionBanner) {
+    const h = new Date().getUTCHours();
+    const nextHour = (t) => { const d = new Date(); d.setUTCHours(t, 0, 0, 0); if (d <= new Date()) d.setDate(d.getDate() + 1); const diff = d - new Date(); const hrs = Math.floor(diff / 3600000); const mins = Math.floor((diff % 3600000) / 60000); return hrs > 0 ? hrs + 'h ' + mins + 'm' : mins + 'm'; };
+    if (h >= 13 && h <= 15) {
+      sessionBanner.style.display = 'flex';
+      sessionBanner.style.background = 'rgba(255,77,109,0.12)';
+      sessionBanner.style.border = '1px solid rgba(255,77,109,0.3)';
+      sessionBanner.innerHTML = `<span style="font-size:14px">⛔</span><span style="color:#ff4d6d;font-weight:700">DEAD ZONE ACTIVE</span><span style="color:#ff8c69">UTC ${h}:00 — No trades will execute (0-18% WR historically). Resumes in ${nextHour(16)}.</span>`;
+    } else if (h >= 21 && h <= 23) {
+      sessionBanner.style.display = 'flex';
+      sessionBanner.style.background = 'rgba(245,196,0,0.08)';
+      sessionBanner.style.border = '1px solid rgba(245,196,0,0.2)';
+      sessionBanner.innerHTML = `<span style="font-size:14px">🟡</span><span style="color:#f5c400;font-weight:700">SUPPRESSED</span><span style="color:#bba44e">UTC ${h}:00 — Probability reduced to 0.4x. Full weight resumes in ${nextHour(0)}.</span>`;
+    } else if ((h >= 4 && h <= 10) || (h >= 16 && h <= 19)) {
+      sessionBanner.style.display = 'flex';
+      sessionBanner.style.background = 'rgba(255,140,105,0.08)';
+      sessionBanner.style.border = '1px solid rgba(255,140,105,0.2)';
+      sessionBanner.innerHTML = `<span style="font-size:14px">🟠</span><span style="color:#ff8c69;font-weight:700">REDUCED</span><span style="color:#a07050">UTC ${h}:00 — Probability at 0.7x.${h <= 10 ? ' Full weight resumes in ' + nextHour(11) + '.' : h >= 16 && h <= 19 ? ' Full weight at UTC 20:00 in ' + nextHour(20) + '.' : ''}</span>`;
+    } else {
+      sessionBanner.style.display = 'flex';
+      sessionBanner.style.background = 'rgba(0,245,160,0.06)';
+      sessionBanner.style.border = '1px solid rgba(0,245,160,0.15)';
+      sessionBanner.innerHTML = `<span style="font-size:14px">✅</span><span style="color:#00f5a0;font-weight:700">FULL WEIGHT</span><span style="color:#5a7a68">UTC ${h}:00 — All signals at 1.0x probability. Trading active.</span>`;
+    }
+  }
 
   if (filtered.length === 0) {
     el.innerHTML = '<div style="text-align:center;padding:24px;color:#5a7a68;font-family:\'Space Mono\',monospace;font-size:11px">No signals match current filters</div>';
