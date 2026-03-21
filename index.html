@@ -2586,6 +2586,7 @@ function switchAuthView(view) {
     <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(0,245,160,0.2);border-radius:10px;padding:14px 16px">
       <div style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.5px">BALANCE</div>
       <div id="btBalanceUSDT" style="font-size:22px;font-weight:800;color:#fff;font-family:'Space Mono',monospace;margin-top:4px">--</div>
+      <div style="font-size:9px;color:#5a7a68;font-family:'Space Mono',monospace;margin-top:2px">Available: <span id="btBalanceAvailDisplay" style="color:#ccc">--</span></div>
       <div id="btBalancePnlSince" style="font-size:9px;color:#00f5a0;font-family:'Space Mono',monospace;margin-top:2px"></div>
     </div>
     <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,77,109,0.2);border-radius:10px;padding:14px 16px">
@@ -24850,6 +24851,8 @@ async function liveRefreshBalance() {
     if (availEl) availEl.textContent = availStr;
     if (btUsdtEl) btUsdtEl.textContent = usdtStr;
     if (btAvailEl) btAvailEl.textContent = availStr;
+    const btAvailDisplayEl = document.getElementById('btBalanceAvailDisplay');
+    if (btAvailDisplayEl) btAvailDisplayEl.textContent = availStr;
 
     // Show funding account balance if it has funds (helps explain "where's my money?")
     const fundingEl = document.getElementById('btFundingBal');
