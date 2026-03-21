@@ -25290,6 +25290,7 @@ renderProbeResults = function(results, tf) {
           </select>
         </div>
         <div style="margin-left:auto;display:flex;gap:6px">
+          <a href="https://blofin.com/trade/${r.asset}-USDT" target="_blank" rel="noopener" style="font-size:9px;padding:6px 14px;width:auto;margin:0;border-radius:5px;font-family:'Space Mono',monospace;font-weight:700;background:rgba(99,179,237,0.1);border:1px solid rgba(99,179,237,0.3);color:#63b3ed;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:4px">↗ BloFin</a>
           <button onclick="logBestTrade(${idx})" id="btLogBtn_${idx}" style="font-size:9px;padding:6px 14px;width:auto;margin:0;border-radius:5px;font-family:'Space Mono',monospace;font-weight:700;background:rgba(245,196,0,0.12);border:1px solid rgba(245,196,0,0.35);color:#f5c400;cursor:pointer">${_loggedTradeIdxs.has(idx) ? '✓ Logged' : 'Log Trade'}</button>
           <button onclick="execFromBestTrades(${idx})" style="font-size:9px;padding:6px 14px;width:auto;margin:0;border-radius:5px;font-family:'Space Mono',monospace;font-weight:700;${execStyle}">⚡ Execute</button>
         </div>
