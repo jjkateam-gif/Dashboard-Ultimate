@@ -24624,17 +24624,43 @@ async function openBlofinModal(setup) {
   if (sub) sub.textContent = setup.direction.toUpperCase() + ' ' + instId + ' · $' + sizing + ' · PERPS';
 
   try {
-    // Fetch last traded price (not exchange mark price used for liquidation)
+    // Fetch last traded price — try multiple sources with timeouts
     let lastPrice;
+    // Source 1: Backend BloFin ticker (needs auth + BloFin creds)
     try {
-      const r = await fetch(LIVE_API + '/ticker?instId=' + encodeURIComponent(instId), { headers: liveHeaders() });
-      if (r.ok) { const d = await r.json(); lastPrice = d.ticker?.last || d.ticker?.bid; }
-    } catch {}
+      const ctrl1 = new AbortController();
+      const t1 = setTimeout(() => ctrl1.abort(), 5000);
+      const r = await fetch(LIVE_API + '/ticker?instId=' + encodeURIComponent(instId), { headers: liveHeaders(), signal: ctrl1.signal });
+      clearTimeout(t1);
+      if (r.ok) { const d = await r.json(); lastPrice = parseFloat(d.ticker?.last || d.ticker?.bid) || null; }
+    } catch (e1) { console.warn('[BlofinModal] Backend ticker failed:', e1.message); }
+    // Source 2: Binance public API
     if (!lastPrice) {
-      const klRes = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=' + setup.sym);
-      if (klRes.ok) { const kl = await klRes.json(); lastPrice = parseFloat(kl.price); }
+      try {
+        const ctrl2 = new AbortController();
+        const t2 = setTimeout(() => ctrl2.abort(), 5000);
+        const klRes = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=' + setup.sym, { signal: ctrl2.signal });
+        clearTimeout(t2);
+        if (klRes.ok) { const kl = await klRes.json(); lastPrice = parseFloat(kl.price); }
+      } catch (e2) { console.warn('[BlofinModal] Binance ticker failed:', e2.message); }
     }
-    if (!lastPrice) throw new Error('Could not fetch price');
+    // Source 3: Use price from scan result (already available)
+    if (!lastPrice && setup.price) {
+      lastPrice = parseFloat(setup.price);
+      console.log('[BlofinModal] Using scan result price:', lastPrice);
+    }
+    // Source 4: Backend proxy for BloFin public ticker (no auth needed)
+    if (!lastPrice) {
+      try {
+        const ctrl3 = new AbortController();
+        const t3 = setTimeout(() => ctrl3.abort(), 5000);
+        const backend = window.CBP_BACKEND || 'http://localhost:3001';
+        const pubRes = await fetch(backend + '/live/candles?instId=' + encodeURIComponent(instId) + '&bar=1m&limit=1', { signal: ctrl3.signal });
+        clearTimeout(t3);
+        if (pubRes.ok) { const pubD = await pubRes.json(); if (pubD.candles?.length) lastPrice = pubD.candles[0].c; }
+      } catch (e3) { console.warn('[BlofinModal] Public candles failed:', e3.message); }
+    }
+    if (!lastPrice) throw new Error('Could not fetch price from any source. Check your connection.');
 
     blofinPending = { setup, instId, sizing, slPct, tpPct, lastPrice, leverage: blofinLev, positionSize: sizing * blofinLev, priceTimestamp: Date.now() };
     updateBlofinDisplay();
@@ -25623,6 +25649,7 @@ function execFromBestTrades(idx) {
     slPct, tpPct,
     sizingUsd: parseFloat($('autoTradeSize')?.value || $('policyMaxSize')?.value || 50),
     asset:     r.asset,
+    price:     r.price,  // pass scan price as fallback
     mode, leverage: lev,
   });
 }
