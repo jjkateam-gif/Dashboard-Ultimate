@@ -905,7 +905,7 @@ function switchAuthView(view) {
 <div class="container" style="padding-bottom:0;margin-bottom:0">
 
 <!-- ========== CYCLE DASHBOARD ========== -->
-<div class="cycle-panel" id="cycleDashboard">
+<div class="cycle-panel" id="cycleDashboard" style="display:none">
   <div class="cycle-header">
     <div class="cycle-title">🔮 Market Cycle Dashboard</div>
     <div style="font-family:'Space Mono',monospace;font-size:9px;color:var(--text-muted)">
@@ -9787,10 +9787,16 @@ function switchPageTab(tab) {
     }
   });
 
+  // Show Market Cycle Dashboard only on Market Intel tab
+  const cycleDash = $('cycleDashboard');
+  if (cycleDash) cycleDash.style.display = (tab === 'intel') ? 'block' : 'none';
+
   if (tab === 'degen') {
     loadDegenResults();
     if (!degenRefreshTimer) degenRefreshTimer = setInterval(loadDegenResults, 5 * 60 * 1000);
   } else if (tab === 'intel') {
+    // Auto-load BTC daily data for cycle dashboard if not loaded yet
+    if (!data || !data.length) autoLoadBTCDaily();
     renderCycleImmediate();
     if (!INTEL.lastLoaded && !INTEL.loading) runIntelAnalysis();
   } else if (tab === 'trades') {
@@ -9821,8 +9827,7 @@ function switchPageTab(tab) {
   } else if (tab === 'predictions') {
     loadPredictionMarkets();
   } else if (tab === 'backtester') {
-    // Auto-load BTC 1d data for cycle dashboard if no data loaded yet
-    if (!data || !data.length) autoLoadBTCDaily();
+    // Backtester no longer auto-loads BTC — cycle dashboard moved to Market Intel
   } else {
     clearInterval(degenRefreshTimer); degenRefreshTimer = null;
     clearInterval(liveFeedTimer);     liveFeedTimer     = null;
