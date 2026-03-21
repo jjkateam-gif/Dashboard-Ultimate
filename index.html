@@ -24984,9 +24984,21 @@ async function loadServerSignals() {
       PROBE.results = serverSignals;
       renderProbeResults(serverSignals, 'all');
     } else {
+      // Build lookup of browser results' crossTFData by asset+direction+tf
+      const browserCTF = {};
+      PROBE.results.forEach(r => {
+        if (r.crossTFData && r.crossTFData.length > 0) {
+          browserCTF[r.asset + '|' + r.direction + '|' + (r.tf || r.timeframe || '')] = r.crossTFData;
+        }
+      });
+      // Enrich server signals with crossTFData from browser scans
+      serverSignals.forEach(s => {
+        const key = s.asset + '|' + s.direction + '|' + (s.timeframe || s.tf || '');
+        if (browserCTF[key]) s.crossTFData = browserCTF[key];
+      });
       // Merge: add server signals not already in PROBE.results (by asset+direction+tf)
-      const existing = new Set(PROBE.results.map(r => r.asset + '|' + r.direction + '|' + (r.timeframe || '')));
-      const newOnes = serverSignals.filter(s => !existing.has(s.asset + '|' + s.direction + '|' + s.timeframe));
+      const existing = new Set(PROBE.results.map(r => r.asset + '|' + r.direction + '|' + (r.tf || r.timeframe || '')));
+      const newOnes = serverSignals.filter(s => !existing.has(s.asset + '|' + s.direction + '|' + (s.timeframe || s.tf || '')));
       if (newOnes.length > 0) {
         PROBE.results = [...PROBE.results, ...newOnes].sort((a, b) => (b.prob || 0) - (a.prob || 0));
         renderProbeResults(PROBE.results, $('probeTimeframe')?.value || '15m');
