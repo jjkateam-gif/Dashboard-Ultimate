@@ -2845,6 +2845,28 @@ class BestTradesScanner {
       }
     }
 
+    // CRITICAL: Also insert into live_positions so the engine tracks this position
+    // Without this, the engine thinks there are 0 open positions and ignores per-asset limits
+    if (pool) {
+      try {
+        await pool.query(
+          `INSERT INTO live_positions
+           (user_id, protocol, market, direction, entry_price,
+            size_usd, collateral_usd, leverage, open_tx, sl_price, tp_price, order_id, margin_mode)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+          [
+            userId, 'blofin', instId, setup.direction, actualFillPrice,
+            posSize, posSize / lev, lev,
+            result.orderId || null, parseFloat(slPrice), parseFloat(tpPrice),
+            result.orderId || null, 'cross',
+          ]
+        );
+        console.log(`[BestTrades] ✅ live_positions INSERT: ${instId} ${setup.direction} | Size: $${posSize} | Lev: ${lev}x`);
+      } catch (lpErr) {
+        console.error(`[BestTrades] ❌ live_positions INSERT FAILED for ${setup.asset}: ${lpErr.message} — position tracking broken!`);
+      }
+    }
+
     console.log(`[BestTrades] ⚡ EXECUTED: ${setup.asset} ${setup.direction.toUpperCase()} @ LIMIT $${limitPrice} (fill: $${actualFillPrice}, slip: ${slippagePct ?? 'n/a'}%) | Prob: ${setup.prob}% | Size: $${posSize} | Lev: ${lev}x | SL: ${slPrice} | TP: ${tpPrice} | OrderId: ${result.orderId} | DB: ${dbId ? '#' + dbId : 'FAILED'}`);
     this._broadcast('trade', { setup, orderId: result.orderId, posSize, leverage: lev, slippagePct, actualFillPrice });
   }
@@ -3439,6 +3461,15 @@ class BestTradesScanner {
               `UPDATE best_trades_log SET outcome='expired', resolved_at=NOW(), closed_at=COALESCE(closed_at, NOW()), hours_to_resolution=$2, exit_reason='expired' WHERE id=$1`,
               [row.id, expiryHours]
             );
+            // Close matching live_positions entry on expiry
+            if (row.order_id) {
+              try {
+                await pool.query(
+                  `UPDATE live_positions SET closed_at = NOW() WHERE order_id = $1 AND closed_at IS NULL`,
+                  [row.order_id]
+                );
+              } catch (lpErr) { console.warn(`[BestTrades] live_positions expiry close failed: ${lpErr.message}`); }
+            }
             resolved++;
             continue;
           }
@@ -3540,6 +3571,20 @@ class BestTradesScanner {
                WHERE id=$3`,
               [outcome, parseFloat(pnl.toFixed(4)), row.id, resolutionHours, exitReason, maePct, mfePct, exitPrice]
             );
+
+            // Also close the matching live_positions entry so position count stays accurate
+            if (row.order_id) {
+              try {
+                await pool.query(
+                  `UPDATE live_positions SET closed_at = NOW(), exit_price = $2, pnl = $3
+                   WHERE order_id = $1 AND closed_at IS NULL`,
+                  [row.order_id, exitPrice, parseFloat(pnl.toFixed(4))]
+                );
+              } catch (lpCloseErr) {
+                console.warn(`[BestTrades] live_positions close failed for order ${row.order_id}: ${lpCloseErr.message}`);
+              }
+            }
+
             resolved++;
           }
 

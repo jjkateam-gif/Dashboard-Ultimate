@@ -23598,7 +23598,7 @@ async function sqToggleExpand(idx) {
     const r = PROBE.results?.[idx];
     if (r) {
       const tf = r.tf || r.timeframe || '15m';
-      const sym = r.asset + 'USDT';
+      const sym = r.sym || (r.asset ? r.asset + 'USDT' : 'UNKNOWN-USDT');
       // Cross-TF data
       if (!r.crossTFData || r.crossTFData.length === 0) {
         const cacheKey = r.asset + '|' + r.direction + '|' + tf;
@@ -24167,7 +24167,7 @@ renderProbeResults = function(results, tf) {
     </div>`;
 
     // RR
-    html += `<div style="font-size:11px;font-weight:700;color:#fff">RR ${(r.rr || 0).toFixed ? parseFloat(r.rr).toFixed(1) : r.rr}</div>`;
+    html += `<div style="font-size:11px;font-weight:700;color:#fff">RR ${r.rr != null && !isNaN(r.rr) ? parseFloat(r.rr).toFixed(1) : 'N/A'}</div>`;
 
     // Probability
     html += `<div style="font-size:16px;font-weight:800;color:${probColor}">${Math.round(r.prob)}%</div>`;
